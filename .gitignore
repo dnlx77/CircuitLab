@@ -416,3 +416,14 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# CircuitLab - specifico del progetto
+# Output di compilazione custom
+out/
+bin/
+
+# DLL di runtime (SFML e altre - gestite separatamente)
+*.dll
+
+# File temporanei di ImGui
+imgui.ini
