@@ -18,9 +18,15 @@
 mono_crash.*
 
 # Build results
-[Dd]ebug/
+# Output di compilazione VS - solo nella root e nei progetti
+**/[Dd]ebug/
+**/[Rr]elease/
+
+# Ma non le nostre cartelle lib/
+!lib/**/[Dd]ebug/
+!lib/**/[Rr]elease/
+
 [Dd]ebugPublic/
-[Rr]elease/
 [Rr]eleases/
 x64/
 x86/
@@ -421,6 +427,13 @@ FodyWeavers.xsd
 # Output di compilazione custom
 out/
 bin/
+
+# Non ignorare la cartella lib/ stessa
+# ma ignora i binari dentro
+lib/**/*.lib
+lib/**/*.dll
+lib/**/*.pdb
+lib/**/*.exp
 
 # DLL di runtime (SFML e altre - gestite separatamente)
 *.dll
