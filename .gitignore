@@ -426,7 +426,14 @@ FodyWeavers.xsd
 # CircuitLab - specifico del progetto
 # Output di compilazione custom
 out/
-bin/
+
+# Output bin di VS - solo nella root dei progetti
+**/[Bb]in/
+
+# Ma non le nostre cartelle lib/
+!lib/**/bin/
+!lib/**/bin/Debug/
+!lib/**/bin/Release/
 
 # Non ignorare la cartella lib/ stessa
 # ma ignora i binari dentro
