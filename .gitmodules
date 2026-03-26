@@ -1,0 +1,12 @@
+[submodule "external/SFML"]
+	path = external/SFML
+	url = https://github.com/SFML/SFML.git
+[submodule "external/imgui"]
+	path = external/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "external/imgui-sfml"]
+	path = external/imgui-sfml
+	url = https://github.com/SFML/imgui-sfml.git
+[submodule "external/nlohmann-json"]
+	path = external/nlohmann-json
+	url = https://github.com/nlohmann/json.git
