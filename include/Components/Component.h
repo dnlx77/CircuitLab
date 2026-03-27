@@ -18,8 +18,8 @@ namespace CircuitLab {
 
 		std::vector<Terminal> m_terminals;
 
-		virtual void saveSpecificData() = 0;
-		virtual void loadSpecificData() = 0;
+		virtual void SaveSpecificData() = 0;
+		virtual void LoadSpecificData() = 0;
 	public:
 		Component (int terminalNumber) : m_id(s_nextId++), m_terminalNumber(terminalNumber) {
 			m_terminals.resize(m_terminalNumber);

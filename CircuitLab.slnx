@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="CircuitLab/CircuitLab.vcxproj" />
+  <Project Path="CircuitLab/CircuitLab.vcxproj" Id="07e53ab0-3ee3-4f8c-b364-f8c42e41258d" />
 </Solution>

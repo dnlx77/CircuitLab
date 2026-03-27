@@ -59,6 +59,9 @@
     <ClCompile Include="..\src\components\Terminal.cpp">
       <Filter>src\components</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\components\Resistor.cpp">
+      <Filter>src\components</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\Components\Terminal.h">
@@ -69,6 +72,9 @@
     </ClInclude>
     <ClInclude Include="..\include\Core\Vector2.h">
       <Filter>Include\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Components\Resistor.h">
+      <Filter>Include\Components</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -157,11 +157,13 @@ sfml-system.lib
     <ClCompile Include="..\external\imgui\imgui_draw.cpp" />
     <ClCompile Include="..\external\imgui\imgui_tables.cpp" />
     <ClCompile Include="..\external\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="..\src\components\Resistor.cpp" />
     <ClCompile Include="..\src\components\Terminal.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\Components\Component.h" />
+    <ClInclude Include="..\include\Components\Resistor.h" />
     <ClInclude Include="..\include\Components\Terminal.h" />
     <ClInclude Include="..\include\Core\Vector2.h" />
   </ItemGroup>
