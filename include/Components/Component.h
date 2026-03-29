@@ -1,8 +1,10 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <Eigen/Dense>
 #include "Terminal.h"
 #include "Core/Vector2.h"
+
 
 namespace CircuitLab {
 	
@@ -24,6 +26,7 @@ namespace CircuitLab {
 		Component (int terminalNumber) : m_id(s_nextId++), m_terminalNumber(terminalNumber) {
 			m_terminals.resize(m_terminalNumber);
 		}
+		virtual ~Component() = default;
 
 		// Getter
 		const Vec2& GetPosition() const { return m_position; }
@@ -40,6 +43,6 @@ namespace CircuitLab {
 		void Save();
 		void Load();
 
-		virtual void Stamp() = 0;
+		virtual void Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &b, const std::map<int,int>& nodeMap) = 0;
 	};
 }

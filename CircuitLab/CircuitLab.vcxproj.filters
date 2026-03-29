@@ -27,11 +27,20 @@
     <Filter Include="src">
       <UniqueIdentifier>{2a1a9e5e-68aa-4786-abf0-a6315b5cdb2f}</UniqueIdentifier>
     </Filter>
-    <Filter Include="src\components">
-      <UniqueIdentifier>{8d3c5b14-1920-462a-a113-dd30f8971407}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Include\Core">
       <UniqueIdentifier>{e20502c5-b401-482a-a62d-8abc188e455f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Core">
+      <UniqueIdentifier>{09c3dfe8-0791-461e-bf6f-b6936b159cb5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Components">
+      <UniqueIdentifier>{8d3c5b14-1920-462a-a113-dd30f8971407}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Include\App">
+      <UniqueIdentifier>{26db7f39-0b2e-446a-9a10-389294d9159c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\App">
+      <UniqueIdentifier>{5b9e7aaf-3d08-442c-8a0b-ba556be01e40}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -57,10 +66,22 @@
       <Filter>File di origine</Filter>
     </ClCompile>
     <ClCompile Include="..\src\components\Terminal.cpp">
-      <Filter>src\components</Filter>
+      <Filter>src\Components</Filter>
     </ClCompile>
     <ClCompile Include="..\src\components\Resistor.cpp">
-      <Filter>src\components</Filter>
+      <Filter>src\Components</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\core\Circuit.cpp">
+      <Filter>src\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\components\Component.cpp">
+      <Filter>src\Components</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\core\Solver.cpp">
+      <Filter>src\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\app\Application.cpp">
+      <Filter>src\App</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -75,6 +96,15 @@
     </ClInclude>
     <ClInclude Include="..\include\Components\Resistor.h">
       <Filter>Include\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Core\Circuit.h">
+      <Filter>Include\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Core\Solver.h">
+      <Filter>Include\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\App\Application.h">
+      <Filter>Include\App</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
