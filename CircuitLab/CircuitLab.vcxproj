@@ -167,16 +167,20 @@ sfml-system.lib
     <ClCompile Include="..\src\components\Terminal.cpp" />
     <ClCompile Include="..\src\core\Circuit.cpp" />
     <ClCompile Include="..\src\core\Solver.cpp" />
+    <ClCompile Include="..\src\ui\UI.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\App\Application.h" />
+    <ClInclude Include="..\include\Common\ComponentType.h" />
     <ClInclude Include="..\include\Components\Component.h" />
     <ClInclude Include="..\include\Components\Resistor.h" />
     <ClInclude Include="..\include\Components\Terminal.h" />
     <ClInclude Include="..\include\Core\Circuit.h" />
     <ClInclude Include="..\include\Core\Solver.h" />
     <ClInclude Include="..\include\Core\Vector2.h" />
+    <ClInclude Include="..\include\UI\ComponentView.h" />
+    <ClInclude Include="..\include\UI\UI.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

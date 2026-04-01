@@ -8,7 +8,7 @@ namespace CircuitLab {
 		double m_resistance;
 		double m_conductance;
 	public:
-		Resistor();
+		Resistor(double value);
 		
 		// Getter
 		double GetResistance() const { return m_resistance; }

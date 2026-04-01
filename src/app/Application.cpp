@@ -1,5 +1,26 @@
+#include <memory>
 #include "App/Application.h"
 #include "Core/Solver.h"
+#include "Components/Resistor.h"
+
+std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type, double value)
+{
+	switch (type) {
+	case ComponentType::resistor:
+			return std::make_unique<Resistor>(value);
+	default:
+		return nullptr;
+	}
+}
+
+CircuitLab::Application::Application()
+{
+	m_ui = std::make_unique<UI>(800, 600, "CircuitLab main window");
+	m_circuit = std::make_unique<Circuit>();
+
+	m_ui->SetOnRunSimulation([this]() { RunSimulation(); });
+	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type, const Vec2 &pos, float rot, const std::string &name, double res) { m_circuit->AddComponent(MakeComponent(type, res)); });
+}
 
 CircuitLab::SimulationResult CircuitLab::Application::RunSimulation()
 {
@@ -15,4 +36,9 @@ CircuitLab::SimulationResult CircuitLab::Application::RunSimulation()
 	
 	m_simulationResult = result.value();
 	return SimulationResult::success;
+}
+
+void CircuitLab::Application::Run()
+{
+	m_ui->Run();
 }

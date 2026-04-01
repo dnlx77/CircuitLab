@@ -1,8 +1,8 @@
 #include "Components/Resistor.h"
 
-CircuitLab::Resistor::Resistor() : Component(2)
+CircuitLab::Resistor::Resistor(double value) : Component(2)
 {
-	SetResistance(1.0);
+	SetResistance(value);
 }
 
 void CircuitLab::Resistor::SetResistance(double res)

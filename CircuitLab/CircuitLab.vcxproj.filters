@@ -42,6 +42,15 @@
     <Filter Include="src\App">
       <UniqueIdentifier>{5b9e7aaf-3d08-442c-8a0b-ba556be01e40}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Include\UI">
+      <UniqueIdentifier>{eeefd32d-6562-47f8-a92e-15623b7656b3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Include\Common">
+      <UniqueIdentifier>{0eada309-fde2-44d9-8703-59c206a91cc7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\UI">
+      <UniqueIdentifier>{efedbc89-c957-4d02-8284-7c150931a495}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\external\imgui-sfml\imgui-SFML.cpp">
@@ -83,6 +92,9 @@
     <ClCompile Include="..\src\app\Application.cpp">
       <Filter>src\App</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\ui\UI.cpp">
+      <Filter>src\UI</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\Components\Terminal.h">
@@ -105,6 +117,15 @@
     </ClInclude>
     <ClInclude Include="..\include\App\Application.h">
       <Filter>Include\App</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\UI\UI.h">
+      <Filter>Include\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Common\ComponentType.h">
+      <Filter>Include\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\UI\ComponentView.h">
+      <Filter>Include\UI</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

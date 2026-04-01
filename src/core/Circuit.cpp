@@ -54,3 +54,8 @@ const Eigen::VectorXd &CircuitLab::Circuit::GetCircuitVector()
 
 	return m_circuitVector;
 }
+
+void CircuitLab::Circuit::AddComponent(std::unique_ptr<Component> comp)
+{
+	m_components.emplace_back(std::move(comp));
+}
