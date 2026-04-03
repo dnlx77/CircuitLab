@@ -30,7 +30,13 @@ void CircuitLab::UI::Run()
 				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R)) 
 				{	
 					int id = m_onCircuitChange(ComponentType::resistor, 1.0);
-					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), 1.0, "Resistor"));
+					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), 1.0, "Resistor", ComponentType::resistor));
+				}
+
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
+				{
+					int id = m_onCircuitChange(ComponentType::voltageSource, 1.0);
+					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), 1.0, "Voltage source", ComponentType::voltageSource));
 				}
 			}
 		}
@@ -43,6 +49,10 @@ void CircuitLab::UI::Run()
 
 		for (const auto &comp : m_componentViewList) {
 			sf::RectangleShape rect({ 20,40 });
+			if (comp.GetComponentType() == ComponentType::resistor)
+				rect.setFillColor(sf::Color::Green);
+			if (comp.GetComponentType() == ComponentType::voltageSource)
+				rect.setFillColor(sf::Color::Red);
 			rect.setPosition({ comp.GetPosition().x,comp.GetPosition().y });
 			m_window.draw(rect);
 		}

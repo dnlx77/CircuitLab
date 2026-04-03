@@ -8,7 +8,9 @@ std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(Co
 {
 	switch (type) {
 	case ComponentType::resistor:
-			return std::make_unique<Resistor>(value);
+		return std::make_unique<Resistor>(value);
+	case ComponentType::voltageSource:
+		return std::make_unique<VoltageSource>(value);
 	default:
 		return nullptr;
 	}
