@@ -20,7 +20,7 @@ namespace CircuitLab {
 		Circuit();
 		const Eigen::MatrixXd &GetCircuitMatrix();
 		const Eigen::VectorXd &GetCircuitVector();
-		void AddComponent(std::unique_ptr<Component> comp);
+		int AddComponent(std::unique_ptr<Component> comp);
 		void RemoveComponent(int compId);
 		void InvalidateCircuit() { m_isDirty = true; }
 		bool IsCircuitEmpty() const { return m_components.empty(); }

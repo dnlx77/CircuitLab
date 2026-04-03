@@ -9,7 +9,7 @@ namespace CircuitLab {
 
 	class UI {
 	public:
-		using fnCircuitChange = std::function<void(CircuitLab::ComponentType type, const Vec2 &pos, float rot, const std::string &name, double res)>;
+		using fnCircuitChange = std::function<int(CircuitLab::ComponentType type, const Vec2 &pos, float rot, const std::string &name, double res)>;
 
 	private:
 		unsigned int m_width;

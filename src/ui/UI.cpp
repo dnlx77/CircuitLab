@@ -4,7 +4,8 @@
 
 CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &title) : m_width(width), m_heigth(heigth), m_title(title), m_window(sf::VideoMode({ m_width,m_heigth }), m_title)
 {
-	ImGui::SFML::Init(m_window);
+	if (!ImGui::SFML::Init(m_window))
+		throw std::runtime_error("Impossibile inizializzare SFML");
 }
 
 CircuitLab::UI::~UI()
