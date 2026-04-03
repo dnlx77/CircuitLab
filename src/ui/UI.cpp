@@ -24,6 +24,15 @@ void CircuitLab::UI::Run()
 			ImGui::SFML::ProcessEvent(m_window, *event);
 			if (event->is<sf::Event::Closed>())
 				m_window.close();
+			else if (const auto *mouseEvent = event->getIf<sf::Event::MouseButtonPressed>())
+			{
+				auto pos = mouseEvent->position;
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R)) 
+				{	
+					int id = m_onCircuitChange(ComponentType::resistor, 1.0);
+					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), 1.0, "Resistor"));
+				}
+			}
 		}
 
 		ImGui::SFML::Update(m_window, deltaClock.restart());
@@ -31,7 +40,15 @@ void CircuitLab::UI::Run()
 		// Finestre ImGui qui
 
 		m_window.clear(sf::Color(30, 30, 30));
+
+		for (const auto &comp : m_componentViewList) {
+			sf::RectangleShape rect({ 20,40 });
+			rect.setPosition({ comp.GetPosition().x,comp.GetPosition().y });
+			m_window.draw(rect);
+		}
+
 		ImGui::SFML::Render(m_window);
+
 		m_window.display();
 	}
 }

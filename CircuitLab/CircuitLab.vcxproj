@@ -168,6 +168,7 @@ sfml-system.lib
     <ClCompile Include="..\src\components\VoltageSource.cpp" />
     <ClCompile Include="..\src\core\Circuit.cpp" />
     <ClCompile Include="..\src\core\Solver.cpp" />
+    <ClCompile Include="..\src\ui\ComponentView.cpp" />
     <ClCompile Include="..\src\ui\UI.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>

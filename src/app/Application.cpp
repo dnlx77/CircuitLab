@@ -20,7 +20,7 @@ CircuitLab::Application::Application()
 	m_circuit = std::make_unique<Circuit>();
 
 	m_ui->SetOnRunSimulation([this]() { RunSimulation(); });
-	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type, const Vec2 &, float, const std::string &, double res) -> int 
+	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type, double res) -> int 
 		{ int id = m_circuit->AddComponent(MakeComponent(type, res)); 
 	return id;
 	});

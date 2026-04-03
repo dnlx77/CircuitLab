@@ -98,6 +98,9 @@
     <ClCompile Include="..\src\components\VoltageSource.cpp">
       <Filter>src\Components</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\ui\ComponentView.cpp">
+      <Filter>src\UI</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\Components\Terminal.h">

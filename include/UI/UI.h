@@ -4,17 +4,20 @@
 
 #include "Common/ComponentType.h"
 #include "Core/Vector2.h"
+#include "UI/ComponentView.h"
 
 namespace CircuitLab {
 
 	class UI {
 	public:
-		using fnCircuitChange = std::function<int(CircuitLab::ComponentType type, const Vec2 &pos, float rot, const std::string &name, double res)>;
+		using fnCircuitChange = std::function<int(CircuitLab::ComponentType type, double res)>;
 
 	private:
 		unsigned int m_width;
 		unsigned int m_heigth;
 		std::string m_title;
+
+		std::vector<ComponentView> m_componentViewList;
 		sf::RenderWindow m_window;
 
 		std::function<void()> m_onRunSimulation;
