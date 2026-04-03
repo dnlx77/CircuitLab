@@ -2,6 +2,7 @@
 #include "App/Application.h"
 #include "Core/Solver.h"
 #include "Components/Resistor.h"
+#include "Components/VoltageSource.h"
 
 std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type, double value)
 {
@@ -19,7 +20,7 @@ CircuitLab::Application::Application()
 	m_circuit = std::make_unique<Circuit>();
 
 	m_ui->SetOnRunSimulation([this]() { RunSimulation(); });
-	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type, const Vec2 &pos, float rot, const std::string &name, double res) { m_circuit->AddComponent(MakeComponent(type, res)); });
+	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type, const Vec2 &, float, const std::string &, double res) { m_circuit->AddComponent(MakeComponent(type, res)); });
 }
 
 CircuitLab::SimulationResult CircuitLab::Application::RunSimulation()

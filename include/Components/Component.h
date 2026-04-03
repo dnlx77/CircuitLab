@@ -29,6 +29,7 @@ namespace CircuitLab {
 		void Save();
 		void Load();
 
-		virtual void Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &b, const std::map<int,int>& nodeMap) = 0;
+		virtual void Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B, const std::map<int,int>& nodeMap, const std::map<int, int>& voltageSourceMap) = 0;
+		virtual int GetExtraVariables() const { return 0; }
 	};
 }

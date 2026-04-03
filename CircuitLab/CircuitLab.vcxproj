@@ -165,6 +165,7 @@ sfml-system.lib
     <ClCompile Include="..\src\components\Component.cpp" />
     <ClCompile Include="..\src\components\Resistor.cpp" />
     <ClCompile Include="..\src\components\Terminal.cpp" />
+    <ClCompile Include="..\src\components\VoltageSource.cpp" />
     <ClCompile Include="..\src\core\Circuit.cpp" />
     <ClCompile Include="..\src\core\Solver.cpp" />
     <ClCompile Include="..\src\ui\UI.cpp" />
@@ -176,6 +177,7 @@ sfml-system.lib
     <ClInclude Include="..\include\Components\Component.h" />
     <ClInclude Include="..\include\Components\Resistor.h" />
     <ClInclude Include="..\include\Components\Terminal.h" />
+    <ClInclude Include="..\include\Components\VoltageSource.h" />
     <ClInclude Include="..\include\Core\Circuit.h" />
     <ClInclude Include="..\include\Core\Solver.h" />
     <ClInclude Include="..\include\Core\Vector2.h" />

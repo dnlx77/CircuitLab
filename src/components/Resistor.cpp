@@ -17,9 +17,10 @@ void CircuitLab::Resistor::SetResistance(double res)
 	}
 }
 
-void CircuitLab::Resistor::Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &b, const std::map<int,int>& nodeMap)
+void CircuitLab::Resistor::Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B, const std::map<int,int>& nodeMap, const std::map<int, int> &voltageSourceMap)
 {
-	(void)b;
+	(void)B;
+	(void)voltageSourceMap;
 	int n1, n2;
 	
 	if (GetTerminals()[0].GetNodeId() != 0)

@@ -2,21 +2,20 @@
 #include "Component.h"
 
 namespace CircuitLab {
-	
-	class Resistor : public Component {
+
+	class VoltageSource : public Component {
 	private:
-		double m_resistance;
-		double m_conductance;
+		double m_voltage;
 	public:
-		Resistor(double value);
-		
+		VoltageSource(double value);
+
 		// Getter
-		double GetResistance() const { return m_resistance; }
-		double GetConductance() const { return m_conductance; }
+		double GetVoltage() const { return m_voltage; }
 
 		// Setter
-		void SetResistance(double res);
+		void SetVoltage(double value);
 		void Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B, const std::map<int, int> &nodeMap, const std::map<int, int> &voltageSourceMap) override;
+		int GetExtraVariables() const override { return 1; }
 		void SaveSpecificData() override;
 		void LoadSpecificData() override;
 	};

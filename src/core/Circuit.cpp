@@ -19,7 +19,16 @@ int CircuitLab::Circuit::ComputeNodes()
 		i++;
 	}
 
-	return static_cast<int>(nodes.size());
+	int k = static_cast<int>(nodes.size());
+	int numVoltageSource = 0;
+	for (const auto &comp : m_components) {
+		if (comp->GetExtraVariables()) {
+			m_voltageSourceMap[comp->GetId()] = k++;
+			numVoltageSource++;
+		}
+	}
+
+	return static_cast<int>(nodes.size()+numVoltageSource);
 }
 
 void CircuitLab::Circuit::ComputeCircuit()
@@ -32,7 +41,7 @@ void CircuitLab::Circuit::ComputeCircuit()
 	m_circuitVector = Eigen::VectorXd::Zero(num_nodes);
 
 	for (const auto &comp : m_components) {
-		comp->Stamp(m_circuitMatrix, m_circuitVector, m_nodesMap);
+		comp->Stamp(m_circuitMatrix, m_circuitVector, m_nodesMap, m_voltageSourceMap);
 	}
 
 	m_isDirty = false;

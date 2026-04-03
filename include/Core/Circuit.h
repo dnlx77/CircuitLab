@@ -12,6 +12,7 @@ namespace CircuitLab {
 		Eigen::MatrixXd m_circuitMatrix;
 		Eigen::VectorXd m_circuitVector;
 		std::map<int, int> m_nodesMap;
+		std::map<int, int> m_voltageSourceMap;
 		bool m_isDirty;
 		int ComputeNodes();
 		void ComputeCircuit();
