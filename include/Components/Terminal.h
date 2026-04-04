@@ -11,7 +11,7 @@ namespace CircuitLab {
 		int m_nodeId;
 	public:
 
-		Terminal() : m_id(s_nextId++), m_connected(nullptr), m_nodeId(0) {}
+		Terminal() : m_id(s_nextId++), m_connected(nullptr), m_nodeId(-1) {}
 		int GetId() const { return m_id; }
 		int GetNodeId() const { return m_nodeId; }
 		Terminal *GetTerminalConnected() const { return m_connected; }

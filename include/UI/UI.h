@@ -3,10 +3,21 @@
 #include <functional>
 
 #include "Common/ComponentType.h"
-#include "Core/Vector2.h"
 #include "UI/ComponentView.h"
 
 namespace CircuitLab {
+
+	enum class SelectionState {
+		none,
+		componentSelected,
+		terminalSelected
+	};
+
+	struct SelecetedComponent {
+		int compId;
+		int terminalIndex;
+		SelectionState state;
+	};
 
 	class UI {
 	public:
@@ -17,11 +28,15 @@ namespace CircuitLab {
 		unsigned int m_heigth;
 		std::string m_title;
 
+		SelecetedComponent m_selectedComponent;
+
 		std::vector<ComponentView> m_componentViewList;
 		sf::RenderWindow m_window;
 
 		std::function<void()> m_onRunSimulation;
 		fnCircuitChange m_onCircuitChange;
+
+		void CheckClick(sf::Vector2i pos, SelecetedComponent &selComp);
 
 	public:
 		UI(unsigned int width, unsigned int heigth, const std::string &title);
