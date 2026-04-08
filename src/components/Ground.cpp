@@ -6,7 +6,12 @@ CircuitLab::Ground::Ground() : Component(1)
 }
 
 void CircuitLab::Ground::Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B, const std::map<int, int> &nodeMap, const std::map<int, int> &voltageSourceMap)
-{}
+{
+	(void)A;
+	(void)B;
+	(void)nodeMap;
+	(void)voltageSourceMap;
+}
 
 void CircuitLab::Ground::SaveSpecificData()
 {}

@@ -8,11 +8,10 @@
 
 void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 {
-	Vec2i ter2;
 	for (const auto &comp : m_componentViewList)
 	{
-		Vec2i ter1(comp.GetPosition().x, comp.GetPosition().y - 20);
-		Vec2i ter2(comp.GetPosition().x, comp.GetPosition().y + 20);
+		Vec2i ter1(static_cast<int>(comp.GetPosition().x), static_cast<int>(comp.GetPosition().y - 20));
+		Vec2i ter2(static_cast<int>(comp.GetPosition().x), static_cast<int>(comp.GetPosition().y + 20));
 
 		if ((pos.x >= ter1.x - 5) && (pos.x <= ter1.x + 5) && (pos.y >= ter1.y - 5) && (pos.y <= ter1.y + 5))
 		{
