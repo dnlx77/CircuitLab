@@ -42,6 +42,46 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 	return;
 }
 
+CircuitLab::LinkView CircuitLab::UI::GetLinkCoords(int comp1, int term1, int comp2, int term2)
+{
+	sf::Vector2f pA, pB;
+	for (const auto &comp : m_componentViewList)
+	{
+		if (comp.GetComponentLink() == comp1)
+		{
+			if (term1 == 0) 
+			{
+				pA.x = comp.GetPosition().x;
+				pA.y = comp.GetPosition().y - 24;
+			}
+			else
+			{
+				pA.x = comp.GetPosition().x;
+				pA.y = comp.GetPosition().y + 24;
+			}
+		}
+
+		if (comp.GetComponentLink() == comp2)
+		{
+			if (term2 == 0)
+			{
+				pB.x = comp.GetPosition().x;
+				pB.y = comp.GetPosition().y - 24;
+			}
+			else
+			{
+				pB.x = comp.GetPosition().x;
+				pB.y = comp.GetPosition().y + 24;
+			}
+		}
+	}
+
+	LinkView link;
+	link.pointA = pA;
+	link.pointB = pB;
+	return link;
+}
+
 CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &title) :
 	m_width(width),
 	m_heigth(heigth),
@@ -98,6 +138,7 @@ void CircuitLab::UI::Run()
 						comp2 = temp.compId;
 						term2 = temp.terminalIndex;
 						m_onCreateLink(comp1, term1, comp2, term2);
+						m_linkViewList.emplace_back(GetLinkCoords(comp1, term1, comp2, term2));
 
 						m_selectedComponent.state = SelectionState::none;
 						m_selectedComponent.compId = -1;
@@ -136,6 +177,15 @@ void CircuitLab::UI::Run()
 			term.setOrigin({ 4, 4 });
 			m_window.draw(term);
 			term.setOutlineThickness(0);
+		}
+
+		for (const auto &wire : m_linkViewList) {
+			sf::Vertex line[2] = {
+				sf::Vertex{wire.pointA, sf::Color::White},
+				sf::Vertex{wire.pointB, sf::Color::White}
+			};
+
+			m_window.draw(line, 2, sf::PrimitiveType::Lines);
 		}
 
 		ImGui::SFML::Render(m_window);

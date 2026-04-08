@@ -19,6 +19,11 @@ namespace CircuitLab {
 		SelectionState state;
 	};
 
+	struct LinkView {
+		sf::Vector2f pointA;
+		sf::Vector2f pointB;
+	};
+
 	class UI {
 	public:
 		using fnCircuitChange = std::function<int(CircuitLab::ComponentType type, double res)>;
@@ -32,6 +37,7 @@ namespace CircuitLab {
 		SelecetedComponent m_selectedComponent;
 
 		std::vector<ComponentView> m_componentViewList;
+		std::vector<LinkView> m_linkViewList;
 		sf::RenderWindow m_window;
 
 		std::function<void()> m_onRunSimulation;
@@ -39,6 +45,7 @@ namespace CircuitLab {
 		fnCreateLink m_onCreateLink;
 
 		void CheckClick(sf::Vector2i pos, SelecetedComponent &selComp);
+		LinkView GetLinkCoords(int comp1, int term1, int comp2, int term2);
 
 	public:
 		UI(unsigned int width, unsigned int heigth, const std::string &title);
