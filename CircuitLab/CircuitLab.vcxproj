@@ -163,6 +163,7 @@ sfml-system.lib
     <ClCompile Include="..\external\imgui\imgui_widgets.cpp" />
     <ClCompile Include="..\src\app\Application.cpp" />
     <ClCompile Include="..\src\components\Component.cpp" />
+    <ClCompile Include="..\src\components\Ground.cpp" />
     <ClCompile Include="..\src\components\Resistor.cpp" />
     <ClCompile Include="..\src\components\Terminal.cpp" />
     <ClCompile Include="..\src\components\VoltageSource.cpp" />
@@ -176,6 +177,7 @@ sfml-system.lib
     <ClInclude Include="..\include\App\Application.h" />
     <ClInclude Include="..\include\Common\ComponentType.h" />
     <ClInclude Include="..\include\Components\Component.h" />
+    <ClInclude Include="..\include\Components\Ground.h" />
     <ClInclude Include="..\include\Components\Resistor.h" />
     <ClInclude Include="..\include\Components\Terminal.h" />
     <ClInclude Include="..\include\Components\VoltageSource.h" />

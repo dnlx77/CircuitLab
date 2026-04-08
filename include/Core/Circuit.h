@@ -26,5 +26,6 @@ namespace CircuitLab {
 		void InvalidateCircuit() { m_isDirty = true; }
 		bool IsCircuitEmpty() const { return m_components.empty(); }
 		void ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2);
+		void PrintCircuit();
 	};
 }

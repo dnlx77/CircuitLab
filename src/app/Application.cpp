@@ -1,8 +1,12 @@
 #include <memory>
+
+#include <iostream>
+
 #include "App/Application.h"
 #include "Core/Solver.h"
 #include "Components/Resistor.h"
 #include "Components/VoltageSource.h"
+#include "Components/Ground.h"
 
 std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type, double value)
 {
@@ -11,6 +15,8 @@ std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(Co
 		return std::make_unique<Resistor>(value);
 	case ComponentType::voltageSource:
 		return std::make_unique<VoltageSource>(value);
+	case ComponentType::ground:
+		return std::make_unique<Ground>();
 	default:
 		return nullptr;
 	}
@@ -21,7 +27,7 @@ CircuitLab::Application::Application()
 	m_ui = std::make_unique<UI>(800, 600, "CircuitLab main window");
 	m_circuit = std::make_unique<Circuit>();
 
-	m_ui->SetOnRunSimulation([this]() { RunSimulation(); });
+	m_ui->SetOnRunSimulation([this]() -> Eigen::VectorXd { RunSimulation(); return m_simulationResult; });
 	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type, double res) -> int 
 		{ int id = m_circuit->AddComponent(MakeComponent(type, res)); 
 	return id;
@@ -31,6 +37,10 @@ CircuitLab::Application::Application()
 
 CircuitLab::SimulationResult CircuitLab::Application::RunSimulation()
 {
+	// DA CANCELLARE
+	std::cout << "Circuito: " << std::endl;
+	m_circuit->PrintCircuit();
+
 	if (m_circuit == nullptr)
 		return SimulationResult::no_circuit;
 	if (m_circuit->IsCircuitEmpty())
@@ -42,6 +52,11 @@ CircuitLab::SimulationResult CircuitLab::Application::RunSimulation()
 		return SimulationResult::solve_error;
 	
 	m_simulationResult = result.value();
+
+	// DA CANCELLARE
+	std::cout << "Soluzione: " << m_simulationResult << std::endl;
+	
+	
 	return SimulationResult::success;
 }
 

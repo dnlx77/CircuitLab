@@ -101,6 +101,9 @@
     <ClCompile Include="..\src\ui\ComponentView.cpp">
       <Filter>src\UI</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\components\Ground.cpp">
+      <Filter>src\Components</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\Components\Terminal.h">
@@ -134,6 +137,9 @@
       <Filter>Include\UI</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Components\VoltageSource.h">
+      <Filter>Include\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Components\Ground.h">
       <Filter>Include\Components</Filter>
     </ClInclude>
   </ItemGroup>

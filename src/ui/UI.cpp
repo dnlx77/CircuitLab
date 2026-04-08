@@ -1,4 +1,7 @@
 #include <imgui-SFML.h>
+#include <imgui.h>
+
+#include <iostream>
 
 #include "UI/Ui.h"
 #include "Core/Vector2.h"
@@ -111,21 +114,27 @@ void CircuitLab::UI::Run()
 			else if (const auto *mouseEvent = event->getIf<sf::Event::MouseButtonPressed>())
 			{
 				auto pos = mouseEvent->position;
-				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R)) 
-				{	
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
+				{
 					int id = m_onCircuitChange(ComponentType::resistor, 1.0);
 					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), 1.0, "Resistor", ComponentType::resistor));
 				}
 
 				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
 				{
-					int id = m_onCircuitChange(ComponentType::voltageSource, 1.0);
+					int id = m_onCircuitChange(ComponentType::voltageSource, 5.0);
 					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), 1.0, "Voltage source", ComponentType::voltageSource));
+				}
+
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G))
+				{
+					int id = m_onCircuitChange(ComponentType::ground, 0);
+					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), 1.0, "Ground", ComponentType::ground));
 				}
 
 				if (m_selectedComponent.state != SelectionState::terminalSelected)
 					CheckClick(pos, m_selectedComponent); // 1° click
-				else if (m_selectedComponent.state == SelectionState::terminalSelected) 
+				else if (m_selectedComponent.state == SelectionState::terminalSelected)
 				{
 					// mi memorizzo i dati del componente in vista di un possibile secondo input
 					int comp1 = m_selectedComponent.compId;
@@ -133,11 +142,15 @@ void CircuitLab::UI::Run()
 					int comp2, term2;
 					SelecetedComponent temp;
 					CheckClick(pos, temp);
-					if (temp.state == SelectionState::terminalSelected) 
+					if (temp.state == SelectionState::terminalSelected)
 					{
 						comp2 = temp.compId;
 						term2 = temp.terminalIndex;
 						m_onCreateLink(comp1, term1, comp2, term2);
+
+						// DA CANCELLARE
+						std::cout << "Link: comp" << comp1 << " term" << term1 << " -> comp" << comp2 << " term" << term2 << std::endl;
+
 						m_linkViewList.emplace_back(GetLinkCoords(comp1, term1, comp2, term2));
 
 						m_selectedComponent.state = SelectionState::none;
@@ -145,23 +158,54 @@ void CircuitLab::UI::Run()
 						m_selectedComponent.terminalIndex = -1;
 					}
 				}
-				
+
 			}
 		}
 
 		ImGui::SFML::Update(m_window, deltaClock.restart());
 
 		// Finestre ImGui qui
+		ImGui::Begin("CircuitLab - Test");
+	
+		if (ImGui::Button("RunSimulation")) {
+			m_result = m_onRunSimulation();
+			
+			// DA CANCELLARE
+			std::cout << "xxxxx" << m_result << std::endl;
+		}
+
+		std::string res = "Risultato: [";
+		for (int i = 0; i < m_result.size(); i++)
+		{
+			res += std::to_string(m_result(i));
+			res += " ";
+		}
+		res += "]";
+		
+		ImGui::Text(res.c_str());
+		ImGui::End();
 
 		m_window.clear(sf::Color(30, 30, 30));
 
 		for (const auto &comp : m_componentViewList) {
-			sf::RectangleShape rect({ 20,40 });
+			sf::RectangleShape rect;
 			sf::CircleShape term(4);
 			if (comp.GetComponentType() == ComponentType::resistor)
+			{
+				rect.setSize({ 20,40 });
 				rect.setFillColor(sf::Color::Green);
+			}
 			if (comp.GetComponentType() == ComponentType::voltageSource)
+			{
+				rect.setSize({ 20,40 });
 				rect.setFillColor(sf::Color::Red);
+			}
+			if (comp.GetComponentType() == ComponentType::ground) 
+			{
+				rect.setSize({ 20, 20 });
+				rect.setFillColor(sf::Color::White);
+			}
+
 			rect.setPosition({ comp.GetPosition().x,comp.GetPosition().y });
 			if (comp.GetComponentLink() == m_selectedComponent.compId && m_selectedComponent.terminalIndex == -1) { rect.setOutlineColor(sf::Color::Yellow); rect.setOutlineThickness(2); }
 			rect.setOrigin({ 10,20 });
@@ -172,24 +216,25 @@ void CircuitLab::UI::Run()
 			term.setOrigin({ 4, 4 });
 			m_window.draw(term);
 			term.setOutlineThickness(0);
-			term.setPosition({ comp.GetPosition().x, comp.GetPosition().y + 24});
+			term.setPosition({ comp.GetPosition().x, comp.GetPosition().y + 24 });
 			if (comp.GetComponentLink() == m_selectedComponent.compId && m_selectedComponent.terminalIndex == 1) { term.setOutlineColor(sf::Color::Yellow); term.setOutlineThickness(2); }
 			term.setOrigin({ 4, 4 });
 			m_window.draw(term);
 			term.setOutlineThickness(0);
 		}
 
-		for (const auto &wire : m_linkViewList) {
-			sf::Vertex line[2] = {
-				sf::Vertex{wire.pointA, sf::Color::White},
-				sf::Vertex{wire.pointB, sf::Color::White}
-			};
 
-			m_window.draw(line, 2, sf::PrimitiveType::Lines);
-		}
+	for (const auto &wire : m_linkViewList) {
+		sf::Vertex line[2] = {
+			sf::Vertex{wire.pointA, sf::Color::White},
+			sf::Vertex{wire.pointB, sf::Color::White}
+		};
 
-		ImGui::SFML::Render(m_window);
-
-		m_window.display();
+		m_window.draw(line, 2, sf::PrimitiveType::Lines);
 	}
+
+	ImGui::SFML::Render(m_window);
+	m_window.display();
+	}
+
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <functional>
+#include <Eigen/Dense>
 
 #include "Common/ComponentType.h"
 #include "UI/ComponentView.h"
@@ -34,13 +35,15 @@ namespace CircuitLab {
 		unsigned int m_heigth;
 		std::string m_title;
 
+		Eigen::VectorXd m_result;
+
 		SelecetedComponent m_selectedComponent;
 
 		std::vector<ComponentView> m_componentViewList;
 		std::vector<LinkView> m_linkViewList;
 		sf::RenderWindow m_window;
 
-		std::function<void()> m_onRunSimulation;
+		std::function<Eigen::VectorXd()> m_onRunSimulation;
 		fnCircuitChange m_onCircuitChange;
 		fnCreateLink m_onCreateLink;
 
@@ -51,7 +54,7 @@ namespace CircuitLab {
 		UI(unsigned int width, unsigned int heigth, const std::string &title);
 		~UI();
 
-		void SetOnRunSimulation(const std::function<void()> &func) { m_onRunSimulation = func; }
+		void SetOnRunSimulation(const std::function<Eigen::VectorXd()> &func) { m_onRunSimulation = func; }
 		void SetOnCircuitChange(const fnCircuitChange &func) { m_onCircuitChange = func; }
 		void SetOnCreateLink(const fnCreateLink &func) { m_onCreateLink = func; }
 
