@@ -25,6 +25,7 @@ namespace CircuitLab {
 		// Getter
 		int GetId() const { return m_id; }
 		const std::vector<Terminal>& GetTerminals() const { return m_terminals; }
+		Terminal &GetTerminal(int index) { return m_terminals[index]; }
 
 		void Save();
 		void Load();

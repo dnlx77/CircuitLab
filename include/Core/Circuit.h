@@ -13,6 +13,7 @@ namespace CircuitLab {
 		Eigen::VectorXd m_circuitVector;
 		std::map<int, int> m_nodesMap;
 		std::map<int, int> m_voltageSourceMap;
+		int m_nextNodeId;
 		bool m_isDirty;
 		int ComputeNodes();
 		void ComputeCircuit();
@@ -24,5 +25,6 @@ namespace CircuitLab {
 		void RemoveComponent(int compId);
 		void InvalidateCircuit() { m_isDirty = true; }
 		bool IsCircuitEmpty() const { return m_components.empty(); }
+		void ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2);
 	};
 }

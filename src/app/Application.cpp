@@ -26,6 +26,7 @@ CircuitLab::Application::Application()
 		{ int id = m_circuit->AddComponent(MakeComponent(type, res)); 
 	return id;
 	});
+	m_ui->SetOnCreateLink([this](int compId1, int termIndex1, int compId2, int termIndex2) { m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2); });
 }
 
 CircuitLab::SimulationResult CircuitLab::Application::RunSimulation()

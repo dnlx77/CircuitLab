@@ -47,7 +47,25 @@ void CircuitLab::Circuit::ComputeCircuit()
 	m_isDirty = false;
 }
 
-CircuitLab::Circuit::Circuit() : m_isDirty(true)
+void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2)
+{
+	Component *comp1 = nullptr;
+	Component *comp2 = nullptr;
+	int nodeId = -1;
+	for (const auto &comp : m_components) {
+		if (comp->GetId() == comp1Id) comp1 = comp.get();
+		if (comp->GetId() == comp2Id) comp2 = comp.get();
+	}
+
+	if (comp1->GetTerminals()[termComp1].GetNodeId() > 0) nodeId = comp1->GetTerminals()[termComp1].GetNodeId();
+	else if (comp2->GetTerminals()[termComp2].GetNodeId() > 0) nodeId = comp2->GetTerminals()[termComp2].GetNodeId();
+	else nodeId = m_nextNodeId++;
+
+	comp1->GetTerminal(termComp1).SetNodeId(nodeId);
+	comp2->GetTerminal(termComp2).SetNodeId(nodeId);
+}
+
+CircuitLab::Circuit::Circuit() : m_isDirty(true), m_nextNodeId(1)
 {}
 
 const Eigen::MatrixXd &CircuitLab::Circuit::GetCircuitMatrix()

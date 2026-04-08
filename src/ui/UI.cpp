@@ -83,7 +83,28 @@ void CircuitLab::UI::Run()
 					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), 1.0, "Voltage source", ComponentType::voltageSource));
 				}
 
-				CheckClick(pos, m_selectedComponent);
+				if (m_selectedComponent.state != SelectionState::terminalSelected)
+					CheckClick(pos, m_selectedComponent); // 1° click
+				else if (m_selectedComponent.state == SelectionState::terminalSelected) 
+				{
+					// mi memorizzo i dati del componente in vista di un possibile secondo input
+					int comp1 = m_selectedComponent.compId;
+					int term1 = m_selectedComponent.terminalIndex;
+					int comp2, term2;
+					SelecetedComponent temp;
+					CheckClick(pos, temp);
+					if (temp.state == SelectionState::terminalSelected) 
+					{
+						comp2 = temp.compId;
+						term2 = temp.terminalIndex;
+						m_onCreateLink(comp1, term1, comp2, term2);
+
+						m_selectedComponent.state = SelectionState::none;
+						m_selectedComponent.compId = -1;
+						m_selectedComponent.terminalIndex = -1;
+					}
+				}
+				
 			}
 		}
 
@@ -102,14 +123,17 @@ void CircuitLab::UI::Run()
 				rect.setFillColor(sf::Color::Red);
 			rect.setPosition({ comp.GetPosition().x,comp.GetPosition().y });
 			if (comp.GetComponentLink() == m_selectedComponent.compId && m_selectedComponent.terminalIndex == -1) { rect.setOutlineColor(sf::Color::Yellow); rect.setOutlineThickness(2); }
+			rect.setOrigin({ 10,20 });
 			m_window.draw(rect);
 			term.setFillColor(sf::Color::Blue);
-			term.setPosition({ comp.GetPosition().x + 5, comp.GetPosition().y - 10 });
+			term.setPosition({ comp.GetPosition().x, comp.GetPosition().y - 24 });
 			if (comp.GetComponentLink() == m_selectedComponent.compId && m_selectedComponent.terminalIndex == 0) { term.setOutlineColor(sf::Color::Yellow); term.setOutlineThickness(2); }
+			term.setOrigin({ 4, 4 });
 			m_window.draw(term);
 			term.setOutlineThickness(0);
-			term.setPosition({ comp.GetPosition().x + 5, comp.GetPosition().y + 40});
+			term.setPosition({ comp.GetPosition().x, comp.GetPosition().y + 24});
 			if (comp.GetComponentLink() == m_selectedComponent.compId && m_selectedComponent.terminalIndex == 1) { term.setOutlineColor(sf::Color::Yellow); term.setOutlineThickness(2); }
+			term.setOrigin({ 4, 4 });
 			m_window.draw(term);
 			term.setOutlineThickness(0);
 		}

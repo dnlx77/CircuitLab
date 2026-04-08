@@ -22,6 +22,7 @@ namespace CircuitLab {
 	class UI {
 	public:
 		using fnCircuitChange = std::function<int(CircuitLab::ComponentType type, double res)>;
+		using fnCreateLink = std::function<void(int compId1, int termIndex1, int compId2, int termIndex2)>;
 
 	private:
 		unsigned int m_width;
@@ -35,6 +36,7 @@ namespace CircuitLab {
 
 		std::function<void()> m_onRunSimulation;
 		fnCircuitChange m_onCircuitChange;
+		fnCreateLink m_onCreateLink;
 
 		void CheckClick(sf::Vector2i pos, SelecetedComponent &selComp);
 
@@ -44,9 +46,11 @@ namespace CircuitLab {
 
 		void SetOnRunSimulation(const std::function<void()> &func) { m_onRunSimulation = func; }
 		void SetOnCircuitChange(const fnCircuitChange &func) { m_onCircuitChange = func; }
+		void SetOnCreateLink(const fnCreateLink &func) { m_onCreateLink = func; }
 
 		std::function<void()> GetOnRunSimulation() const { return m_onRunSimulation; }
 		fnCircuitChange GetOnCircuitChange() const { return m_onCircuitChange; }
+		fnCreateLink GetOnCreateLink() const { return m_onCreateLink; }
 
 		void Run();
 	};
