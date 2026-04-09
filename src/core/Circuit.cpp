@@ -109,15 +109,18 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 		comp1->GetTerminal(termComp1).SetNodeId(0);
 		comp2->GetTerminal(termComp2).SetNodeId(0);
 
-		for (auto const &comp : m_components)
+		// retropropaga solo se il vecchio nodo era collegato
+		if (oldNodeId > 0)
 		{
-			for (int i = 0; i < comp->GetTerminals().size(); i++)
+			for (auto const &comp : m_components)
 			{
-				if (comp->GetTerminal(i).GetNodeId() == oldNodeId)
-					comp->GetTerminal(i).SetNodeId(0);
+				for (int i = 0; i < comp->GetTerminals().size(); i++)
+				{
+					if (comp->GetTerminal(i).GetNodeId() == oldNodeId)
+						comp->GetTerminal(i).SetNodeId(0);
+				}
 			}
 		}
-
 
 		// DA CANCELLARE
 		std::cout << "comp1 id=" << comp1Id << " term=" << termComp1
@@ -180,14 +183,6 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 		return;
 		
 	}
-	/*
-	if (comp1->GetTerminals()[termComp1].GetNodeId() >= 0) nodeId = comp1->GetTerminals()[termComp1].GetNodeId();
-	else if (comp2->GetTerminals()[termComp2].GetNodeId() >= 0) nodeId = comp2->GetTerminals()[termComp2].GetNodeId();
-	else nodeId = m_nextNodeId++;
-
-	comp1->GetTerminal(termComp1).SetNodeId(nodeId);
-	comp2->GetTerminal(termComp2).SetNodeId(nodeId);
-	*/
 
 }
 

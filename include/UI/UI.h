@@ -35,6 +35,13 @@ namespace CircuitLab {
 		unsigned int m_heigth;
 		std::string m_title;
 
+		static constexpr int CLICK_TOLLERANCE = 5;
+		static constexpr double DEFAULT_RESISTANCE = 1.0;
+		static constexpr double DEFAULT_VOLTAGE = 5.0;
+		static constexpr float DEFAULT_ROTATION = 0.0f;
+		static constexpr int OUTLINE_THICKNESS = 2;
+		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30);
+
 		Eigen::VectorXd m_result;
 
 		SelecetedComponent m_selectedComponent;
