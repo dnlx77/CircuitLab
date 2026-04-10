@@ -2,16 +2,12 @@
 #include <memory>
 #include <Eigen/Dense>
 #include "Core/Circuit.h"
-#include "UI/UI.h"
 #include "Common/ComponentType.h"
+#include "Common/SimulationOutput.h"
 
 namespace CircuitLab {
-	enum class SimulationResult {
-		success,
-		empty_circuit,
-		no_circuit,
-		solve_error
-	};
+
+	class UI;
 
 	class Application {
 	private:
@@ -22,8 +18,9 @@ namespace CircuitLab {
 		std::unique_ptr<Component> MakeComponent(ComponentType type, double value);
 	public:
 		Application();
+		~Application();
 		
-		SimulationResult RunSimulation();
+		SimulationOutput RunSimulation();
 		const Eigen::VectorXd &GetResult() const { return m_simulationResult; }
 
 		void Run();

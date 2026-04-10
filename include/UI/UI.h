@@ -4,7 +4,9 @@
 #include <Eigen/Dense>
 
 #include "Common/ComponentType.h"
+#include "Common/SimulationOutput.h"
 #include "UI/ComponentView.h"
+#include "App/Application.h"
 
 namespace CircuitLab {
 
@@ -42,7 +44,7 @@ namespace CircuitLab {
 		static constexpr int OUTLINE_THICKNESS = 2;
 		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30);
 
-		Eigen::VectorXd m_result;
+		SimulationOutput m_simulationOutput;
 
 		SelecetedComponent m_selectedComponent;
 
@@ -50,7 +52,7 @@ namespace CircuitLab {
 		std::vector<LinkView> m_linkViewList;
 		sf::RenderWindow m_window;
 
-		std::function<Eigen::VectorXd()> m_onRunSimulation;
+		std::function<SimulationOutput()> m_onRunSimulation;
 		fnCircuitChange m_onCircuitChange;
 		fnCreateLink m_onCreateLink;
 
@@ -61,13 +63,14 @@ namespace CircuitLab {
 		UI(unsigned int width, unsigned int heigth, const std::string &title);
 		~UI();
 
-		void SetOnRunSimulation(const std::function<Eigen::VectorXd()> &func) { m_onRunSimulation = func; }
+		void SetOnRunSimulation(const std::function<SimulationOutput()> &func) { m_onRunSimulation = func; }
 		void SetOnCircuitChange(const fnCircuitChange &func) { m_onCircuitChange = func; }
 		void SetOnCreateLink(const fnCreateLink &func) { m_onCreateLink = func; }
 
-		std::function<void()> GetOnRunSimulation() const { return m_onRunSimulation; }
-		fnCircuitChange GetOnCircuitChange() const { return m_onCircuitChange; }
-		fnCreateLink GetOnCreateLink() const { return m_onCreateLink; }
+		// DA CANCELLARE
+		//std::function<SimulationOutput()> GetOnRunSimulation() const { return m_onRunSimulation; }
+		//fnCircuitChange GetOnCircuitChange() const { return m_onCircuitChange; }
+		//fnCreateLink GetOnCreateLink() const { return m_onCreateLink; }
 
 		void Run();
 	};

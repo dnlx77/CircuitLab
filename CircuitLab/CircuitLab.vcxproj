@@ -176,6 +176,7 @@ sfml-system.lib
   <ItemGroup>
     <ClInclude Include="..\include\App\Application.h" />
     <ClInclude Include="..\include\Common\ComponentType.h" />
+    <ClInclude Include="..\include\Common\SimulationOutput.h" />
     <ClInclude Include="..\include\Components\Component.h" />
     <ClInclude Include="..\include\Components\Ground.h" />
     <ClInclude Include="..\include\Components\Resistor.h" />

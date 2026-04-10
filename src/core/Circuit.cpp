@@ -70,6 +70,28 @@ void CircuitLab::Circuit::PrintCircuit()
 	}
 }
 
+int CircuitLab::Circuit::GetNodesFromIndex(int index) const
+{
+	for (const auto &[key, value] : m_nodesMap)
+	{
+		if (value == index)
+			return key;
+	}
+
+	return -1;
+}
+
+int CircuitLab::Circuit::GetCurrentFromIndex(int index) const
+{
+	for (const auto &[key, value] : m_voltageSourceMap)
+	{
+		if (value == index)
+			return key;
+	}
+
+	return -1;
+}
+
 void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2)
 {
 	Component *comp1 = nullptr;

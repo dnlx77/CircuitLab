@@ -142,5 +142,8 @@
     <ClInclude Include="..\include\Components\Ground.h">
       <Filter>Include\Components</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\Common\SimulationOutput.h">
+      <Filter>Include\Common</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

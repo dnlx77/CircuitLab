@@ -154,18 +154,19 @@ void CircuitLab::UI::Run()
 		ImGui::Begin("CircuitLab - Test");
 	
 		if (ImGui::Button("RunSimulation")) {
-			m_result = m_onRunSimulation();
+			m_simulationOutput = m_onRunSimulation();
 		}
 
-		std::string res = "Risultato: [";
-		for (int i = 0; i < m_result.size(); i++)
-		{
-			res += std::to_string(m_result(i));
-			res += " ";
-		}
-		res += "]";
+		ImGui::Text("Risultato: [");
 		
-		ImGui::Text(res.c_str());
+		for (const auto &r : m_simulationOutput.res) 
+		{
+			std::string res = r.first + " " + std::to_string(r.second) + " ";
+			ImGui::Text(res.c_str());
+		}
+
+		ImGui::Text("]");
+		
 		ImGui::End();
 
 		m_window.clear(BACKGROUND_COLOR);
