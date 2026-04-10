@@ -10,68 +10,88 @@
 
 namespace CircuitLab {
 
+	// Stato della selezione corrente nel canvas:
+	// niente selezionato, un componente selezionato, o un terminale selezionato.
 	enum class SelectionState {
 		none,
 		componentSelected,
 		terminalSelected
 	};
 
+	// Tiene traccia del componente (o terminale) attualmente selezionato.
+	// Usato per gestire il doppio click sui terminali per creare un collegamento.
 	struct SelecetedComponent {
-		int compId;
-		int terminalIndex;
+		int compId;          // ID del componente selezionato (-1 se nessuno)
+		int terminalIndex;   // Indice del terminale selezionato (-1 se nessuno o se è il corpo)
 		SelectionState state;
 	};
 
+	// Rappresentazione visiva di un collegamento tra due terminali:
+	// semplicemente i due punti estremi del filo nel canvas.
 	struct LinkView {
 		sf::Vector2f pointA;
 		sf::Vector2f pointB;
 	};
 
+	// Classe principale dell'interfaccia grafica.
+	// Gestisce la finestra SFML, il loop degli eventi, il rendering dei componenti
+	// e dei collegamenti, e il pannello ImGui.
+	// Comunica con Application tramite tre callback:
+	//   - m_onRunSimulation: avvia la simulazione e restituisce i risultati
+	//   - m_onCircuitChange: aggiunge un componente al circuito, restituisce il suo ID
+	//   - m_onCreateLink:    collega due terminali nel circuito
 	class UI {
 	public:
-		using fnCircuitChange = std::function<int(CircuitLab::ComponentType type, double res)>;
+		// Callback per aggiungere un componente: riceve tipo e valore, restituisce l'ID assegnato
+		using fnCircuitChange = std::function<int(CircuitLab::ComponentType type, double value)>;
+		// Callback per collegare due terminali
 		using fnCreateLink = std::function<void(int compId1, int termIndex1, int compId2, int termIndex2)>;
 
 	private:
-		unsigned int m_width;
-		unsigned int m_heigth;
-		std::string m_title;
+		unsigned int m_width;   // Larghezza della finestra (pixel)
+		unsigned int m_heigth;  // Altezza della finestra (pixel)
+		std::string m_title;    // Titolo della finestra
 
-		static constexpr int CLICK_TOLLERANCE = 5;
-		static constexpr double DEFAULT_RESISTANCE = 1.0;
-		static constexpr double DEFAULT_VOLTAGE = 5.0;
-		static constexpr float DEFAULT_ROTATION = 0.0f;
-		static constexpr int OUTLINE_THICKNESS = 2;
-		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30);
+		// Costanti di configurazione UI
+		static constexpr int CLICK_TOLLERANCE = 5;         // Tolleranza click sui terminali (pixel)
+		static constexpr double DEFAULT_RESISTANCE = 1.0;  // Resistenza di default (Ohm)
+		static constexpr double DEFAULT_VOLTAGE = 5.0;     // Tensione di default (Volt)
+		static constexpr float DEFAULT_ROTATION = 0.0f;    // Rotazione di default (gradi)
+		static constexpr int OUTLINE_THICKNESS = 2;        // Spessore outline selezione (pixel)
+		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30); // Colore sfondo canvas
 
-		SimulationOutput m_simulationOutput;
+		SimulationOutput m_simulationOutput;  // Ultimo risultato di simulazione ricevuto
 
-		SelecetedComponent m_selectedComponent;
+		SelecetedComponent m_selectedComponent; // Componente/terminale attualmente selezionato
 
-		std::vector<ComponentView> m_componentViewList;
-		std::vector<LinkView> m_linkViewList;
-		sf::RenderWindow m_window;
+		std::vector<ComponentView> m_componentViewList; // Lista delle viste grafiche dei componenti
+		std::vector<LinkView> m_linkViewList;           // Lista dei collegamenti (fili) da disegnare
 
+		sf::RenderWindow m_window; // Finestra SFML
+
+		// Callback impostati da Application
 		std::function<SimulationOutput()> m_onRunSimulation;
 		fnCircuitChange m_onCircuitChange;
 		fnCreateLink m_onCreateLink;
 
+		// Determina quale componente o terminale è stato cliccato nella posizione pos.
+		// Aggiorna selComp con il risultato.
 		void CheckClick(sf::Vector2i pos, SelecetedComponent &selComp);
+
+		// Calcola le coordinate pixel dei due estremi di un collegamento,
+		// tenendo conto delle posizioni e degli offset dei terminali.
 		LinkView GetLinkCoords(int comp1, int term1, int comp2, int term2);
 
 	public:
 		UI(unsigned int width, unsigned int heigth, const std::string &title);
 		~UI();
 
+		// Setter per i callback - chiamati da Application nel costruttore
 		void SetOnRunSimulation(const std::function<SimulationOutput()> &func) { m_onRunSimulation = func; }
 		void SetOnCircuitChange(const fnCircuitChange &func) { m_onCircuitChange = func; }
 		void SetOnCreateLink(const fnCreateLink &func) { m_onCreateLink = func; }
 
-		// DA CANCELLARE
-		//std::function<SimulationOutput()> GetOnRunSimulation() const { return m_onRunSimulation; }
-		//fnCircuitChange GetOnCircuitChange() const { return m_onCircuitChange; }
-		//fnCreateLink GetOnCreateLink() const { return m_onCreateLink; }
-
+		// Avvia il loop principale: gestione eventi, aggiornamento ImGui, rendering
 		void Run();
 	};
 }
