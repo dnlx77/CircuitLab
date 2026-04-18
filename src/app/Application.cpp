@@ -40,11 +40,13 @@ CircuitLab::Application::Application()
 
 	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type, double value) -> int
 		{
+			m_circuit->InvalidateCircuit();
 			return m_circuit->AddComponent(MakeComponent(type, value));
 		});
 
 	m_ui->SetOnCreateLink([this](int compId1, int termIndex1, int compId2, int termIndex2)
 		{
+			m_circuit->InvalidateCircuit();
 			m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
 		});
 

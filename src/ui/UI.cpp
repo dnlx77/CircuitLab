@@ -197,13 +197,22 @@ void CircuitLab::UI::Run()
 		if (ImGui::Button("RunSimulation"))
 			m_simulationOutput = m_onRunSimulation();
 
-		ImGui::Text("Risultato: [");
-		for (const auto &r : m_simulationOutput.res)
+		if (m_simulationOutput.simRes == SimulationResult::solve_error)
+			ImGui::Text("Circuito non risolvibile!");
+		else if (m_simulationOutput.simRes == SimulationResult::empty_circuit)
+			ImGui::Text("Il circuito non contiene componenti!");
+		else if (m_simulationOutput.simRes == SimulationResult::no_circuit)
+			ImGui::Text("Errore interno, puntatore a circuito nullo!");
+		else
 		{
-			std::string res = r.first + " " + std::to_string(r.second) + " ";
-			ImGui::Text(res.c_str());
+			ImGui::Text("Risultato: [");
+			for (const auto &r : m_simulationOutput.res)
+			{
+				std::string res = r.first + " " + std::to_string(r.second) + " ";
+				ImGui::Text(res.c_str());
+			}
+			ImGui::Text("]");
 		}
-		ImGui::Text("]");
 
 		ImGui::End();
 
