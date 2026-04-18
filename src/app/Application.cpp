@@ -47,6 +47,11 @@ CircuitLab::Application::Application()
 		{
 			m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
 		});
+
+	m_ui->SetOnGetCompTerminalId([this](int compId)
+		{
+			return m_circuit->GetNodesIdFromComponentId(compId);
+		});
 }
 
 CircuitLab::Application::~Application() = default;
@@ -102,7 +107,18 @@ CircuitLab::SimulationOutput CircuitLab::Application::RunSimulation()
 			outVec.emplace_back("V" + std::to_string(vNode), m_simulationResult[i]);
 
 		if (iNode != -1)
-			outVec.emplace_back("Ig" + std::to_string(iNode), m_simulationResult[i]);
+		{
+			std::vector<int> terminalsId = m_circuit->GetNodesIdFromComponentId(iNode);
+			std::string compString;
+			for (int j = 0; j < terminalsId.size(); j++)
+			{
+				compString += std::to_string(terminalsId[j]);
+				if (j < terminalsId.size() - 1)
+					compString += "_";
+			}
+			outVec.emplace_back("I(V" + compString + ")", m_simulationResult[i]);
+		}
+			
 	}
 
 	output.simRes = SimulationResult::success;

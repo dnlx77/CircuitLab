@@ -97,6 +97,9 @@ CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &t
 {
 	if (!ImGui::SFML::Init(m_window))
 		throw std::runtime_error("Impossibile inizializzare ImGui-SFML");
+
+	if (!m_font.openFromFile("JetBrainsMono-Regular.ttf"))
+		throw std::runtime_error("Impossibile caricare il font");
 }
 
 // Shutdown di ImGui-SFML alla distruzione della UI
@@ -259,7 +262,29 @@ void CircuitLab::UI::Run()
 				m_window.draw(term);
 				term.setOutlineThickness(0); // Reset per il prossimo terminale
 			}
+
+			std::vector<int> terminalsId = m_onGetCompTerminalId(comp.GetComponentLink());
+			std::string compString;
+			if (comp.GetComponentType() == ComponentType::resistor)
+				compString += "R";
+			else if (comp.GetComponentType() == ComponentType::voltageSource)
+				compString += "V";
+			else if (comp.GetComponentType() == ComponentType::ground)
+				compString += "G";
+			for (int i = 0; i < terminalsId.size(); i++)
+			{
+				compString += std::to_string(terminalsId[i]);
+				if (i < terminalsId.size() - 1)
+					compString += "_";
+			}
+
+			sf::Text label(m_font);
+			label.setString(compString);
+			label.setCharacterSize(12);
+			label.setPosition({ comp.GetPosition().x + TEXT_COMPONENT_OFFSET, comp.GetPosition().y });
+			m_window.draw(label);
 		}
+
 
 		// Disegna i fili come linee bianche tra i punti dei terminali collegati
 		for (const auto &wire : m_linkViewList)

@@ -83,6 +83,17 @@ void CircuitLab::Circuit::PrintCircuit()
 	}
 }
 
+std::vector<int> CircuitLab::Circuit::GetNodesIdFromComponentId(int compId) const
+{
+	for (const auto &comp : m_components)
+	{
+		if (comp->GetId() == compId)
+			return comp->GetTerminalId();
+	}
+
+	return std::vector<int>();
+}
+
 // Ricerca inversa nella mappa nodi: dato un indice nella matrice, restituisce il nodeId
 int CircuitLab::Circuit::GetNodesFromIndex(int index) const
 {

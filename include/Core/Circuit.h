@@ -49,6 +49,8 @@ namespace CircuitLab {
 
 		void PrintCircuit();
 
+		std::vector<int> GetNodesIdFromComponentId(int compId) const;
+
 		// Dato un indice nella matrice, restituisce il nodeId corrispondente (-1 se non trovato)
 		int GetNodesFromIndex(int index) const;
 

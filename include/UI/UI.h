@@ -47,10 +47,13 @@ namespace CircuitLab {
 		// Callback per collegare due terminali
 		using fnCreateLink = std::function<void(int compId1, int termIndex1, int compId2, int termIndex2)>;
 
+		using fnGetCompTerminalId = std::function<std::vector<int>(int compId)>;
+
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
 		unsigned int m_heigth;  // Altezza della finestra (pixel)
 		std::string m_title;    // Titolo della finestra
+		sf::Font m_font;
 
 		// Costanti di configurazione UI
 		static constexpr int CLICK_TOLLERANCE = 5;         // Tolleranza click sui terminali (pixel)
@@ -58,6 +61,7 @@ namespace CircuitLab {
 		static constexpr double DEFAULT_VOLTAGE = 5.0;     // Tensione di default (Volt)
 		static constexpr float DEFAULT_ROTATION = 0.0f;    // Rotazione di default (gradi)
 		static constexpr int OUTLINE_THICKNESS = 2;        // Spessore outline selezione (pixel)
+		static constexpr int TEXT_COMPONENT_OFFSET = 15;
 		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30); // Colore sfondo canvas
 
 		SimulationOutput m_simulationOutput;  // Ultimo risultato di simulazione ricevuto
@@ -73,6 +77,7 @@ namespace CircuitLab {
 		std::function<SimulationOutput()> m_onRunSimulation;
 		fnCircuitChange m_onCircuitChange;
 		fnCreateLink m_onCreateLink;
+		fnGetCompTerminalId m_onGetCompTerminalId;
 
 		// Determina quale componente o terminale è stato cliccato nella posizione pos.
 		// Aggiorna selComp con il risultato.
@@ -90,6 +95,7 @@ namespace CircuitLab {
 		void SetOnRunSimulation(const std::function<SimulationOutput()> &func) { m_onRunSimulation = func; }
 		void SetOnCircuitChange(const fnCircuitChange &func) { m_onCircuitChange = func; }
 		void SetOnCreateLink(const fnCreateLink &func) { m_onCreateLink = func; }
+		void SetOnGetCompTerminalId(const fnGetCompTerminalId &func) { m_onGetCompTerminalId = func; }
 
 		// Avvia il loop principale: gestione eventi, aggiornamento ImGui, rendering
 		void Run();

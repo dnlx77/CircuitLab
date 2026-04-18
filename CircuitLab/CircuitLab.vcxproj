@@ -126,7 +126,8 @@
       <AdditionalDependencies>sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;sfml-audio-d.lib;sfml-network-d.lib;opengl32.lib</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D "$(SolutionDir)lib\SFML\bin\$(Configuration)\*.dll" "$(OutDir)"</Command>
+      <Command>xcopy /Y /D "$(SolutionDir)lib\SFML\bin\$(Configuration)\*.dll" "$(OutDir)"
+xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -151,7 +152,8 @@ sfml-system.lib
 ;sfml-network.lib</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D "$(SolutionDir)lib\SFML\bin\$(Configuration)\*.dll" "$(OutDir)"</Command>
+      <Command>xcopy /Y /D "$(SolutionDir)lib\SFML\bin\$(Configuration)\*.dll" "$(OutDir)"
+xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
