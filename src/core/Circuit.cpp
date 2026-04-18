@@ -123,6 +123,8 @@ int CircuitLab::Circuit::GetCurrentFromIndex(int index) const
 //   3. Uno dei due ha già un nodeId > 0: propaga quel nodeId all'altro e a tutti i collegati
 void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2)
 {
+	if (comp1Id == comp2Id) return;
+
 	Component *comp1 = nullptr;
 	Component *comp2 = nullptr;
 	int nodeId = -1;
@@ -132,6 +134,10 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 		if (comp->GetId() == comp1Id) comp1 = comp.get();
 		if (comp->GetId() == comp2Id) comp2 = comp.get();
 	}
+
+	if (!comp1 || !comp2) return;
+
+	if (comp1->GetTerminals()[termComp1].GetNodeId() == comp2->GetTerminals()[termComp2].GetNodeId()) return;
 
 	// Caso 1: entrambi liberi -> nuovo nodo
 	if (comp1->GetTerminals()[termComp1].GetNodeId() < 0 && comp2->GetTerminals()[termComp2].GetNodeId() < 0)
