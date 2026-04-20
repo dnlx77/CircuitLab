@@ -164,9 +164,12 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 	if (!comp1 || !comp2) return;
 	
 	// Evita di ricollegare terminali già sullo stesso nodo
+	/*
 	if (comp1->GetTerminals()[termComp1].GetNodeId() == comp2->GetTerminals()[termComp2].GetNodeId()
 		&& comp1->GetTerminals()[termComp1].GetNodeId() != -1) return;
-	
+	*/
+	if (comp1->GetTerminal(termComp1).GetId() == comp2->GetTerminal(termComp2).GetId()) return;
+
 	if(addLink)
 		m_links.emplace_back(Link{ comp1Id, termComp1, comp2Id, termComp2 });
 

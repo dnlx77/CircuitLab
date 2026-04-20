@@ -173,14 +173,16 @@ void CircuitLab::UI::Run()
 						int term2 = temp.terminalIndex;
 
 						// Notifica il circuito e aggiunge il filo alla lista visiva
-						m_onCreateLink(comp1, term1, comp2, term2);
+						if (comp1 != comp2)
+						{
+							m_onCreateLink(comp1, term1, comp2, term2);
 
-						// DA CANCELLARE
-						std::cout << "Link: comp" << comp1 << " term" << term1
-							<< " -> comp" << comp2 << " term" << term2 << std::endl;
+							// DA CANCELLARE
+							std::cout << "Link: comp" << comp1 << " term" << term1
+								<< " -> comp" << comp2 << " term" << term2 << std::endl;
 
-						m_linkViewList.emplace_back(GetLinkCoords(comp1, term1, comp2, term2));
-
+							m_linkViewList.emplace_back(GetLinkCoords(comp1, term1, comp2, term2));
+						}
 						// Reset selezione
 						m_selectedComponent.state = SelectionState::none;
 						m_selectedComponent.compId = -1;
