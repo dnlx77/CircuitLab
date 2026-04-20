@@ -26,22 +26,20 @@ int CircuitLab::Circuit::ComputeNodes()
 		i++;
 	}
 
+	// DA CANCELLARE
 	for (const auto &n : nodes)
-		// DA CANCELLARE
 		std::cout << "node in set: " << n << std::endl;
 
 	// Le sorgenti di tensione introducono una variabile extra (la corrente)
 	// che occupa una riga/colonna aggiuntiva in fondo alla matrice
 	int k = static_cast<int>(nodes.size());
-	int numVoltageSource = 0;
 	for (const auto &comp : m_components) {
 		if (comp->GetExtraVariables()) {
 			m_voltageSourceMap[comp->GetId()] = k++;
-			numVoltageSource++;
 		}
 	}
 
-	return static_cast<int>(nodes.size() + numVoltageSource);
+	return static_cast<int>(nodes.size() + m_voltageSourceMap.size());
 }
 
 // Ricalcola la matrice MNA e il vettore b solo se il circuito è stato modificato.
@@ -51,7 +49,7 @@ void CircuitLab::Circuit::ComputeCircuit()
 	if (!m_isDirty)
 		return;
 
-	// Le mappe vanno azzerate prima di ogni ricalcolo
+	// Le mappe vanno azzerate prima di ogni ricalcolo per evitare dati obsoleti
 	m_nodesMap.clear();
 	m_voltageSourceMap.clear();
 
@@ -59,9 +57,8 @@ void CircuitLab::Circuit::ComputeCircuit()
 	m_circuitMatrix = Eigen::MatrixXd::Zero(num_nodes, num_nodes);
 	m_circuitVector = Eigen::VectorXd::Zero(num_nodes);
 
-	for (const auto &comp : m_components) {
+	for (const auto &comp : m_components)
 		comp->Stamp(m_circuitMatrix, m_circuitVector, m_nodesMap, m_voltageSourceMap);
-	}
 
 	m_isDirty = false;
 
@@ -70,52 +67,40 @@ void CircuitLab::Circuit::ComputeCircuit()
 	std::cout << m_circuitVector << std::endl;
 }
 
+// Restituisce l'ID del terminale dato il componente e l'indice del terminale (-1 se non trovato)
 int CircuitLab::Circuit::GetTerminalId(int compId, int termIndex) const
 {
 	for (const auto &comp : m_components)
-	{
 		if (comp->GetId() == compId)
-		{
 			return comp->GetTerminal(termIndex).GetId();
-		}
-	}
-	
 	return -1;
 }
 
+// Restituisce l'ID del componente che possiede il terminale con l'ID dato (-1 se non trovato)
 int CircuitLab::Circuit::GetComponentId(int terminalId) const
 {
-	
 	for (const auto &comp : m_components)
-	{
-		std::vector<Terminal> termVec = comp->GetTerminals();
-		for (const auto &term : termVec)
+		for (const auto &term : comp->GetTerminals())
 			if (term.GetId() == terminalId)
 				return comp->GetId();
-	}
-
 	return -1;
 }
 
+// Restituisce un puntatore costante al componente con l'ID dato (nullptr se non trovato)
 const CircuitLab::Component *CircuitLab::Circuit::GetComponentById(int compId) const
 {
 	for (auto const &c : m_components)
-	{
 		if (c->GetId() == compId)
 			return c.get();
-	}
-
 	return nullptr;
 }
 
+// Versione non-const: usata quando è necessario modificare il componente trovato
 CircuitLab::Component *CircuitLab::Circuit::GetComponentById(int compId)
 {
 	for (auto const &c : m_components)
-	{
 		if (c->GetId() == compId)
 			return c.get();
-	}
-
 	return nullptr;
 }
 
@@ -126,42 +111,34 @@ void CircuitLab::Circuit::PrintCircuit()
 	{
 		std::cout << "Component id: " << comp->GetId() << std::endl;
 		for (int i = 0; i < comp->GetTerminals().size(); i++)
-		{
 			std::cout << "Terminale " << i << " nodeId: " << comp->GetTerminal(i).GetNodeId() << std::endl;
-		}
 	}
 }
 
+// Restituisce la lista dei nodeId dei terminali del componente con l'ID dato
 std::vector<int> CircuitLab::Circuit::GetNodesIdFromComponentId(int compId) const
 {
 	for (const auto &comp : m_components)
-	{
 		if (comp->GetId() == compId)
 			return comp->GetTerminalId();
-	}
-
 	return std::vector<int>();
 }
 
-// Ricerca inversa nella mappa nodi: dato un indice nella matrice, restituisce il nodeId
+// Ricerca inversa nella mappa nodi: dato un indice nella matrice, restituisce il nodeId (-1 se non trovato)
 int CircuitLab::Circuit::GetNodesFromIndex(int index) const
 {
 	for (const auto &[key, value] : m_nodesMap)
-	{
 		if (value == index)
 			return key;
-	}
 	return -1;
 }
 
-// Ricerca inversa nella mappa sorgenti: dato un indice nella matrice, restituisce il componentId
+// Ricerca inversa nella mappa sorgenti: dato un indice nella matrice, restituisce il componentId (-1 se non trovato)
 int CircuitLab::Circuit::GetCurrentFromIndex(int index) const
 {
 	for (const auto &[key, value] : m_voltageSourceMap)
-	{
 		if (value == index)
 			return key;
-	}
 	return -1;
 }
 
@@ -170,7 +147,7 @@ int CircuitLab::Circuit::GetCurrentFromIndex(int index) const
 //   1. Entrambi i terminali sono liberi (-1): assegna un nuovo nodeId
 //   2. Uno dei due è ground (0): propaga lo 0 a tutti i terminali del vecchio nodo
 //   3. Uno dei due ha già un nodeId > 0: propaga quel nodeId all'altro e a tutti i collegati
-void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2)
+void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2, bool addLink)
 {
 	if (comp1Id == comp2Id) return;
 
@@ -185,10 +162,13 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 	}
 
 	if (!comp1 || !comp2) return;
-
-	if (comp1->GetTerminals()[termComp1].GetNodeId() == comp2->GetTerminals()[termComp2].GetNodeId() && comp1->GetTerminals()[termComp1].GetNodeId() != -1) return;
-
-	m_links.emplace_back(Link{ comp1Id, termComp1, comp2Id, termComp2 });
+	
+	// Evita di ricollegare terminali già sullo stesso nodo
+	if (comp1->GetTerminals()[termComp1].GetNodeId() == comp2->GetTerminals()[termComp2].GetNodeId()
+		&& comp1->GetTerminals()[termComp1].GetNodeId() != -1) return;
+	
+	if(addLink)
+		m_links.emplace_back(Link{ comp1Id, termComp1, comp2Id, termComp2 });
 
 	// Caso 1: entrambi liberi -> nuovo nodo
 	if (comp1->GetTerminals()[termComp1].GetNodeId() < 0 && comp2->GetTerminals()[termComp2].GetNodeId() < 0)
@@ -202,6 +182,8 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 			<< " nodeId=" << comp1->GetTerminal(termComp1).GetNodeId() << std::endl;
 		std::cout << "comp2 id=" << comp2Id << " term=" << termComp2
 			<< " nodeId=" << comp2->GetTerminal(termComp2).GetNodeId() << std::endl;
+		std::cout << "Link: comp" << comp1 << " term" << termComp1
+			<< " -> comp" << comp2 << " term" << termComp2 << std::endl;
 		return;
 	}
 
@@ -217,18 +199,18 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 		comp2->GetTerminal(termComp2).SetNodeId(0);
 
 		if (oldNodeId > 0)
-		{
 			for (auto const &comp : m_components)
 				for (int i = 0; i < comp->GetTerminals().size(); i++)
 					if (comp->GetTerminal(i).GetNodeId() == oldNodeId)
 						comp->GetTerminal(i).SetNodeId(0);
-		}
 
 		// DA CANCELLARE
 		std::cout << "comp1 id=" << comp1Id << " term=" << termComp1
 			<< " nodeId=" << comp1->GetTerminal(termComp1).GetNodeId() << std::endl;
 		std::cout << "comp2 id=" << comp2Id << " term=" << termComp2
 			<< " nodeId=" << comp2->GetTerminal(termComp2).GetNodeId() << std::endl;
+		std::cout << "Link: comp" << comp1 << " term" << termComp1
+			<< " -> comp" << comp2 << " term" << termComp2 << std::endl;
 		return;
 	}
 
@@ -267,6 +249,8 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 			<< " nodeId=" << comp1->GetTerminal(termComp1).GetNodeId() << std::endl;
 		std::cout << "comp2 id=" << comp2Id << " term=" << termComp2
 			<< " nodeId=" << comp2->GetTerminal(termComp2).GetNodeId() << std::endl;
+		std::cout << "Link: comp" << comp1 << " term" << termComp1
+			<< " -> comp" << comp2 << " term" << termComp2 << std::endl;
 		return;
 	}
 }
@@ -294,10 +278,18 @@ int CircuitLab::Circuit::AddComponent(std::unique_ptr<Component> comp)
 	return id;
 }
 
+// Rimuove un componente dal circuito insieme a tutti i link che lo coinvolgono.
+// Dopo la rimozione, azzera i nodeId di tutti i terminali rimasti e
+// ricostruisce le connessioni rieseguendo i link sopravvissuti,
+// in modo da mantenere la topologia del circuito consistente.
 void CircuitLab::Circuit::RemoveComponent(int compId)
 {
 	if (!GetComponentById(compId)) return;
 
+	//DA CANCELLARE
+	std::cout << "Link iniziali: " << m_links.size() << std::endl;
+
+	// Rimuove il componente dalla lista
 	m_components.erase(
 		std::remove_if(m_components.begin(), m_components.end(),
 			[compId](const std::unique_ptr<Component> &c) {
@@ -306,6 +298,7 @@ void CircuitLab::Circuit::RemoveComponent(int compId)
 		m_components.end()
 	);
 
+	// Rimuove tutti i link che coinvolgevano il componente eliminato
 	m_links.erase(
 		std::remove_if(m_links.begin(), m_links.end(),
 			[compId](const Link &l) {
@@ -314,16 +307,23 @@ void CircuitLab::Circuit::RemoveComponent(int compId)
 		m_links.end()
 	);
 
+	// DA CANCELLARE
+	std::cout << "Link finali: " << m_links.size() << std::endl;
+
+	// Azzera i nodeId di tutti i terminali non-ground per ripartire da zero
 	for (auto const &comp : m_components)
 	{
 		if (comp->IsGround()) continue;
-		else
-			for (int i = 0; i < comp->GetTerminals().size(); i++)
-				comp->GetTerminal(i).SetNodeId(-1);
+		for (int i = 0; i < comp->GetTerminals().size(); i++)
+			comp->GetTerminal(i).SetNodeId(-1);
 	}
 
+	// Ricostruisce le connessioni rieseguendo i link rimasti
 	for (auto const &link : m_links)
-		ConnectTerminals(link.compId1, link.termIndex1, link.compId2, link.termIndex2);
+		ConnectTerminals(link.compId1, link.termIndex1, link.compId2, link.termIndex2, false);
+
+	// DA CANCELLARE
+	std::cout << "Link finali2: " << m_links.size() << std::endl;
 
 	InvalidateCircuit();
 }

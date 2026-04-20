@@ -24,10 +24,12 @@ std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(Co
 	}
 }
 
-// Costruisce UI e Circuit, poi collega i tre callback:
-//   - onRunSimulation: la UI chiama RunSimulation() su Application
-//   - onCircuitChange: la UI chiede ad Application di aggiungere un componente al circuito
-//   - onCreateLink:    la UI chiede ad Application di collegare due terminali
+// Costruisce UI e Circuit, poi collega i cinque callback:
+//   - onRunSimulation:     la UI chiama RunSimulation() su Application
+//   - onCircuitChange:     la UI chiede ad Application di aggiungere un componente al circuito
+//   - onCreateLink:        la UI chiede ad Application di collegare due terminali
+//   - onGetCompTerminalId: la UI chiede i nodeId dei terminali di un componente
+//   - onDeleteComponent:   la UI chiede ad Application di rimuovere un componente
 CircuitLab::Application::Application()
 {
 	m_ui = std::make_unique<UI>(800, 600, "CircuitLab main window");
@@ -52,11 +54,14 @@ CircuitLab::Application::Application()
 
 	m_ui->SetOnGetCompTerminalId([this](int compId)
 		{
+			// Chiede al circuito i nodeId dei terminali del componente,
+			// usati dalla UI per costruire le etichette da visualizzare sul canvas
 			return m_circuit->GetNodesIdFromComponentId(compId);
 		});
 
 	m_ui->SetOnDeleteComponent([this](int compId)
 		{
+			// Rimuove il componente dal circuito e ricostruisce le connessioni rimaste
 			m_circuit->RemoveComponent(compId);
 		});
 }
@@ -66,7 +71,7 @@ CircuitLab::Application::~Application() = default;
 // Esegue la simulazione MNA sull'attuale stato del circuito.
 // Controlla prima i casi degeneri (circuito nullo o vuoto),
 // poi risolve il sistema A*x = b e costruisce il vettore di output
-// con i nomi delle variabili (tensioni Vn e correnti Ig).
+// con i nomi delle variabili (tensioni Vn e correnti nei rami).
 CircuitLab::SimulationOutput CircuitLab::Application::RunSimulation()
 {
 	// DA CANCELLARE
@@ -103,7 +108,7 @@ CircuitLab::SimulationOutput CircuitLab::Application::RunSimulation()
 	// Costruisce il vettore di output associando ogni indice della soluzione
 	// al nome della variabile corrispondente:
 	//   - se l'indice corrisponde a un nodo -> "Vn" (tensione al nodo n)
-	//   - se l'indice corrisponde a una sorgente -> "Ign" (corrente nella sorgente n)
+	//   - se l'indice corrisponde a una sorgente -> "I(Vn_m)" (corrente nella sorgente tra nodi n e m)
 	std::vector<std::pair<std::string, double>> outVec;
 	for (int i = 0; i < m_simulationResult.size(); i++)
 	{
@@ -115,6 +120,7 @@ CircuitLab::SimulationOutput CircuitLab::Application::RunSimulation()
 
 		if (iNode != -1)
 		{
+			// Costruisce la stringa "I(Vn_m)" usando i nodeId dei terminali della sorgente
 			std::vector<int> terminalsId = m_circuit->GetNodesIdFromComponentId(iNode);
 			std::string compString;
 			for (int j = 0; j < terminalsId.size(); j++)
@@ -125,7 +131,6 @@ CircuitLab::SimulationOutput CircuitLab::Application::RunSimulation()
 			}
 			outVec.emplace_back("I(V" + compString + ")", m_simulationResult[i]);
 		}
-			
 	}
 
 	output.simRes = SimulationResult::success;

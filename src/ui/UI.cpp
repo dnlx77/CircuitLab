@@ -90,7 +90,7 @@ CircuitLab::LinkView CircuitLab::UI::GetLinkCoords(int comp1, int term1, int com
 }
 
 // Inizializza la finestra SFML e ImGui-SFML.
-// Lancia un'eccezione se ImGui non riesce ad inizializzarsi.
+// Lancia un'eccezione se ImGui o il font non riescono ad inizializzarsi.
 CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &title) :
 	m_width(width),
 	m_heigth(heigth),
@@ -111,10 +111,10 @@ CircuitLab::UI::~UI()
 }
 
 // Loop principale della UI:
-//   1. Gestione eventi SFML (chiusura, click mouse)
+//   1. Gestione eventi SFML (chiusura, click mouse, tasto Delete)
 //   2. Aggiornamento ImGui
 //   3. Pannello ImGui con pulsante di simulazione e risultati
-//   4. Rendering canvas: componenti, terminali, fili
+//   4. Rendering canvas: componenti, terminali, etichette, fili
 //   5. Render ImGui sopra il canvas
 void CircuitLab::UI::Run()
 {
@@ -190,9 +190,13 @@ void CircuitLab::UI::Run()
 			}
 			else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete))
 			{
+				// Eliminazione del componente selezionato con tasto Delete:
+				// rimuove la vista, i fili collegati e notifica il circuito
 				if (m_selectedComponent.state == SelectionState::componentSelected)
 				{
 					int id = m_selectedComponent.compId;
+
+					// Rimuove la vista del componente
 					m_componentViewList.erase(
 						std::remove_if(m_componentViewList.begin(), m_componentViewList.end(),
 							[id](const ComponentView &cw) {
@@ -201,6 +205,7 @@ void CircuitLab::UI::Run()
 						m_componentViewList.end()
 					);
 
+					// Rimuove i fili collegati al componente eliminato
 					m_linkViewList.erase(
 						std::remove_if(m_linkViewList.begin(), m_linkViewList.end(),
 							[id](const LinkView &lw) {
@@ -210,23 +215,25 @@ void CircuitLab::UI::Run()
 					);
 
 					m_onDeleteComponent(m_selectedComponent.compId);
+
 					// Reset selezione
 					m_selectedComponent.state = SelectionState::none;
 					m_selectedComponent.compId = -1;
 					m_selectedComponent.terminalIndex = -1;
 				}
 			}
-
 		}
 
 		// --- Aggiornamento ImGui ---
 		ImGui::SFML::Update(m_window, deltaClock.restart());
+
 		// --- Pannello ImGui ---
 		ImGui::Begin("CircuitLab - Test");
 
 		if (ImGui::Button("RunSimulation"))
 			m_simulationOutput = m_onRunSimulation();
 
+		// Mostra il risultato della simulazione o un messaggio di errore
 		if (m_simulationOutput.simRes == SimulationResult::solve_error)
 			ImGui::Text("Circuito non risolvibile!");
 		else if (m_simulationOutput.simRes == SimulationResult::empty_circuit)
@@ -249,7 +256,7 @@ void CircuitLab::UI::Run()
 		// --- Rendering canvas ---
 		m_window.clear(BACKGROUND_COLOR);
 
-		// Disegna ogni componente: rettangolo colorato per tipo + cerchi per i terminali
+		// Disegna ogni componente: rettangolo colorato per tipo + cerchi per i terminali + etichetta
 		for (const auto &comp : m_componentViewList)
 		{
 			ComponentDesign des = comp.GetComponetDesign();
@@ -302,6 +309,8 @@ void CircuitLab::UI::Run()
 				term.setOutlineThickness(0); // Reset per il prossimo terminale
 			}
 
+			// Costruisce l'etichetta del componente nel formato "R1_2" / "V1_2" / "G0"
+			// usando i nodeId dei terminali ottenuti dal circuito tramite callback
 			std::vector<int> terminalsId = m_onGetCompTerminalId(comp.GetComponentLink());
 			std::string compString;
 			if (comp.GetComponentType() == ComponentType::resistor)
@@ -323,7 +332,6 @@ void CircuitLab::UI::Run()
 			label.setPosition({ comp.GetPosition().x + TEXT_COMPONENT_OFFSET, comp.GetPosition().y });
 			m_window.draw(label);
 		}
-
 
 		// Disegna i fili come linee bianche tra i punti dei terminali collegati
 		for (const auto &wire : m_linkViewList)

@@ -27,37 +27,41 @@ namespace CircuitLab {
 	};
 
 	// Rappresentazione visiva di un collegamento tra due terminali:
-	// semplicemente i due punti estremi del filo nel canvas.
+	// semplicemente i due punti estremi del filo nel canvas,
+	// con i riferimenti ai componenti collegati (usati per rimuovere il filo
+	// quando un componente viene eliminato).
 	struct LinkView {
 		sf::Vector2f pointA;
 		sf::Vector2f pointB;
-		int compIdA;
-		int compIdB;
+		int compIdA;   // ID del componente sul primo estremo del filo
+		int compIdB;   // ID del componente sul secondo estremo del filo
 	};
 
 	// Classe principale dell'interfaccia grafica.
 	// Gestisce la finestra SFML, il loop degli eventi, il rendering dei componenti
 	// e dei collegamenti, e il pannello ImGui.
-	// Comunica con Application tramite tre callback:
-	//   - m_onRunSimulation: avvia la simulazione e restituisce i risultati
-	//   - m_onCircuitChange: aggiunge un componente al circuito, restituisce il suo ID
-	//   - m_onCreateLink:    collega due terminali nel circuito
+	// Comunica con Application tramite cinque callback:
+	//   - m_onRunSimulation:      avvia la simulazione e restituisce i risultati
+	//   - m_onCircuitChange:      aggiunge un componente al circuito, restituisce il suo ID
+	//   - m_onCreateLink:         collega due terminali nel circuito
+	//   - m_onGetCompTerminalId:  richiede i nodeId dei terminali di un componente
+	//   - m_onDeleteComponent:    rimuove un componente dal circuito
 	class UI {
 	public:
 		// Callback per aggiungere un componente: riceve tipo e valore, restituisce l'ID assegnato
 		using fnCircuitChange = std::function<int(CircuitLab::ComponentType type, double value)>;
 		// Callback per collegare due terminali
 		using fnCreateLink = std::function<void(int compId1, int termIndex1, int compId2, int termIndex2)>;
-
+		// Callback per ottenere i nodeId dei terminali di un componente
 		using fnGetCompTerminalId = std::function<std::vector<int>(int compId)>;
-
+		// Callback per eliminare un componente dal circuito
 		using fnDeleteComponent = std::function<void(int compId)>;
 
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
 		unsigned int m_heigth;  // Altezza della finestra (pixel)
 		std::string m_title;    // Titolo della finestra
-		sf::Font m_font;
+		sf::Font m_font;        // Font usato per le etichette dei componenti sul canvas
 
 		// Costanti di configurazione UI
 		static constexpr int CLICK_TOLLERANCE = 5;         // Tolleranza click sui terminali (pixel)
@@ -65,7 +69,7 @@ namespace CircuitLab {
 		static constexpr double DEFAULT_VOLTAGE = 5.0;     // Tensione di default (Volt)
 		static constexpr float DEFAULT_ROTATION = 0.0f;    // Rotazione di default (gradi)
 		static constexpr int OUTLINE_THICKNESS = 2;        // Spessore outline selezione (pixel)
-		static constexpr int TEXT_COMPONENT_OFFSET = 15;
+		static constexpr int TEXT_COMPONENT_OFFSET = 15;   // Offset orizzontale etichetta rispetto al centro del componente (pixel)
 		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30); // Colore sfondo canvas
 
 		SimulationOutput m_simulationOutput;  // Ultimo risultato di simulazione ricevuto
@@ -81,8 +85,8 @@ namespace CircuitLab {
 		std::function<SimulationOutput()> m_onRunSimulation;
 		fnCircuitChange m_onCircuitChange;
 		fnCreateLink m_onCreateLink;
-		fnGetCompTerminalId m_onGetCompTerminalId;
-		fnDeleteComponent m_onDeleteComponent;
+		fnGetCompTerminalId m_onGetCompTerminalId; // Richiede i nodeId dei terminali al circuito
+		fnDeleteComponent m_onDeleteComponent;     // Richiede la rimozione di un componente al circuito
 
 		// Determina quale componente o terminale è stato cliccato nella posizione pos.
 		// Aggiorna selComp con il risultato.
