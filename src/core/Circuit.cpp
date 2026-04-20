@@ -70,6 +70,55 @@ void CircuitLab::Circuit::ComputeCircuit()
 	std::cout << m_circuitVector << std::endl;
 }
 
+int CircuitLab::Circuit::GetTerminalId(int compId, int termIndex) const
+{
+	for (const auto &comp : m_components)
+	{
+		if (comp->GetId() == compId)
+		{
+			return comp->GetTerminal(termIndex).GetId();
+		}
+	}
+	
+	return -1;
+}
+
+int CircuitLab::Circuit::GetComponentId(int terminalId) const
+{
+	
+	for (const auto &comp : m_components)
+	{
+		std::vector<Terminal> termVec = comp->GetTerminals();
+		for (const auto &term : termVec)
+			if (term.GetId() == terminalId)
+				return comp->GetId();
+	}
+
+	return -1;
+}
+
+const CircuitLab::Component *CircuitLab::Circuit::GetComponentById(int compId) const
+{
+	for (auto const &c : m_components)
+	{
+		if (c->GetId() == compId)
+			return c.get();
+	}
+
+	return nullptr;
+}
+
+CircuitLab::Component *CircuitLab::Circuit::GetComponentById(int compId)
+{
+	for (auto const &c : m_components)
+	{
+		if (c->GetId() == compId)
+			return c.get();
+	}
+
+	return nullptr;
+}
+
 // Stampa a console lo stato di ogni componente e dei suoi terminali (debug)
 void CircuitLab::Circuit::PrintCircuit()
 {
@@ -137,7 +186,9 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 
 	if (!comp1 || !comp2) return;
 
-	if (comp1->GetTerminals()[termComp1].GetNodeId() == comp2->GetTerminals()[termComp2].GetNodeId()) return;
+	if (comp1->GetTerminals()[termComp1].GetNodeId() == comp2->GetTerminals()[termComp2].GetNodeId() && comp1->GetTerminals()[termComp1].GetNodeId() != -1) return;
+
+	m_links.emplace_back(Link{ comp1Id, termComp1, comp2Id, termComp2 });
 
 	// Caso 1: entrambi liberi -> nuovo nodo
 	if (comp1->GetTerminals()[termComp1].GetNodeId() < 0 && comp2->GetTerminals()[termComp2].GetNodeId() < 0)
@@ -241,4 +292,38 @@ int CircuitLab::Circuit::AddComponent(std::unique_ptr<Component> comp)
 	int id = comp->GetId();
 	m_components.emplace_back(std::move(comp));
 	return id;
+}
+
+void CircuitLab::Circuit::RemoveComponent(int compId)
+{
+	if (!GetComponentById(compId)) return;
+
+	m_components.erase(
+		std::remove_if(m_components.begin(), m_components.end(),
+			[compId](const std::unique_ptr<Component> &c) {
+				return c->GetId() == compId;
+			}),
+		m_components.end()
+	);
+
+	m_links.erase(
+		std::remove_if(m_links.begin(), m_links.end(),
+			[compId](const Link &l) {
+				return (l.compId1 == compId || l.compId2 == compId);
+			}),
+		m_links.end()
+	);
+
+	for (auto const &comp : m_components)
+	{
+		if (comp->IsGround()) continue;
+		else
+			for (int i = 0; i < comp->GetTerminals().size(); i++)
+				comp->GetTerminal(i).SetNodeId(-1);
+	}
+
+	for (auto const &link : m_links)
+		ConnectTerminals(link.compId1, link.termIndex1, link.compId2, link.termIndex2);
+
+	InvalidateCircuit();
 }

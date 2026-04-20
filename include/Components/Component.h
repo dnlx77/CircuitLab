@@ -31,6 +31,7 @@ namespace CircuitLab {
 		const std::vector<Terminal> &GetTerminals() const { return m_terminals; }
 		Terminal &GetTerminal(int index) { return m_terminals[index]; }
 		std::vector<int> GetTerminalId() const;
+		virtual bool IsGround() const { return false; }
 
 		void Save();
 		void Load();

@@ -31,6 +31,8 @@ namespace CircuitLab {
 	struct LinkView {
 		sf::Vector2f pointA;
 		sf::Vector2f pointB;
+		int compIdA;
+		int compIdB;
 	};
 
 	// Classe principale dell'interfaccia grafica.
@@ -48,6 +50,8 @@ namespace CircuitLab {
 		using fnCreateLink = std::function<void(int compId1, int termIndex1, int compId2, int termIndex2)>;
 
 		using fnGetCompTerminalId = std::function<std::vector<int>(int compId)>;
+
+		using fnDeleteComponent = std::function<void(int compId)>;
 
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
@@ -78,6 +82,7 @@ namespace CircuitLab {
 		fnCircuitChange m_onCircuitChange;
 		fnCreateLink m_onCreateLink;
 		fnGetCompTerminalId m_onGetCompTerminalId;
+		fnDeleteComponent m_onDeleteComponent;
 
 		// Determina quale componente o terminale è stato cliccato nella posizione pos.
 		// Aggiorna selComp con il risultato.
@@ -96,6 +101,7 @@ namespace CircuitLab {
 		void SetOnCircuitChange(const fnCircuitChange &func) { m_onCircuitChange = func; }
 		void SetOnCreateLink(const fnCreateLink &func) { m_onCreateLink = func; }
 		void SetOnGetCompTerminalId(const fnGetCompTerminalId &func) { m_onGetCompTerminalId = func; }
+		void SetOnDeleteComponent(const fnDeleteComponent &func) { m_onDeleteComponent = func; }
 
 		// Avvia il loop principale: gestione eventi, aggiornamento ImGui, rendering
 		void Run();

@@ -16,6 +16,8 @@ namespace CircuitLab {
 			const std::map<int, int> &nodeMap,
 			const std::map<int, int> &voltageSourceMap) override;
 
+		bool IsGround() const { return true; }
+
 		void SaveSpecificData() override;
 		void LoadSpecificData() override;
 	};

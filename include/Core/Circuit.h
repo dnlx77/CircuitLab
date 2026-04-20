@@ -6,6 +6,11 @@
 
 namespace CircuitLab {
 
+	struct Link {
+		int compId1, termIndex1;
+		int compId2, termIndex2;
+	};
+
 	// Rappresenta il circuito elettrico nel suo insieme.
 	// Si occupa di gestire la collezione di componenti, costruire
 	// la matrice MNA (A) e il vettore (b), e gestire le connessioni tra terminali.
@@ -18,6 +23,7 @@ namespace CircuitLab {
 		Eigen::VectorXd m_circuitVector;  // Vettore b del sistema MNA
 		std::map<int, int> m_nodesMap;          // nodeId -> indice nella matrice
 		std::map<int, int> m_voltageSourceMap;   // componentId -> indice riga extra (per sorgenti di tensione)
+		std::vector<Link> m_links;
 		int m_nextNodeId;  // Prossimo ID disponibile per i nodi
 		bool m_isDirty;    // true se il circuito è stato modificato e va ricalcolato
 
@@ -26,6 +32,11 @@ namespace CircuitLab {
 
 		// Ricalcola matrice e vettore MNA se il circuito è dirty
 		void ComputeCircuit();
+
+		int GetTerminalId(int compId, int termIndex) const;
+		int GetComponentId(int terminalId) const;
+		const Component * GetComponentById(int compId) const;
+		Component *GetComponentById(int compId);
 
 	public:
 		Circuit();

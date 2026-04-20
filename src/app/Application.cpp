@@ -54,6 +54,11 @@ CircuitLab::Application::Application()
 		{
 			return m_circuit->GetNodesIdFromComponentId(compId);
 		});
+
+	m_ui->SetOnDeleteComponent([this](int compId)
+		{
+			m_circuit->RemoveComponent(compId);
+		});
 }
 
 CircuitLab::Application::~Application() = default;

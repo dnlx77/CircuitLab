@@ -83,7 +83,9 @@ CircuitLab::LinkView CircuitLab::UI::GetLinkCoords(int comp1, int term1, int com
 
 	LinkView link;
 	link.pointA = pA;
+	link.compIdA = comp1;
 	link.pointB = pB;
+	link.compIdB = comp2;
 	return link;
 }
 
@@ -186,11 +188,39 @@ void CircuitLab::UI::Run()
 					}
 				}
 			}
+			else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete))
+			{
+				if (m_selectedComponent.state == SelectionState::componentSelected)
+				{
+					int id = m_selectedComponent.compId;
+					m_componentViewList.erase(
+						std::remove_if(m_componentViewList.begin(), m_componentViewList.end(),
+							[id](const ComponentView &cw) {
+								return cw.GetComponentLink() == id;
+							}),
+						m_componentViewList.end()
+					);
+
+					m_linkViewList.erase(
+						std::remove_if(m_linkViewList.begin(), m_linkViewList.end(),
+							[id](const LinkView &lw) {
+								return (lw.compIdA == id || lw.compIdB == id);
+							}),
+						m_linkViewList.end()
+					);
+
+					m_onDeleteComponent(m_selectedComponent.compId);
+					// Reset selezione
+					m_selectedComponent.state = SelectionState::none;
+					m_selectedComponent.compId = -1;
+					m_selectedComponent.terminalIndex = -1;
+				}
+			}
+
 		}
 
 		// --- Aggiornamento ImGui ---
 		ImGui::SFML::Update(m_window, deltaClock.restart());
-
 		// --- Pannello ImGui ---
 		ImGui::Begin("CircuitLab - Test");
 
