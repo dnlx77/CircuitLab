@@ -46,10 +46,10 @@ CircuitLab::Application::Application()
 			return m_circuit->AddComponent(MakeComponent(type, value));
 		});
 
-	m_ui->SetOnCreateLink([this](int compId1, int termIndex1, int compId2, int termIndex2)
+	m_ui->SetOnCreateLink([this](int compId1, int termIndex1, int compId2, int termIndex2) -> bool
 		{
 			m_circuit->InvalidateCircuit();
-			m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
+			return m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
 		});
 
 	m_ui->SetOnGetCompTerminalId([this](int compId)

@@ -104,6 +104,15 @@ CircuitLab::Component *CircuitLab::Circuit::GetComponentById(int compId)
 	return nullptr;
 }
 
+bool CircuitLab::Circuit::IsDuplicate(Link newLink) const
+{
+	bool duplicate = std::any_of(m_links.begin(), m_links.end(), [&](const Link &l) {
+		return (l.compId1 == newLink.compId1 && l.termIndex1 == newLink.termIndex1 && l.compId2 == newLink.compId2 && l.termIndex2 == newLink.termIndex2) ||
+			(l.compId1 == newLink.compId2 && l.termIndex1 == newLink.termIndex2 && l.compId2 == newLink.compId1 && l.termIndex2 == newLink.termIndex1);
+		});
+	return duplicate;
+}
+
 // Stampa a console lo stato di ogni componente e dei suoi terminali (debug)
 void CircuitLab::Circuit::PrintCircuit()
 {
@@ -147,9 +156,9 @@ int CircuitLab::Circuit::GetCurrentFromIndex(int index) const
 //   1. Entrambi i terminali sono liberi (-1): assegna un nuovo nodeId
 //   2. Uno dei due è ground (0): propaga lo 0 a tutti i terminali del vecchio nodo
 //   3. Uno dei due ha già un nodeId > 0: propaga quel nodeId all'altro e a tutti i collegati
-void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2, bool addLink)
+bool CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2, bool addLink)
 {
-	if (comp1Id == comp2Id) return;
+	if (comp1Id == comp2Id) return false;
 
 	Component *comp1 = nullptr;
 	Component *comp2 = nullptr;
@@ -161,17 +170,15 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 		if (comp->GetId() == comp2Id) comp2 = comp.get();
 	}
 
-	if (!comp1 || !comp2) return;
+	if (!comp1 || !comp2) return false;
 	
 	// Evita di ricollegare terminali già sullo stesso nodo
-	/*
-	if (comp1->GetTerminals()[termComp1].GetNodeId() == comp2->GetTerminals()[termComp2].GetNodeId()
-		&& comp1->GetTerminals()[termComp1].GetNodeId() != -1) return;
-	*/
-	if (comp1->GetTerminal(termComp1).GetId() == comp2->GetTerminal(termComp2).GetId()) return;
+	if (comp1->GetTerminal(termComp1).GetId() == comp2->GetTerminal(termComp2).GetId()) return false;
+
 
 	if(addLink)
-		m_links.emplace_back(Link{ comp1Id, termComp1, comp2Id, termComp2 });
+		if (!IsDuplicate(Link{ comp1Id, termComp1, comp2Id, termComp2 }))
+			m_links.emplace_back(Link{ comp1Id, termComp1, comp2Id, termComp2 });
 
 	// Caso 1: entrambi liberi -> nuovo nodo
 	if (comp1->GetTerminals()[termComp1].GetNodeId() < 0 && comp2->GetTerminals()[termComp2].GetNodeId() < 0)
@@ -187,7 +194,7 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 			<< " nodeId=" << comp2->GetTerminal(termComp2).GetNodeId() << std::endl;
 		std::cout << "Link: comp" << comp1 << " term" << termComp1
 			<< " -> comp" << comp2 << " term" << termComp2 << std::endl;
-		return;
+		return true;
 	}
 
 	// Caso 2: uno dei due è ground -> propaga 0 a tutti i terminali del vecchio nodo
@@ -214,7 +221,7 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 			<< " nodeId=" << comp2->GetTerminal(termComp2).GetNodeId() << std::endl;
 		std::cout << "Link: comp" << comp1 << " term" << termComp1
 			<< " -> comp" << comp2 << " term" << termComp2 << std::endl;
-		return;
+		return true;
 	}
 
 	// Caso 3: almeno uno ha un nodeId > 0 -> propaga quel nodeId all'altro e ai collegati
@@ -254,8 +261,10 @@ void CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 			<< " nodeId=" << comp2->GetTerminal(termComp2).GetNodeId() << std::endl;
 		std::cout << "Link: comp" << comp1 << " term" << termComp1
 			<< " -> comp" << comp2 << " term" << termComp2 << std::endl;
-		return;
+		return true;
 	}
+
+	return false;
 }
 
 CircuitLab::Circuit::Circuit() : m_isDirty(true), m_nextNodeId(1)

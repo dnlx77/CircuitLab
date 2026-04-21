@@ -45,6 +45,8 @@ namespace CircuitLab {
 		const Component *GetComponentById(int compId) const;
 		Component *GetComponentById(int compId);
 
+		bool IsDuplicate(Link newLink) const;
+
 	public:
 		Circuit();
 
@@ -65,7 +67,7 @@ namespace CircuitLab {
 
 		// Collega due terminali di due componenti, propagando il nodeId a tutti
 		// i terminali già connessi allo stesso nodo
-		void ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2, bool addLink = true);
+		bool ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2, bool addLink = true);
 
 		void PrintCircuit();
 
