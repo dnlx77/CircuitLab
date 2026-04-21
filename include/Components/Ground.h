@@ -16,6 +16,8 @@ namespace CircuitLab {
 			const std::map<int, int> &nodeMap,
 			const std::map<int, int> &voltageSourceMap) override;
 
+		// Segnala che questo componente è il nodo di riferimento del circuito
+		bool IsGround() const { return true; }
 		bool IsGround() const { return true; }
 
 		void SaveSpecificData() override;

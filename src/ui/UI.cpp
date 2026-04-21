@@ -175,6 +175,7 @@ void CircuitLab::UI::Run()
 						// Notifica il circuito e aggiunge il filo alla lista visiva
 						if (comp1 != comp2)
 						{
+							// Notifica il circuito: aggiunge il filo alla lista visiva solo se il collegamento è valido
 							bool isConnect = m_onCreateLink(comp1, term1, comp2, term2);
 
 							// DA CANCELLARE

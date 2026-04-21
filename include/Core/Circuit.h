@@ -45,6 +45,7 @@ namespace CircuitLab {
 		const Component *GetComponentById(int compId) const;
 		Component *GetComponentById(int compId);
 
+		// Controlla se il collegamento esiste già nella lista dei link (in entrambe le direzioni)
 		bool IsDuplicate(Link newLink) const;
 
 	public:
@@ -64,11 +65,16 @@ namespace CircuitLab {
 		void InvalidateCircuit() { m_isDirty = true; }
 
 		bool IsCircuitEmpty() const { return m_components.empty(); }
-		
+
+		// Restituisce true se il circuito contiene solo componenti ground
+		// (caso degenere: nessun nodo attivo nella matrice MNA)
 		bool CircuitHasOnlyGround() const;
 
 		// Collega due terminali di due componenti, propagando il nodeId a tutti
-		// i terminali già connessi allo stesso nodo
+		// i terminali già connessi allo stesso nodo.
+		// Il parametro addLink controlla se il collegamento va aggiunto alla lista dei link
+		// (false quando si ricostruiscono le connessioni dopo una rimozione).
+		// Restituisce false se il collegamento non è valido o è duplicato.
 		bool ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2, bool addLink = true);
 
 		void PrintCircuit();

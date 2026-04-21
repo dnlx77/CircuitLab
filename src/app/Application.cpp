@@ -49,6 +49,7 @@ CircuitLab::Application::Application()
 	m_ui->SetOnCreateLink([this](int compId1, int termIndex1, int compId2, int termIndex2) -> bool
 		{
 			m_circuit->InvalidateCircuit();
+			// Propaga il risultato al chiamante: false indica un collegamento non valido o duplicato
 			return m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
 		});
 

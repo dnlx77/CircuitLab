@@ -50,7 +50,7 @@ namespace CircuitLab {
 	public:
 		// Callback per aggiungere un componente: riceve tipo e valore, restituisce l'ID assegnato
 		using fnCircuitChange = std::function<int(CircuitLab::ComponentType type, double value)>;
-		// Callback per collegare due terminali
+		// Callback per collegare due terminali: restituisce true se il collegamento è andato a buon fine
 		using fnCreateLink = std::function<bool(int compId1, int termIndex1, int compId2, int termIndex2)>;
 		// Callback per ottenere i nodeId dei terminali di un componente
 		using fnGetCompTerminalId = std::function<std::vector<int>(int compId)>;
