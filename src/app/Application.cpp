@@ -94,6 +94,12 @@ CircuitLab::SimulationOutput CircuitLab::Application::RunSimulation()
 		return output;
 	}
 
+	if (m_circuit->CircuitHasOnlyGround())
+	{
+		output.simRes = SimulationResult::only_ground_circuit;
+		return output;
+	}
+
 	// Risolve il sistema MNA; restituisce nullopt se la matrice è singolare
 	auto result = Solver::SolveCircuit(m_circuit->GetCircuitMatrix(), m_circuit->GetCircuitVector());
 

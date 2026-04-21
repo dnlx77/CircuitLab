@@ -242,6 +242,8 @@ void CircuitLab::UI::Run()
 			ImGui::Text("Il circuito non contiene componenti!");
 		else if (m_simulationOutput.simRes == SimulationResult::no_circuit)
 			ImGui::Text("Errore interno, puntatore a circuito nullo!");
+		else if (m_simulationOutput.simRes == SimulationResult::only_ground_circuit)
+			ImGui::Text("Il circuito contiene solo componenti ground!");
 		else
 		{
 			ImGui::Text("Risultato: [");

@@ -10,6 +10,7 @@ namespace CircuitLab {
 	enum class SimulationResult {
 		success,        // Simulazione completata con successo
 		empty_circuit,  // Il circuito non contiene componenti
+		only_ground_circuit,
 		no_circuit,     // Il puntatore al circuito è nullo (errore interno)
 		solve_error     // La matrice MNA è singolare, sistema non risolvibile
 	};

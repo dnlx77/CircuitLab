@@ -151,6 +151,15 @@ int CircuitLab::Circuit::GetCurrentFromIndex(int index) const
 	return -1;
 }
 
+bool CircuitLab::Circuit::CircuitHasOnlyGround() const
+{
+	for (auto const &comp : m_components)
+		if (!comp->IsGround())
+			return false;
+
+	return true;
+}
+
 // Collega due terminali tra loro, unificando i nodeId.
 // Gestisce tre casi:
 //   1. Entrambi i terminali sono liberi (-1): assegna un nuovo nodeId

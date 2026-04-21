@@ -64,6 +64,8 @@ namespace CircuitLab {
 		void InvalidateCircuit() { m_isDirty = true; }
 
 		bool IsCircuitEmpty() const { return m_components.empty(); }
+		
+		bool CircuitHasOnlyGround() const;
 
 		// Collega due terminali di due componenti, propagando il nodeId a tutti
 		// i terminali già connessi allo stesso nodo
