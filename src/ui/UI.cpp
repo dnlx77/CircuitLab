@@ -178,9 +178,6 @@ void CircuitLab::UI::Run()
 							// Notifica il circuito: aggiunge il filo alla lista visiva solo se il collegamento è valido
 							bool isConnect = m_onCreateLink(comp1, term1, comp2, term2);
 
-							// DA CANCELLARE
-							std::cout << "Link: comp" << comp1 << " term" << term1
-								<< " -> comp" << comp2 << " term" << term2 << std::endl;
 							if (isConnect)
 								m_linkViewList.emplace_back(GetLinkCoords(comp1, term1, comp2, term2));
 						}

@@ -164,6 +164,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClCompile Include="..\external\imgui\imgui_tables.cpp" />
     <ClCompile Include="..\external\imgui\imgui_widgets.cpp" />
     <ClCompile Include="..\src\app\Application.cpp" />
+    <ClCompile Include="..\src\Common\Logger.cpp" />
     <ClCompile Include="..\src\components\Component.cpp" />
     <ClCompile Include="..\src\components\Ground.cpp" />
     <ClCompile Include="..\src\components\Resistor.cpp" />
@@ -178,6 +179,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
   <ItemGroup>
     <ClInclude Include="..\include\App\Application.h" />
     <ClInclude Include="..\include\Common\ComponentType.h" />
+    <ClInclude Include="..\include\Common\Logger.h" />
     <ClInclude Include="..\include\Common\SimulationOutput.h" />
     <ClInclude Include="..\include\Components\Component.h" />
     <ClInclude Include="..\include\Components\Ground.h" />

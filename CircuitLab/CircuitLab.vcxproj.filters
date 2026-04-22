@@ -51,6 +51,9 @@
     <Filter Include="src\UI">
       <UniqueIdentifier>{efedbc89-c957-4d02-8284-7c150931a495}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\Common">
+      <UniqueIdentifier>{3332081c-32e5-4be0-b709-44a112525611}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\external\imgui-sfml\imgui-SFML.cpp">
@@ -104,6 +107,9 @@
     <ClCompile Include="..\src\components\Ground.cpp">
       <Filter>src\Components</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\Common\Logger.cpp">
+      <Filter>src\Common</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\Components\Terminal.h">
@@ -143,6 +149,9 @@
       <Filter>Include\Components</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Common\SimulationOutput.h">
+      <Filter>Include\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Common\Logger.h">
       <Filter>Include\Common</Filter>
     </ClInclude>
   </ItemGroup>

@@ -18,7 +18,6 @@ namespace CircuitLab {
 
 		// Segnala che questo componente è il nodo di riferimento del circuito
 		bool IsGround() const { return true; }
-		bool IsGround() const { return true; }
 
 		void SaveSpecificData() override;
 		void LoadSpecificData() override;

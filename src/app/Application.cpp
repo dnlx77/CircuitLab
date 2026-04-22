@@ -8,6 +8,7 @@
 #include "Components/Ground.h"
 #include "Common/SimulationOutput.h"
 #include "UI/Ui.h"
+#include "Common/Logger.h"
 
 // Crea il componente appropriato in base al tipo richiesto.
 // Il valore ha significato diverso a seconda del tipo:
@@ -32,6 +33,9 @@ std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(Co
 //   - onDeleteComponent:   la UI chiede ad Application di rimuovere un componente
 CircuitLab::Application::Application()
 {
+	Logger::GetInstance().SetMinLogLevel(LogLevel::Debug);
+	Logger::GetInstance().SetLogToFile("circuitlab.log");
+
 	m_ui = std::make_unique<UI>(800, 600, "CircuitLab main window");
 	m_circuit = std::make_unique<Circuit>();
 
@@ -75,8 +79,7 @@ CircuitLab::Application::~Application() = default;
 // con i nomi delle variabili (tensioni Vn e correnti nei rami).
 CircuitLab::SimulationOutput CircuitLab::Application::RunSimulation()
 {
-	// DA CANCELLARE
-	std::cout << "Circuito: " << std::endl;
+	// LOG
 	m_circuit->PrintCircuit();
 
 	SimulationOutput output;

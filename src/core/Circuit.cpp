@@ -2,6 +2,7 @@
 #include <iostream>
 
 #include "Core/Circuit.h"
+#include "Common/Logger.h"
 
 // Scandisce tutti i terminali di tutti i componenti per raccogliere i nodi attivi
 // (esclude il nodo ground, nodeId == 0), costruisce la mappa nodeId -> indice matrice,
@@ -26,9 +27,9 @@ int CircuitLab::Circuit::ComputeNodes()
 		i++;
 	}
 
-	// DA CANCELLARE
+	// LOG
 	for (const auto &n : nodes)
-		std::cout << "node in set: " << n << std::endl;
+		LOG_DEBUG("node in set: " << n);
 
 	// Le sorgenti di tensione introducono una variabile extra (la corrente)
 	// che occupa una riga/colonna aggiuntiva in fondo alla matrice
@@ -62,9 +63,9 @@ void CircuitLab::Circuit::ComputeCircuit()
 
 	m_isDirty = false;
 
-	// DA CANCELLARE
-	std::cout << m_circuitMatrix << std::endl;
-	std::cout << m_circuitVector << std::endl;
+	// LOG
+	LOG_DEBUG("Matrice del sistema: " << std::endl << m_circuitMatrix);
+	LOG_DEBUG("Vettore del sistema: " << std::endl << m_circuitVector);
 }
 
 // Restituisce l'ID del terminale dato il componente e l'indice del terminale (-1 se non trovato)
@@ -116,11 +117,12 @@ bool CircuitLab::Circuit::IsDuplicate(Link newLink) const
 // Stampa a console lo stato di ogni componente e dei suoi terminali (debug)
 void CircuitLab::Circuit::PrintCircuit()
 {
+	LOG_INFO("Circuito:");
 	for (const auto &comp : m_components)
 	{
-		std::cout << "Component id: " << comp->GetId() << std::endl;
+		LOG_INFO("Component id: " << comp->GetId());
 		for (int i = 0; i < comp->GetTerminals().size(); i++)
-			std::cout << "Terminale " << i << " nodeId: " << comp->GetTerminal(i).GetNodeId() << std::endl;
+			LOG_INFO("Terminale " << i << " nodeId: " << comp->GetTerminal(i).GetNodeId());
 	}
 }
 
@@ -196,13 +198,11 @@ bool CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 		comp1->GetTerminal(termComp1).SetNodeId(nodeId);
 		comp2->GetTerminal(termComp2).SetNodeId(nodeId);
 
-		// DA CANCELLARE
-		std::cout << "comp1 id=" << comp1Id << " term=" << termComp1
-			<< " nodeId=" << comp1->GetTerminal(termComp1).GetNodeId() << std::endl;
-		std::cout << "comp2 id=" << comp2Id << " term=" << termComp2
-			<< " nodeId=" << comp2->GetTerminal(termComp2).GetNodeId() << std::endl;
-		std::cout << "Link: comp" << comp1 << " term" << termComp1
-			<< " -> comp" << comp2 << " term" << termComp2 << std::endl;
+		// DEBUG
+		LOG_DEBUG("Collegamento di 2 terminali liberi");
+		LOG_DEBUG("Link tra comp" << comp1Id << " term" << termComp1 << " -> comp" << comp2Id << " term" << termComp2);
+		LOG_DEBUG("Link tra comp" << comp1Id << " term" << termComp1 << " (" << comp1->GetTerminal(termComp1).GetNodeId() <<
+			") -> comp" << comp2Id << " term" << termComp2 << " (" << comp2->GetTerminal(termComp2).GetNodeId() << ")");
 		return true;
 	}
 
@@ -223,13 +223,10 @@ bool CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 					if (comp->GetTerminal(i).GetNodeId() == oldNodeId)
 						comp->GetTerminal(i).SetNodeId(0);
 
-		// DA CANCELLARE
-		std::cout << "comp1 id=" << comp1Id << " term=" << termComp1
-			<< " nodeId=" << comp1->GetTerminal(termComp1).GetNodeId() << std::endl;
-		std::cout << "comp2 id=" << comp2Id << " term=" << termComp2
-			<< " nodeId=" << comp2->GetTerminal(termComp2).GetNodeId() << std::endl;
-		std::cout << "Link: comp" << comp1 << " term" << termComp1
-			<< " -> comp" << comp2 << " term" << termComp2 << std::endl;
+		// DEBUG
+		LOG_DEBUG("Collegamento di un terminale a ground");
+		LOG_DEBUG("Link tra comp" << comp1Id << " term" << termComp1 << " (" << comp1->GetTerminal(termComp1).GetNodeId() << 
+			") -> comp" << comp2Id << " term" << termComp2 << " (" << comp2->GetTerminal(termComp2).GetNodeId() << ")");
 		return true;
 	}
 
@@ -263,13 +260,10 @@ bool CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 							comp->GetTerminal(i).SetNodeId(id2);
 		}
 
-		// DA CANCELLARE
-		std::cout << "comp1 id=" << comp1Id << " term=" << termComp1
-			<< " nodeId=" << comp1->GetTerminal(termComp1).GetNodeId() << std::endl;
-		std::cout << "comp2 id=" << comp2Id << " term=" << termComp2
-			<< " nodeId=" << comp2->GetTerminal(termComp2).GetNodeId() << std::endl;
-		std::cout << "Link: comp" << comp1 << " term" << termComp1
-			<< " -> comp" << comp2 << " term" << termComp2 << std::endl;
+		// DEBUG
+		LOG_DEBUG("Collegamento a terminale esistente");
+		LOG_DEBUG("Link tra comp" << comp1Id << " term" << termComp1 << " (" << comp1->GetTerminal(termComp1).GetNodeId() <<
+			") -> comp" << comp2Id << " term" << termComp2 << " (" << comp2->GetTerminal(termComp2).GetNodeId() << ")");
 		return true;
 	}
 
@@ -307,9 +301,6 @@ void CircuitLab::Circuit::RemoveComponent(int compId)
 {
 	if (!GetComponentById(compId)) return;
 
-	//DA CANCELLARE
-	std::cout << "Link iniziali: " << m_links.size() << std::endl;
-
 	// Rimuove il componente dalla lista
 	m_components.erase(
 		std::remove_if(m_components.begin(), m_components.end(),
@@ -328,9 +319,6 @@ void CircuitLab::Circuit::RemoveComponent(int compId)
 		m_links.end()
 	);
 
-	// DA CANCELLARE
-	std::cout << "Link finali: " << m_links.size() << std::endl;
-
 	// Azzera i nodeId di tutti i terminali non-ground per ripartire da zero
 	for (auto const &comp : m_components)
 	{
@@ -342,9 +330,6 @@ void CircuitLab::Circuit::RemoveComponent(int compId)
 	// Ricostruisce le connessioni rieseguendo i link rimasti
 	for (auto const &link : m_links)
 		ConnectTerminals(link.compId1, link.termIndex1, link.compId2, link.termIndex2, false);
-
-	// DA CANCELLARE
-	std::cout << "Link finali2: " << m_links.size() << std::endl;
 
 	InvalidateCircuit();
 }
