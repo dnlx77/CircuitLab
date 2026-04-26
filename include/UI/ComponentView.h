@@ -12,9 +12,10 @@ namespace CircuitLab {
 	// e offset dei terminali rispetto al centro del componente.
 	// È una struttura dati pura, condivisa tra tutti i componenti dello stesso tipo.
 	struct ComponentDesign {
-		int compWidth, compHeight;       // Dimensioni del rettangolo del componente (pixel)
-		int terminalRadius;              // Raggio del cerchio che rappresenta il terminale (pixel)
-		std::vector<Vec2i> terminalOffset; // Offset di ogni terminale rispetto al centro del componente
+		int compWidth, compHeight;			// Dimensioni del rettangolo del componente (pixel)
+		int terminalRadius;					// Raggio del cerchio che rappresenta il terminale (pixel)
+		std::vector<Vec2i> terminalOffset;	// Offset di ogni terminale rispetto al centro del componente
+		int isPositiveTerminal;				// Indice del terminale eventualmente polarizzato (-1) se nessun polarizzato
 	};
 
 	// Rappresenta la vista grafica di un componente nel canvas.

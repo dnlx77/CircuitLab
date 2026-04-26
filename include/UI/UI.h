@@ -1,12 +1,10 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <functional>
-#include <Eigen/Dense>
 
 #include "Common/ComponentType.h"
 #include "Common/SimulationOutput.h"
 #include "UI/ComponentView.h"
-#include "App/Application.h"
 
 namespace CircuitLab {
 
@@ -35,6 +33,8 @@ namespace CircuitLab {
 		sf::Vector2f pointB;
 		int compIdA;   // ID del componente sul primo estremo del filo
 		int compIdB;   // ID del componente sul secondo estremo del filo
+		int termIndexA; // Indice del terminale del componente A
+		int termIndexB; // Indice del terminale del componente B
 	};
 
 	// Classe principale dell'interfaccia grafica.
@@ -95,6 +95,10 @@ namespace CircuitLab {
 		// Calcola le coordinate pixel dei due estremi di un collegamento,
 		// tenendo conto delle posizioni e degli offset dei terminali.
 		LinkView GetLinkCoords(int comp1, int term1, int comp2, int term2);
+
+		sf::Vector2f GetRotatedTermnialPos(const ComponentView &cw, int termIndex);
+
+		void UpdateLinksForComponent(int compId);
 
 	public:
 		UI(unsigned int width, unsigned int heigth, const std::string &title);

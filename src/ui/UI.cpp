@@ -1,6 +1,6 @@
 #include <imgui-SFML.h>
 #include <imgui.h>
-#include <iostream>
+#include <numbers>
 
 #include "UI/Ui.h"
 #include "Core/Vector2.h"
@@ -15,18 +15,21 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 	{
 		ComponentDesign des = comp.GetComponetDesign();
 
+		float cosAngle = static_cast<float>(std::cos(-1 * comp.GetRotation() * std::numbers::pi / 180.0));
+		float sinAngle = static_cast<float>(std::sin(-1 * comp.GetRotation() * std::numbers::pi / 180.0));
+
+		int dx = static_cast<int>(pos.x - comp.GetPosition().x);
+		int dy = static_cast<int>(pos.y - comp.GetPosition().y);
+
+		float x1 = dx * cosAngle - dy * sinAngle;
+		float y1 = dx * sinAngle + dy * cosAngle;
+
 		int i = 0;
 		for (const auto &terminal : des.terminalOffset)
 		{
-			// Posizione assoluta del terminale nel canvas
-			Vec2i ter(
-				static_cast<int>(comp.GetPosition().x + terminal.x),
-				static_cast<int>(comp.GetPosition().y + terminal.y)
-			);
-
 			// Click dentro la zona di tolleranza del terminale?
-			if ((pos.x >= ter.x - CLICK_TOLLERANCE) && (pos.x <= ter.x + CLICK_TOLLERANCE) &&
-				(pos.y >= ter.y - CLICK_TOLLERANCE) && (pos.y <= ter.y + CLICK_TOLLERANCE))
+			if ((x1 >= terminal.x - CLICK_TOLLERANCE) && (x1 <= terminal.x + CLICK_TOLLERANCE) &&
+				(y1 >= terminal.y - CLICK_TOLLERANCE) && (y1 <= terminal.y + CLICK_TOLLERANCE))
 			{
 				selComp.compId = comp.GetComponentLink();
 				selComp.terminalIndex = i;
@@ -37,10 +40,10 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 		}
 
 		// Click dentro il rettangolo del corpo del componente?
-		if ((pos.x >= comp.GetPosition().x - des.compWidth / 2) &&
-			(pos.x <= comp.GetPosition().x + des.compWidth / 2) &&
-			(pos.y >= comp.GetPosition().y - des.compHeight / 2) &&
-			(pos.y <= comp.GetPosition().y + des.compHeight / 2))
+		if ((x1 >= - des.compWidth / 2) &&
+			(x1 <= des.compWidth / 2) &&
+			(y1 >= - des.compHeight / 2) &&
+			(y1 <= des.compHeight / 2))
 		{
 			selComp.compId = comp.GetComponentLink();
 			selComp.terminalIndex = -1;
@@ -66,18 +69,16 @@ CircuitLab::LinkView CircuitLab::UI::GetLinkCoords(int comp1, int term1, int com
 	{
 		if (comp.GetComponentLink() == comp1)
 		{
-			ComponentDesign des = comp.GetComponetDesign();
-			pA.x = comp.GetPosition().x + des.terminalOffset[term1].x;
-			pA.y = comp.GetPosition().y + des.terminalOffset[term1].y
-				+ (des.terminalOffset[term1].y >= 0 ? 1 : -1) * des.terminalRadius;
+			sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, term1);
+			pA.x = comp.GetPosition().x + rotTerm.x;
+			pA.y = comp.GetPosition().y + rotTerm.y;
 		}
 
 		if (comp.GetComponentLink() == comp2)
 		{
-			ComponentDesign des = comp.GetComponetDesign();
-			pB.x = comp.GetPosition().x + des.terminalOffset[term2].x;
-			pB.y = comp.GetPosition().y + des.terminalOffset[term2].y
-				+ (des.terminalOffset[term2].y >= 0 ? 1 : -1) * des.terminalRadius;
+			sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, term2);
+			pB.x = comp.GetPosition().x + rotTerm.x;
+			pB.y = comp.GetPosition().y + rotTerm.y;
 		}
 	}
 
@@ -86,7 +87,43 @@ CircuitLab::LinkView CircuitLab::UI::GetLinkCoords(int comp1, int term1, int com
 	link.compIdA = comp1;
 	link.pointB = pB;
 	link.compIdB = comp2;
+	link.termIndexA = term1;
+	link.termIndexB = term2;
 	return link;
+}
+
+sf::Vector2f CircuitLab::UI::GetRotatedTermnialPos(const ComponentView &cw, int termIndex)
+{
+	ComponentDesign des = cw.GetComponetDesign();
+	float cosAngle = static_cast<float>(std::cos(cw.GetRotation() * std::numbers::pi / 180.0));
+	float sinAngle = static_cast<float>(std::sin(cw.GetRotation() * std::numbers::pi / 180.0));
+
+	float x = static_cast<float>(des.terminalOffset[termIndex].x);
+	float y = static_cast<float>(des.terminalOffset[termIndex].y + (des.terminalOffset[termIndex].y >= 0 ? 1 : -1) * des.terminalRadius);
+	float x1 = x * cosAngle - y * sinAngle;
+	float y1 = x * sinAngle + y * cosAngle;
+
+	return sf::Vector2f({ x1, y1 });
+}
+
+void CircuitLab::UI::UpdateLinksForComponent(int compId)
+{
+	std::vector<LinkView> toUpdateLinkList;
+	for (auto const &lw : m_linkViewList)
+		if (lw.compIdA == compId || lw.compIdB == compId)
+			toUpdateLinkList.emplace_back(lw);
+
+	// Rimuove i fili collegati al componente eliminato
+	m_linkViewList.erase(
+		std::remove_if(m_linkViewList.begin(), m_linkViewList.end(),
+			[compId](const LinkView &lw) {
+				return (lw.compIdA == compId || lw.compIdB == compId);
+			}),
+		m_linkViewList.end()
+	);
+
+	for (auto const &lw : toUpdateLinkList)
+		m_linkViewList.emplace_back(GetLinkCoords(lw.compIdA, lw.termIndexA, lw.compIdB, lw.termIndexB));
 }
 
 // Inizializza la finestra SFML e ImGui-SFML.
@@ -222,6 +259,17 @@ void CircuitLab::UI::Run()
 					m_selectedComponent.terminalIndex = -1;
 				}
 			}
+			else if (const auto *keyboardEvent = event->getIf<sf::Event::KeyPressed>())
+			{
+				if (m_selectedComponent.state == SelectionState::componentSelected && keyboardEvent->code == sf::Keyboard::Key::Q)
+				{
+					for (auto &cw : m_componentViewList)
+						if (cw.GetComponentLink() == m_selectedComponent.compId)
+							cw.SetRotation(static_cast<float>(static_cast<int>(cw.GetRotation() + 45) % 360));
+
+					UpdateLinksForComponent(m_selectedComponent.compId);
+				}
+			}
 		}
 
 		// --- Aggiornamento ImGui ---
@@ -267,6 +315,7 @@ void CircuitLab::UI::Run()
 			rect.setSize({ static_cast<float>(des.compWidth), static_cast<float>(des.compHeight) });
 			rect.setOrigin({ static_cast<float>(des.compWidth / 2), static_cast<float>(des.compHeight / 2) });
 			rect.setPosition({ comp.GetPosition().x, comp.GetPosition().y });
+			rect.setRotation(sf::degrees(comp.GetRotation()));
 
 			// Colore del corpo in base al tipo
 			if (comp.GetComponentType() == ComponentType::resistor)
@@ -290,14 +339,15 @@ void CircuitLab::UI::Run()
 			sf::CircleShape term(static_cast<float>(des.terminalRadius));
 			term.setFillColor(sf::Color::Blue);
 			term.setOrigin({ static_cast<float>(des.terminalRadius), static_cast<float>(des.terminalRadius) });
-
+			std::vector<int> terminalsId = m_onGetCompTerminalId(comp.GetComponentLink());
+			
 			for (int i = 0; i < des.terminalOffset.size(); i++)
 			{
-				term.setPosition({
-					comp.GetPosition().x + des.terminalOffset[i].x,
-					comp.GetPosition().y + des.terminalOffset[i].y
-						+ (des.terminalOffset[i].y >= 0 ? 1 : -1) * des.terminalRadius
-					});
+				sf::Text termLabel(m_font);
+				
+				sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, i);
+				
+				term.setPosition({ comp.GetPosition().x + rotTerm.x,comp.GetPosition().y + rotTerm.y });
 
 				// Outline giallo se questo terminale è selezionato
 				if (comp.GetComponentLink() == m_selectedComponent.compId &&
@@ -309,11 +359,19 @@ void CircuitLab::UI::Run()
 
 				m_window.draw(term);
 				term.setOutlineThickness(0); // Reset per il prossimo terminale
+				
+				std::string termString;
+				if (des.isPositiveTerminal == i)
+					termString = "+ ";
+				termString += std::to_string(terminalsId[i]);
+				termLabel.setString(termString);
+				termLabel.setCharacterSize(12);
+				termLabel.setPosition({ comp.GetPosition().x + rotTerm.x + TEXT_COMPONENT_OFFSET, comp.GetPosition().y + rotTerm.y });
+				m_window.draw(termLabel);
 			}
 
 			// Costruisce l'etichetta del componente nel formato "R1_2" / "V1_2" / "G0"
 			// usando i nodeId dei terminali ottenuti dal circuito tramite callback
-			std::vector<int> terminalsId = m_onGetCompTerminalId(comp.GetComponentLink());
 			std::string compString;
 			if (comp.GetComponentType() == ComponentType::resistor)
 				compString += "R";
@@ -321,12 +379,8 @@ void CircuitLab::UI::Run()
 				compString += "V";
 			else if (comp.GetComponentType() == ComponentType::ground)
 				compString += "G";
-			for (int i = 0; i < terminalsId.size(); i++)
-			{
-				compString += std::to_string(terminalsId[i]);
-				if (i < terminalsId.size() - 1)
-					compString += "_";
-			}
+			
+			compString += std::to_string(comp.GetComponentLink());
 
 			sf::Text label(m_font);
 			label.setString(compString);
