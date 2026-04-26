@@ -377,8 +377,8 @@ void CircuitLab::UI::Run()
 				m_window.draw(termLabel);
 			}
 
-			// Costruisce l'etichetta del componente nel formato "R1_2" / "V1_2" / "G0"
-			// usando i nodeId dei terminali ottenuti dal circuito tramite callback
+			// Costruisce l'etichetta del componente nel formato "R3" / "V2" / "G1"
+			// usando il prefisso del tipo seguito dall'ID del componente
 			std::string compString;
 			if (comp.GetComponentType() == ComponentType::resistor)
 				compString += "R";
