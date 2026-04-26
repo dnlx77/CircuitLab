@@ -92,6 +92,9 @@ CircuitLab::LinkView CircuitLab::UI::GetLinkCoords(int comp1, int term1, int com
 	return link;
 }
 
+// Calcola la posizione ruotata di un terminale rispetto al centro del componente.
+// Applica la matrice di rotazione 2D all'offset del terminale,
+// tenendo conto del raggio per attaccare il filo al bordo del cerchio.
 sf::Vector2f CircuitLab::UI::GetRotatedTermnialPos(const ComponentView &cw, int termIndex)
 {
 	ComponentDesign des = cw.GetComponetDesign();
@@ -106,6 +109,9 @@ sf::Vector2f CircuitLab::UI::GetRotatedTermnialPos(const ComponentView &cw, int 
 	return sf::Vector2f({ x1, y1 });
 }
 
+// Aggiorna le coordinate dei fili collegati al componente specificato.
+// Rimuove i vecchi LinkView e li ricalcola con GetLinkCoords(),
+// in modo che i fili seguano il componente dopo una rotazione.
 void CircuitLab::UI::UpdateLinksForComponent(int compId)
 {
 	std::vector<LinkView> toUpdateLinkList;
@@ -360,6 +366,7 @@ void CircuitLab::UI::Run()
 				m_window.draw(term);
 				term.setOutlineThickness(0); // Reset per il prossimo terminale
 				
+				// Aggiunge il prefisso "+" se questo è il terminale positivo del componente
 				std::string termString;
 				if (des.isPositiveTerminal == i)
 					termString = "+ ";

@@ -96,8 +96,12 @@ namespace CircuitLab {
 		// tenendo conto delle posizioni e degli offset dei terminali.
 		LinkView GetLinkCoords(int comp1, int term1, int comp2, int term2);
 
+		// Calcola la posizione ruotata di un terminale nel canvas,
+		// tenendo conto della rotazione del componente.
 		sf::Vector2f GetRotatedTermnialPos(const ComponentView &cw, int termIndex);
 
+		// Aggiorna le coordinate dei fili collegati a un componente
+		// dopo che quest'ultimo è stato ruotato o spostato.
 		void UpdateLinksForComponent(int compId);
 
 	public:
