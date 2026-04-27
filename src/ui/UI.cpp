@@ -132,6 +132,253 @@ void CircuitLab::UI::UpdateLinksForComponent(int compId)
 		m_linkViewList.emplace_back(GetLinkCoords(lw.compIdA, lw.termIndexA, lw.compIdB, lw.termIndexB));
 }
 
+void CircuitLab::UI::HandleEvents()
+{
+	// --- Gestione eventi ---
+	while (const std::optional event = m_window.pollEvent())
+	{
+		ImGui::SFML::ProcessEvent(m_window, *event);
+
+		if (event->is<sf::Event::Closed>())
+			m_window.close();
+
+		else if (const auto *mouseEvent = event->getIf<sf::Event::MouseButtonPressed>())
+		{
+			auto pos = mouseEvent->position;
+
+			// Aggiunta componenti con tasto modificatore + click
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
+			{
+				int id = m_onCircuitChange(ComponentType::resistor, DEFAULT_RESISTANCE);
+				m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Resistor", ComponentType::resistor));
+			}
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
+			{
+				int id = m_onCircuitChange(ComponentType::voltageSource, DEFAULT_VOLTAGE);
+				m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Voltage source", ComponentType::voltageSource));
+			}
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G))
+			{
+				int id = m_onCircuitChange(ComponentType::ground, 0);
+				m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Ground", ComponentType::ground));
+			}
+
+			// Gestione selezione e collegamento terminali:
+			// - 1° click su un terminale: lo seleziona
+			// - 2° click su un altro terminale: crea il collegamento
+			if (m_selectedComponent.state != SelectionState::terminalSelected)
+			{
+				CheckClick(pos, m_selectedComponent);
+			}
+			else
+			{
+				// Salva i dati del primo terminale selezionato
+				int comp1 = m_selectedComponent.compId;
+				int term1 = m_selectedComponent.terminalIndex;
+
+				SelecetedComponent temp;
+				CheckClick(pos, temp);
+
+				if (temp.state == SelectionState::terminalSelected)
+				{
+					int comp2 = temp.compId;
+					int term2 = temp.terminalIndex;
+
+					// Notifica il circuito e aggiunge il filo alla lista visiva
+					if (comp1 != comp2)
+					{
+						// Notifica il circuito: aggiunge il filo alla lista visiva solo se il collegamento è valido
+						bool isConnect = m_onCreateLink(comp1, term1, comp2, term2);
+
+						if (isConnect)
+							m_linkViewList.emplace_back(GetLinkCoords(comp1, term1, comp2, term2));
+					}
+					// Reset selezione
+					m_selectedComponent.state = SelectionState::none;
+					m_selectedComponent.compId = -1;
+					m_selectedComponent.terminalIndex = -1;
+				}
+			}
+		}
+		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete))
+		{
+			// Eliminazione del componente selezionato con tasto Delete:
+			// rimuove la vista, i fili collegati e notifica il circuito
+			if (m_selectedComponent.state == SelectionState::componentSelected)
+			{
+				int id = m_selectedComponent.compId;
+
+				// Rimuove la vista del componente
+				m_componentViewList.erase(
+					std::remove_if(m_componentViewList.begin(), m_componentViewList.end(),
+						[id](const ComponentView &cw) {
+							return cw.GetComponentLink() == id;
+						}),
+					m_componentViewList.end()
+				);
+
+				// Rimuove i fili collegati al componente eliminato
+				m_linkViewList.erase(
+					std::remove_if(m_linkViewList.begin(), m_linkViewList.end(),
+						[id](const LinkView &lw) {
+							return (lw.compIdA == id || lw.compIdB == id);
+						}),
+					m_linkViewList.end()
+				);
+
+				m_onDeleteComponent(m_selectedComponent.compId);
+
+				// Reset selezione
+				m_selectedComponent.state = SelectionState::none;
+				m_selectedComponent.compId = -1;
+				m_selectedComponent.terminalIndex = -1;
+			}
+		}
+		else if (const auto *keyboardEvent = event->getIf<sf::Event::KeyPressed>())
+		{
+			if (m_selectedComponent.state == SelectionState::componentSelected && keyboardEvent->code == sf::Keyboard::Key::Q)
+			{
+				for (auto &cw : m_componentViewList)
+					if (cw.GetComponentLink() == m_selectedComponent.compId)
+						cw.SetRotation(static_cast<float>(static_cast<int>(cw.GetRotation() + 45) % 360));
+
+				UpdateLinksForComponent(m_selectedComponent.compId);
+			}
+		}
+	}
+}
+
+void CircuitLab::UI::DrawImageGuiPanel()
+{
+	// --- Pannello ImGui ---
+	ImGui::Begin("CircuitLab - Test");
+
+	if (ImGui::Button("RunSimulation"))
+		m_simulationOutput = m_onRunSimulation();
+
+	// Mostra il risultato della simulazione o un messaggio di errore
+	if (m_simulationOutput.simRes == SimulationResult::solve_error)
+		ImGui::Text("Circuito non risolvibile!");
+	else if (m_simulationOutput.simRes == SimulationResult::empty_circuit)
+		ImGui::Text("Il circuito non contiene componenti!");
+	else if (m_simulationOutput.simRes == SimulationResult::no_circuit)
+		ImGui::Text("Errore interno, puntatore a circuito nullo!");
+	else if (m_simulationOutput.simRes == SimulationResult::only_ground_circuit)
+		ImGui::Text("Il circuito contiene solo componenti ground!");
+	else
+	{
+		ImGui::Text("Risultato: [");
+		for (const auto &r : m_simulationOutput.res)
+		{
+			std::string res = r.first + " " + std::to_string(r.second) + " ";
+			ImGui::Text(res.c_str());
+		}
+		ImGui::Text("]");
+	}
+
+	ImGui::End();
+}
+
+void CircuitLab::UI::DrawComponents()
+{
+	// Disegna ogni componente: rettangolo colorato per tipo + cerchi per i terminali + etichetta
+	for (const auto &comp : m_componentViewList)
+	{
+		ComponentDesign des = comp.GetComponetDesign();
+
+		sf::RectangleShape rect;
+		rect.setSize({ static_cast<float>(des.compWidth), static_cast<float>(des.compHeight) });
+		rect.setOrigin({ static_cast<float>(des.compWidth / 2), static_cast<float>(des.compHeight / 2) });
+		rect.setPosition({ comp.GetPosition().x, comp.GetPosition().y });
+		rect.setRotation(sf::degrees(comp.GetRotation()));
+
+		// Colore del corpo in base al tipo
+		if (comp.GetComponentType() == ComponentType::resistor)
+			rect.setFillColor(sf::Color::Green);
+		else if (comp.GetComponentType() == ComponentType::voltageSource)
+			rect.setFillColor(sf::Color::Red);
+		else if (comp.GetComponentType() == ComponentType::ground)
+			rect.setFillColor(sf::Color::White);
+
+		// Outline giallo se il componente è selezionato (corpo, non terminale)
+		if (comp.GetComponentLink() == m_selectedComponent.compId &&
+			m_selectedComponent.terminalIndex == -1)
+		{
+			rect.setOutlineColor(sf::Color::Yellow);
+			rect.setOutlineThickness(OUTLINE_THICKNESS);
+		}
+
+		m_window.draw(rect);
+
+		// Disegna i terminali come cerchi blu
+		sf::CircleShape term(static_cast<float>(des.terminalRadius));
+		term.setFillColor(sf::Color::Blue);
+		term.setOrigin({ static_cast<float>(des.terminalRadius), static_cast<float>(des.terminalRadius) });
+		std::vector<int> terminalsId = m_onGetCompTerminalId(comp.GetComponentLink());
+
+		for (int i = 0; i < des.terminalOffset.size(); i++)
+		{
+			sf::Text termLabel(m_font);
+
+			sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, i);
+
+			term.setPosition({ comp.GetPosition().x + rotTerm.x,comp.GetPosition().y + rotTerm.y });
+
+			// Outline giallo se questo terminale è selezionato
+			if (comp.GetComponentLink() == m_selectedComponent.compId &&
+				m_selectedComponent.terminalIndex == i)
+			{
+				term.setOutlineColor(sf::Color::Yellow);
+				term.setOutlineThickness(OUTLINE_THICKNESS);
+			}
+
+			m_window.draw(term);
+			term.setOutlineThickness(0); // Reset per il prossimo terminale
+
+			// Aggiunge il prefisso "+" se questo è il terminale positivo del componente
+			std::string termString;
+			if (des.isPositiveTerminal == i)
+				termString = "+ ";
+			termString += std::to_string(terminalsId[i]);
+			termLabel.setString(termString);
+			termLabel.setCharacterSize(12);
+			termLabel.setPosition({ comp.GetPosition().x + rotTerm.x + TEXT_COMPONENT_OFFSET, comp.GetPosition().y + rotTerm.y });
+			m_window.draw(termLabel);
+		}
+
+		// Costruisce l'etichetta del componente nel formato "R3" / "V2" / "G1"
+		// usando il prefisso del tipo seguito dall'ID del componente
+		std::string compString;
+		if (comp.GetComponentType() == ComponentType::resistor)
+			compString += "R";
+		else if (comp.GetComponentType() == ComponentType::voltageSource)
+			compString += "V";
+		else if (comp.GetComponentType() == ComponentType::ground)
+			compString += "G";
+
+		compString += std::to_string(comp.GetComponentLink());
+
+		sf::Text label(m_font);
+		label.setString(compString);
+		label.setCharacterSize(12);
+		label.setPosition({ comp.GetPosition().x + TEXT_COMPONENT_OFFSET, comp.GetPosition().y });
+		m_window.draw(label);
+	}
+}
+
+void CircuitLab::UI::DrawWires()
+{
+	// Disegna i fili come linee bianche tra i punti dei terminali collegati
+	for (const auto &wire : m_linkViewList)
+	{
+		sf::Vertex line[2] = {
+			sf::Vertex{wire.pointA, sf::Color::White},
+			sf::Vertex{wire.pointB, sf::Color::White}
+		};
+		m_window.draw(line, 2, sf::PrimitiveType::Lines);
+	}
+}
+
 // Inizializza la finestra SFML e ImGui-SFML.
 // Lancia un'eccezione se ImGui o il font non riescono ad inizializzarsi.
 CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &title) :
@@ -165,246 +412,19 @@ void CircuitLab::UI::Run()
 
 	while (m_window.isOpen())
 	{
-		// --- Gestione eventi ---
-		while (const std::optional event = m_window.pollEvent())
-		{
-			ImGui::SFML::ProcessEvent(m_window, *event);
-
-			if (event->is<sf::Event::Closed>())
-				m_window.close();
-
-			else if (const auto *mouseEvent = event->getIf<sf::Event::MouseButtonPressed>())
-			{
-				auto pos = mouseEvent->position;
-
-				// Aggiunta componenti con tasto modificatore + click
-				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
-				{
-					int id = m_onCircuitChange(ComponentType::resistor, DEFAULT_RESISTANCE);
-					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Resistor", ComponentType::resistor));
-				}
-				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
-				{
-					int id = m_onCircuitChange(ComponentType::voltageSource, DEFAULT_VOLTAGE);
-					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Voltage source", ComponentType::voltageSource));
-				}
-				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G))
-				{
-					int id = m_onCircuitChange(ComponentType::ground, 0);
-					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Ground", ComponentType::ground));
-				}
-
-				// Gestione selezione e collegamento terminali:
-				// - 1° click su un terminale: lo seleziona
-				// - 2° click su un altro terminale: crea il collegamento
-				if (m_selectedComponent.state != SelectionState::terminalSelected)
-				{
-					CheckClick(pos, m_selectedComponent);
-				}
-				else
-				{
-					// Salva i dati del primo terminale selezionato
-					int comp1 = m_selectedComponent.compId;
-					int term1 = m_selectedComponent.terminalIndex;
-
-					SelecetedComponent temp;
-					CheckClick(pos, temp);
-
-					if (temp.state == SelectionState::terminalSelected)
-					{
-						int comp2 = temp.compId;
-						int term2 = temp.terminalIndex;
-						
-						// Notifica il circuito e aggiunge il filo alla lista visiva
-						if (comp1 != comp2)
-						{
-							// Notifica il circuito: aggiunge il filo alla lista visiva solo se il collegamento è valido
-							bool isConnect = m_onCreateLink(comp1, term1, comp2, term2);
-
-							if (isConnect)
-								m_linkViewList.emplace_back(GetLinkCoords(comp1, term1, comp2, term2));
-						}
-						// Reset selezione
-						m_selectedComponent.state = SelectionState::none;
-						m_selectedComponent.compId = -1;
-						m_selectedComponent.terminalIndex = -1;
-					}
-				}
-			}
-			else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete))
-			{
-				// Eliminazione del componente selezionato con tasto Delete:
-				// rimuove la vista, i fili collegati e notifica il circuito
-				if (m_selectedComponent.state == SelectionState::componentSelected)
-				{
-					int id = m_selectedComponent.compId;
-
-					// Rimuove la vista del componente
-					m_componentViewList.erase(
-						std::remove_if(m_componentViewList.begin(), m_componentViewList.end(),
-							[id](const ComponentView &cw) {
-								return cw.GetComponentLink() == id;
-							}),
-						m_componentViewList.end()
-					);
-
-					// Rimuove i fili collegati al componente eliminato
-					m_linkViewList.erase(
-						std::remove_if(m_linkViewList.begin(), m_linkViewList.end(),
-							[id](const LinkView &lw) {
-								return (lw.compIdA == id || lw.compIdB == id);
-							}),
-						m_linkViewList.end()
-					);
-
-					m_onDeleteComponent(m_selectedComponent.compId);
-
-					// Reset selezione
-					m_selectedComponent.state = SelectionState::none;
-					m_selectedComponent.compId = -1;
-					m_selectedComponent.terminalIndex = -1;
-				}
-			}
-			else if (const auto *keyboardEvent = event->getIf<sf::Event::KeyPressed>())
-			{
-				if (m_selectedComponent.state == SelectionState::componentSelected && keyboardEvent->code == sf::Keyboard::Key::Q)
-				{
-					for (auto &cw : m_componentViewList)
-						if (cw.GetComponentLink() == m_selectedComponent.compId)
-							cw.SetRotation(static_cast<float>(static_cast<int>(cw.GetRotation() + 45) % 360));
-
-					UpdateLinksForComponent(m_selectedComponent.compId);
-				}
-			}
-		}
+		HandleEvents();
 
 		// --- Aggiornamento ImGui ---
 		ImGui::SFML::Update(m_window, deltaClock.restart());
 
-		// --- Pannello ImGui ---
-		ImGui::Begin("CircuitLab - Test");
-
-		if (ImGui::Button("RunSimulation"))
-			m_simulationOutput = m_onRunSimulation();
-
-		// Mostra il risultato della simulazione o un messaggio di errore
-		if (m_simulationOutput.simRes == SimulationResult::solve_error)
-			ImGui::Text("Circuito non risolvibile!");
-		else if (m_simulationOutput.simRes == SimulationResult::empty_circuit)
-			ImGui::Text("Il circuito non contiene componenti!");
-		else if (m_simulationOutput.simRes == SimulationResult::no_circuit)
-			ImGui::Text("Errore interno, puntatore a circuito nullo!");
-		else if (m_simulationOutput.simRes == SimulationResult::only_ground_circuit)
-			ImGui::Text("Il circuito contiene solo componenti ground!");
-		else
-		{
-			ImGui::Text("Risultato: [");
-			for (const auto &r : m_simulationOutput.res)
-			{
-				std::string res = r.first + " " + std::to_string(r.second) + " ";
-				ImGui::Text(res.c_str());
-			}
-			ImGui::Text("]");
-		}
-
-		ImGui::End();
+		DrawImageGuiPanel();
 
 		// --- Rendering canvas ---
 		m_window.clear(BACKGROUND_COLOR);
 
-		// Disegna ogni componente: rettangolo colorato per tipo + cerchi per i terminali + etichetta
-		for (const auto &comp : m_componentViewList)
-		{
-			ComponentDesign des = comp.GetComponetDesign();
+		DrawComponents();
 
-			sf::RectangleShape rect;
-			rect.setSize({ static_cast<float>(des.compWidth), static_cast<float>(des.compHeight) });
-			rect.setOrigin({ static_cast<float>(des.compWidth / 2), static_cast<float>(des.compHeight / 2) });
-			rect.setPosition({ comp.GetPosition().x, comp.GetPosition().y });
-			rect.setRotation(sf::degrees(comp.GetRotation()));
-
-			// Colore del corpo in base al tipo
-			if (comp.GetComponentType() == ComponentType::resistor)
-				rect.setFillColor(sf::Color::Green);
-			else if (comp.GetComponentType() == ComponentType::voltageSource)
-				rect.setFillColor(sf::Color::Red);
-			else if (comp.GetComponentType() == ComponentType::ground)
-				rect.setFillColor(sf::Color::White);
-
-			// Outline giallo se il componente è selezionato (corpo, non terminale)
-			if (comp.GetComponentLink() == m_selectedComponent.compId &&
-				m_selectedComponent.terminalIndex == -1)
-			{
-				rect.setOutlineColor(sf::Color::Yellow);
-				rect.setOutlineThickness(OUTLINE_THICKNESS);
-			}
-
-			m_window.draw(rect);
-
-			// Disegna i terminali come cerchi blu
-			sf::CircleShape term(static_cast<float>(des.terminalRadius));
-			term.setFillColor(sf::Color::Blue);
-			term.setOrigin({ static_cast<float>(des.terminalRadius), static_cast<float>(des.terminalRadius) });
-			std::vector<int> terminalsId = m_onGetCompTerminalId(comp.GetComponentLink());
-			
-			for (int i = 0; i < des.terminalOffset.size(); i++)
-			{
-				sf::Text termLabel(m_font);
-				
-				sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, i);
-				
-				term.setPosition({ comp.GetPosition().x + rotTerm.x,comp.GetPosition().y + rotTerm.y });
-
-				// Outline giallo se questo terminale è selezionato
-				if (comp.GetComponentLink() == m_selectedComponent.compId &&
-					m_selectedComponent.terminalIndex == i)
-				{
-					term.setOutlineColor(sf::Color::Yellow);
-					term.setOutlineThickness(OUTLINE_THICKNESS);
-				}
-
-				m_window.draw(term);
-				term.setOutlineThickness(0); // Reset per il prossimo terminale
-				
-				// Aggiunge il prefisso "+" se questo è il terminale positivo del componente
-				std::string termString;
-				if (des.isPositiveTerminal == i)
-					termString = "+ ";
-				termString += std::to_string(terminalsId[i]);
-				termLabel.setString(termString);
-				termLabel.setCharacterSize(12);
-				termLabel.setPosition({ comp.GetPosition().x + rotTerm.x + TEXT_COMPONENT_OFFSET, comp.GetPosition().y + rotTerm.y });
-				m_window.draw(termLabel);
-			}
-
-			// Costruisce l'etichetta del componente nel formato "R3" / "V2" / "G1"
-			// usando il prefisso del tipo seguito dall'ID del componente
-			std::string compString;
-			if (comp.GetComponentType() == ComponentType::resistor)
-				compString += "R";
-			else if (comp.GetComponentType() == ComponentType::voltageSource)
-				compString += "V";
-			else if (comp.GetComponentType() == ComponentType::ground)
-				compString += "G";
-			
-			compString += std::to_string(comp.GetComponentLink());
-
-			sf::Text label(m_font);
-			label.setString(compString);
-			label.setCharacterSize(12);
-			label.setPosition({ comp.GetPosition().x + TEXT_COMPONENT_OFFSET, comp.GetPosition().y });
-			m_window.draw(label);
-		}
-
-		// Disegna i fili come linee bianche tra i punti dei terminali collegati
-		for (const auto &wire : m_linkViewList)
-		{
-			sf::Vertex line[2] = {
-				sf::Vertex{wire.pointA, sf::Color::White},
-				sf::Vertex{wire.pointB, sf::Color::White}
-			};
-			m_window.draw(line, 2, sf::PrimitiveType::Lines);
-		}
+		DrawWires();
 
 		// Render ImGui sopra il canvas
 		ImGui::SFML::Render(m_window);

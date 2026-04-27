@@ -104,6 +104,14 @@ namespace CircuitLab {
 		// dopo che quest'ultimo è stato ruotato o spostato.
 		void UpdateLinksForComponent(int compId);
 
+		void HandleEvents();
+
+		void DrawImageGuiPanel();
+
+		void DrawComponents();
+
+		void DrawWires();
+
 	public:
 		UI(unsigned int width, unsigned int heigth, const std::string &title);
 		~UI();
