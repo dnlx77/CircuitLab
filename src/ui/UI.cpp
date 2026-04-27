@@ -146,61 +146,99 @@ void CircuitLab::UI::HandleEvents()
 		{
 			auto pos = mouseEvent->position;
 
-			// Aggiunta componenti con tasto modificatore + click
-			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
+			if (mouseEvent->button == sf::Mouse::Button::Left && m_selectedComponent.state != SelectionState::dragging)
 			{
-				int id = m_onCircuitChange(ComponentType::resistor, DEFAULT_RESISTANCE);
-				m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Resistor", ComponentType::resistor));
-			}
-			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
-			{
-				int id = m_onCircuitChange(ComponentType::voltageSource, DEFAULT_VOLTAGE);
-				m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Voltage source", ComponentType::voltageSource));
-			}
-			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G))
-			{
-				int id = m_onCircuitChange(ComponentType::ground, 0);
-				m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Ground", ComponentType::ground));
-			}
+				// Aggiunta componenti con tasto modificatore + click
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
+				{
+					int id = m_onCircuitChange(ComponentType::resistor, DEFAULT_RESISTANCE);
+					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Resistor", ComponentType::resistor));
+				}
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
+				{
+					int id = m_onCircuitChange(ComponentType::voltageSource, DEFAULT_VOLTAGE);
+					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Voltage source", ComponentType::voltageSource));
+				}
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G))
+				{
+					int id = m_onCircuitChange(ComponentType::ground, 0);
+					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Ground", ComponentType::ground));
+				}
 
-			// Gestione selezione e collegamento terminali:
-			// - 1° click su un terminale: lo seleziona
-			// - 2° click su un altro terminale: crea il collegamento
-			if (m_selectedComponent.state != SelectionState::terminalSelected)
+				// Gestione selezione e collegamento terminali:
+				// - 1° click su un terminale: lo seleziona
+				// - 2° click su un altro terminale: crea il collegamento
+				if (m_selectedComponent.state != SelectionState::terminalSelected)
+				{
+					CheckClick(pos, m_selectedComponent);
+				}
+				else
+				{
+					// Salva i dati del primo terminale selezionato
+					int comp1 = m_selectedComponent.compId;
+					int term1 = m_selectedComponent.terminalIndex;
+
+					SelecetedComponent temp;
+					CheckClick(pos, temp);
+
+					if (temp.state == SelectionState::terminalSelected)
+					{
+						int comp2 = temp.compId;
+						int term2 = temp.terminalIndex;
+
+						// Notifica il circuito e aggiunge il filo alla lista visiva
+						if (comp1 != comp2)
+						{
+							// Notifica il circuito: aggiunge il filo alla lista visiva solo se il collegamento è valido
+							bool isConnect = m_onCreateLink(comp1, term1, comp2, term2);
+
+							if (isConnect)
+								m_linkViewList.emplace_back(GetLinkCoords(comp1, term1, comp2, term2));
+						}
+						// Reset selezione
+						m_selectedComponent.state = SelectionState::none;
+						m_selectedComponent.compId = -1;
+						m_selectedComponent.terminalIndex = -1;
+					}
+				}
+			}
+			else if (mouseEvent->button == sf::Mouse::Button::Right)
 			{
 				CheckClick(pos, m_selectedComponent);
-			}
-			else
-			{
-				// Salva i dati del primo terminale selezionato
-				int comp1 = m_selectedComponent.compId;
-				int term1 = m_selectedComponent.terminalIndex;
-
-				SelecetedComponent temp;
-				CheckClick(pos, temp);
-
-				if (temp.state == SelectionState::terminalSelected)
+				if (m_selectedComponent.state != SelectionState::none)
 				{
-					int comp2 = temp.compId;
-					int term2 = temp.terminalIndex;
-
-					// Notifica il circuito e aggiunge il filo alla lista visiva
-					if (comp1 != comp2)
-					{
-						// Notifica il circuito: aggiunge il filo alla lista visiva solo se il collegamento è valido
-						bool isConnect = m_onCreateLink(comp1, term1, comp2, term2);
-
-						if (isConnect)
-							m_linkViewList.emplace_back(GetLinkCoords(comp1, term1, comp2, term2));
-					}
-					// Reset selezione
-					m_selectedComponent.state = SelectionState::none;
-					m_selectedComponent.compId = -1;
-					m_selectedComponent.terminalIndex = -1;
+					for (auto const &comp:m_componentViewList)
+						if (comp.GetComponentLink() == m_selectedComponent.compId)
+						{
+							m_compClickOffset.x = pos.x - comp.GetPosition().x;
+							m_compClickOffset.y = pos.y - comp.GetPosition().y;
+						}
+					m_selectedComponent.state = SelectionState::dragging;
 				}
 			}
 		}
-		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete))
+		else if (const auto *mouseMovedEvent = event->getIf<sf::Event::MouseMoved>())
+		{
+			auto pos = mouseMovedEvent->position;
+			Vec2 newPos;
+			if (m_selectedComponent.state == SelectionState::dragging)
+			{
+				newPos.x = pos.x - m_compClickOffset.x;
+				newPos.y = pos.y - m_compClickOffset.y;
+
+				for (auto &cw : m_componentViewList)
+					if (cw.GetComponentLink() == m_selectedComponent.compId)
+						cw.SetPosition(newPos);
+
+				UpdateLinksForComponent(m_selectedComponent.compId);
+			}
+		}
+		else if (const auto *mouseReleasedEvent = event->getIf<sf::Event::MouseButtonReleased>()) 
+		{
+			if (mouseReleasedEvent->button == sf::Mouse::Button::Right)
+				m_selectedComponent.state = SelectionState::none;
+		}
+		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete) && m_selectedComponent.state != SelectionState::dragging)
 		{
 			// Eliminazione del componente selezionato con tasto Delete:
 			// rimuove la vista, i fili collegati e notifica il circuito

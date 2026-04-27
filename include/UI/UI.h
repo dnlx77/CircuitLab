@@ -9,11 +9,12 @@
 namespace CircuitLab {
 
 	// Stato della selezione corrente nel canvas:
-	// niente selezionato, un componente selezionato, o un terminale selezionato.
+	// niente selezionato, un componente selezionato, o un terminale selezionato, o trascinamento.
 	enum class SelectionState {
 		none,
 		componentSelected,
-		terminalSelected
+		terminalSelected,
+		dragging
 	};
 
 	// Tiene traccia del componente (o terminale) attualmente selezionato.
@@ -78,6 +79,8 @@ namespace CircuitLab {
 
 		std::vector<ComponentView> m_componentViewList; // Lista delle viste grafiche dei componenti
 		std::vector<LinkView> m_linkViewList;           // Lista dei collegamenti (fili) da disegnare
+
+		sf::Vector2f m_compClickOffset;
 
 		sf::RenderWindow m_window; // Finestra SFML
 
