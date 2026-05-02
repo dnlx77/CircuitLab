@@ -90,7 +90,10 @@ namespace CircuitLab {
 		// Dato un indice nella matrice, restituisce il componentId della sorgente di tensione (-1 se non trovato)
 		int GetCurrentFromIndex(int index) const;
 
-		const std::vector<std::unique_ptr<Component>>& GetComponentsVector() const& { return m_components; }
-		const std::vector<Link>& GetLinksVector() const { return m_links; }
+		// Restituisce la lista dei componenti (usata da IOManager per la serializzazione)
+		const std::vector<std::unique_ptr<Component>> &GetComponentsVector() const &{ return m_components; }
+
+		// Restituisce la lista dei link tra terminali (usata da IOManager per la serializzazione)
+		const std::vector<Link> &GetLinksVector() const { return m_links; }
 	};
 }

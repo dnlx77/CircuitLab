@@ -29,9 +29,9 @@ namespace CircuitLab {
 		// Callback per eliminare un componente dal circuito
 		using fnDeleteComponent = std::function<void(int compId)>;
 
-		using fnOnSave = std::function<void(const std::string &filePath)>;
-		using fnOnLoad = std::function<void(const std::string &filePath)>;
-		using fnOnNew = std::function<void()>;
+		using fnOnSave = std::function<void(const std::string &filePath)>; // Callback per salvare il circuito su file
+		using fnOnLoad = std::function<void(const std::string &filePath)>; // Callback per caricare il circuito da file
+		using fnOnNew = std::function<void()>;                             // Callback per resettare il canvas
 
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
@@ -107,11 +107,19 @@ namespace CircuitLab {
 		void SetOnLoad(const fnOnLoad &func) { m_onLoad = func; }
 		void SetOnNew(const fnOnNew &func) { m_onNew = func; }
 
+		// Aggiunge la vista grafica di un componente al canvas
 		void AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation);
+
+		// Aggiunge la vista grafica di un filo al canvas
 		void AddViewLink(int comp1, int term1, int comp2, int term2);
+
+		// Rimuove tutte le viste grafiche (componenti e fili) dal canvas
 		void Clear();
 
+		// Restituisce la lista delle viste grafiche dei componenti (usata da IOManager per la serializzazione)
 		const std::vector<ComponentView> &GetComponentsViewList() const { return m_componentViewList; }
+
+		// Restituisce la lista delle viste grafiche dei fili (usata da IOManager per la serializzazione)
 		const std::vector<LinkView> &GetLinkVIewList() const { return m_linkViewList; }
 
 		// Avvia il loop principale: gestione eventi, aggiornamento ImGui, rendering

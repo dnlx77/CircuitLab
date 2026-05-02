@@ -71,12 +71,18 @@ CircuitLab::Application::Application()
 			m_circuit->RemoveComponent(compId);
 		});
 
+	// Collega IOManager ad Application e UI tramite callback,
+	// con la stessa logica usata per i callback della UI:
+	// IOManager non conosce né Circuit né UI direttamente.
+
+	// Crea un componente nel circuito durante il caricamento da file
 	m_ioManager->SetOnComponentLoad([this](CircuitLab::ComponentType type, double value) -> int
 		{
 			m_circuit->InvalidateCircuit();
 			return m_circuit->AddComponent(MakeComponent(type, value));
 		});
 
+	// Collega due terminali nel circuito durante il caricamento da file
 	m_ioManager->SetOnLoadLink([this](int compId1, int termIndex1, int compId2, int termIndex2) -> bool
 		{
 			m_circuit->InvalidateCircuit();
@@ -84,11 +90,13 @@ CircuitLab::Application::Application()
 			return m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
 		});
 
+	// Aggiunge la vista grafica di un componente alla UI durante il caricamento
 	m_ioManager->SetOnComponentViewLoad([this](int compId, const std::string &name, ComponentType type, Vec2 position, float rotation)
 		{
 			m_ui->AddViewComponent(compId, name, type, position, rotation);
 		});
 
+	// Aggiunge la vista grafica di un filo alla UI durante il caricamento
 	m_ioManager->SetOnLinkViewLoad([this](int comp1, int term1, int comp2, int term2)
 		{
 			m_ui->AddViewLink(comp1, term1, comp2, term2);
@@ -108,7 +116,8 @@ CircuitLab::Application::Application()
 		{
 			New();
 		});
-
+	
+	// Resetta circuito e UI prima di caricare un nuovo file
 	m_ioManager->SetOnNew([this]()
 		{
 			New();

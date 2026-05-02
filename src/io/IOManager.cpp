@@ -8,6 +8,8 @@ void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circui
 	nlohmann::json j;
 	j["components"] = nlohmann::json::array();
 
+	// Serializza ogni componente delegando a Component::Save(),
+	// che chiama SaveSpecificData() sulla classe derivata (Template Method)
 	for (auto const &comp : circ.GetComponentsVector())
 	{
 		nlohmann::json compJson;
@@ -16,7 +18,8 @@ void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circui
 	}
 
 	j["links"] = nlohmann::json::array();
-	
+
+	// Serializza i link tra terminali (topologia del circuito)
 	for (auto const &link : circ.GetLinksVector())
 	{
 		nlohmann::json linkJson;
@@ -29,6 +32,7 @@ void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circui
 
 	j["componentsView"] = nlohmann::json::array();
 
+	// Serializza le viste grafiche (posizione, rotazione, nome) dei componenti
 	for (auto const &cw : compsView)
 	{
 		nlohmann::json compViewJson;
@@ -38,6 +42,7 @@ void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circui
 
 	j["linksView"] = nlohmann::json::array();
 
+	// Serializza le viste grafiche dei fili (estremi e riferimenti ai componenti)
 	for (auto const &lw : linksView)
 	{
 		nlohmann::json linkViewJson;
@@ -70,24 +75,33 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 	nlohmann::json j;
 	i >> j;
 
+	// Resetta il circuito e la UI prima di ricaricare
 	m_onNew();
+
+	// Mappa savedId -> newId: gli ID nel file JSON sono quelli del momento
+	// in cui il circuito è stato salvato. Alla ricarica, i componenti ricevono
+	// nuovi ID progressivi. Questa mappa traduce i riferimenti nei link e nelle viste.
 	std::map<int, int> m_loadVsRealNodeMap;
 
+	// Prima passata: crea i componenti e registra la corrispondenza tra ID salvato e ID nuovo
 	for (auto const compJson : j["components"])
 	{
 		double value = compJson.contains("value") ? compJson["value"].get<double>() : 0.0;
 		m_loadVsRealNodeMap[compJson["id"]] = m_onComponentLoad(compJson["type"].get<ComponentType>(), value);
 	}
 
+	// Seconda passata: crea le viste grafiche, traducendo l'ID salvato con quello reale
 	for (auto const compViewJosn : j["componentsView"])
 	{
 		Vec2 vec(compViewJosn["position"][0], compViewJosn["position"][1]);
 		m_onComponentViewLoad(m_loadVsRealNodeMap.at(compViewJosn["componentLink"]), compViewJosn["name"].get<std::string>(), compViewJosn["type"].get<ComponentType>(), vec, compViewJosn["rotation"]);
 	}
 
+	// Terza passata: ricrea i link tra terminali nel circuito
 	for (auto const linkJson : j["links"])
 		m_onLinkLoad(m_loadVsRealNodeMap.at(linkJson["compId1"]), linkJson["termIndex1"], m_loadVsRealNodeMap.at(linkJson["compId2"]), linkJson["termIndex2"]);
 
+	// Quarta passata: ricrea le viste grafiche dei fili
 	for (auto const linkViewJson : j["linksView"])
 		m_onLinkViewLoad(m_loadVsRealNodeMap.at(linkViewJson["compIdA"]), linkViewJson["termIndexA"], m_loadVsRealNodeMap.at(linkViewJson["compIdB"]), linkViewJson["termIndexB"]);
 }

@@ -17,10 +17,10 @@ namespace CircuitLab {
 	// Possiede in esclusiva sia il circuito che la UI tramite unique_ptr.
 	class Application {
 	private:
-		std::unique_ptr<Circuit> m_circuit;          // Il circuito elettrico
-		std::unique_ptr<UI> m_ui;                    // L'interfaccia grafica
-		Eigen::VectorXd m_simulationResult;          // Ultimo vettore soluzione MNA
-		std::unique_ptr<IOManager> m_ioManager;
+		std::unique_ptr<Circuit> m_circuit;         // Il circuito elettrico
+		std::unique_ptr<UI> m_ui;                   // L'interfaccia grafica
+		Eigen::VectorXd m_simulationResult;         // Ultimo vettore soluzione MNA
+		std::unique_ptr<IOManager> m_ioManager;		// Gestisce salvataggio e caricamento su file JSON
 
 		// Factory method: crea il componente corretto in base al tipo richiesto dalla UI.
 		// Restituisce nullptr per tipi non riconosciuti.
@@ -37,6 +37,7 @@ namespace CircuitLab {
 
 		const Eigen::VectorXd &GetResult() const { return m_simulationResult; }
 
+		// Resetta il circuito e la UI allo stato iniziale (canvas vuoto)
 		void New();
 
 		// Avvia il loop principale delegando alla UI
