@@ -10,3 +10,11 @@ std::vector<int> CircuitLab::Component::GetTerminalId() const
 	
 	return vecTerminal;
 }
+
+void CircuitLab::Component::Save(nlohmann::json &j) const
+{
+	j["id"] = m_id;
+	j["type"] = GetType();
+
+	SaveSpecificData(j);
+}

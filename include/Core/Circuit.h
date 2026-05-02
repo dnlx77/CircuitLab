@@ -79,6 +79,8 @@ namespace CircuitLab {
 
 		void PrintCircuit();
 
+		void Clear();
+
 		// Restituisce la lista dei nodeId dei terminali del componente dato
 		std::vector<int> GetNodesIdFromComponentId(int compId) const;
 
@@ -87,5 +89,8 @@ namespace CircuitLab {
 
 		// Dato un indice nella matrice, restituisce il componentId della sorgente di tensione (-1 se non trovato)
 		int GetCurrentFromIndex(int index) const;
+
+		const std::vector<std::unique_ptr<Component>>& GetComponentsVector() const& { return m_components; }
+		const std::vector<Link>& GetLinksVector() const { return m_links; }
 	};
 }

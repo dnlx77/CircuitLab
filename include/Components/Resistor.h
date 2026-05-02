@@ -28,7 +28,6 @@ namespace CircuitLab {
 			const std::map<int, int> &nodeMap,
 			const std::map<int, int> &voltageSourceMap) override;
 
-		void SaveSpecificData() override;
-		void LoadSpecificData() override;
+		void SaveSpecificData(nlohmann::json &j) const override;
 	};
 }

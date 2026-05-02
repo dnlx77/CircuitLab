@@ -4,6 +4,7 @@
 #include "Core/Circuit.h"
 #include "Common/ComponentType.h"
 #include "Common/SimulationOutput.h"
+#include "IO/IOManager.h"
 
 namespace CircuitLab {
 
@@ -19,6 +20,7 @@ namespace CircuitLab {
 		std::unique_ptr<Circuit> m_circuit;          // Il circuito elettrico
 		std::unique_ptr<UI> m_ui;                    // L'interfaccia grafica
 		Eigen::VectorXd m_simulationResult;          // Ultimo vettore soluzione MNA
+		std::unique_ptr<IOManager> m_ioManager;
 
 		// Factory method: crea il componente corretto in base al tipo richiesto dalla UI.
 		// Restituisce nullptr per tipi non riconosciuti.
@@ -34,6 +36,8 @@ namespace CircuitLab {
 		SimulationOutput RunSimulation();
 
 		const Eigen::VectorXd &GetResult() const { return m_simulationResult; }
+
+		void New();
 
 		// Avvia il loop principale delegando alla UI
 		void Run();

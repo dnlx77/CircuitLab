@@ -18,3 +18,12 @@ CircuitLab::ComponentView::ComponentView(int componentLink, const Vec2 &position
 	m_name(name),
 	m_type(type)
 {}
+
+void CircuitLab::ComponentView::Save(nlohmann::json & j) const
+{
+	j["componentLink"] = GetComponentLink();
+	j["name"] = GetName();
+	j["type"] = GetComponentType();
+	j["position"] = { GetPosition().x, GetPosition().y };
+	j["rotation"] = GetRotation();
+}

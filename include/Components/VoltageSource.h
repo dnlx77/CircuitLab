@@ -27,7 +27,6 @@ namespace CircuitLab {
 		// Segnala al Circuit che questa sorgente occupa una riga extra nella matrice
 		int GetExtraVariables() const override { return 1; }
 
-		void SaveSpecificData() override;
-		void LoadSpecificData() override;
+		void SaveSpecificData(nlohmann::json &j) const override;
 	};
 }

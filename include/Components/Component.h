@@ -2,7 +2,9 @@
 #include <string>
 #include <vector>
 #include <Eigen/Dense>
+#include <nlohmann/json.hpp>
 #include "Terminal.h"
+#include "Common/ComponentType.h"
 
 namespace CircuitLab {
 
@@ -15,14 +17,14 @@ namespace CircuitLab {
 		int m_id;                   // ID univoco di questo componente
 		int m_terminalNumber;       // Numero di terminali del componente
 		std::vector<Terminal> m_terminals; // Lista dei terminali
+		ComponentType m_componentType;
 
 		// Metodi per la serializzazione - da implementare nelle classi derivate
-		virtual void SaveSpecificData() = 0;
-		virtual void LoadSpecificData() = 0;
+		virtual void SaveSpecificData(nlohmann::json &j) const = 0;
 
 	public:
 		// Il costruttore alloca automaticamente il numero corretto di terminali
-		Component(int terminalNumber) : m_id(s_nextId++), m_terminalNumber(terminalNumber) {
+		Component(int terminalNumber, ComponentType compType) : m_id(s_nextId++), m_terminalNumber(terminalNumber), m_componentType(compType) {
 			m_terminals.resize(m_terminalNumber);
 		}
 		virtual ~Component() = default;
@@ -32,9 +34,9 @@ namespace CircuitLab {
 		Terminal &GetTerminal(int index) { return m_terminals[index]; }
 		std::vector<int> GetTerminalId() const;
 		virtual bool IsGround() const { return false; }
+		ComponentType GetType() const { return m_componentType; }
 
-		void Save();
-		void Load();
+		void Save(nlohmann::json &j) const;
 
 		// Stampa il contributo del componente nella matrice MNA (A) e nel vettore (b).
 		// nodeMap mappa nodeId -> indice di riga/colonna nella matrice.

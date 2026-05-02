@@ -172,6 +172,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClCompile Include="..\src\components\VoltageSource.cpp" />
     <ClCompile Include="..\src\core\Circuit.cpp" />
     <ClCompile Include="..\src\core\Solver.cpp" />
+    <ClCompile Include="..\src\io\IOManager.cpp" />
     <ClCompile Include="..\src\ui\ComponentView.cpp" />
     <ClCompile Include="..\src\ui\UI.cpp" />
     <ClCompile Include="main.cpp" />
@@ -181,6 +182,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClInclude Include="..\include\Common\ComponentType.h" />
     <ClInclude Include="..\include\Common\Logger.h" />
     <ClInclude Include="..\include\Common\SimulationOutput.h" />
+    <ClInclude Include="..\include\Common\UICommon.h" />
     <ClInclude Include="..\include\Components\Component.h" />
     <ClInclude Include="..\include\Components\Ground.h" />
     <ClInclude Include="..\include\Components\Resistor.h" />
@@ -189,6 +191,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClInclude Include="..\include\Core\Circuit.h" />
     <ClInclude Include="..\include\Core\Solver.h" />
     <ClInclude Include="..\include\Core\Vector2.h" />
+    <ClInclude Include="..\include\IO\IOManager.h" />
     <ClInclude Include="..\include\UI\ComponentView.h" />
     <ClInclude Include="..\include\UI\UI.h" />
   </ItemGroup>

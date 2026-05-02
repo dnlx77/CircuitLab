@@ -152,17 +152,17 @@ void CircuitLab::UI::HandleEvents()
 				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
 				{
 					int id = m_onCircuitChange(ComponentType::resistor, DEFAULT_RESISTANCE);
-					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Resistor", ComponentType::resistor));
+					AddViewComponent(id, "Resistor", ComponentType::resistor, Vec2(pos.x, pos.y), DEFAULT_ROTATION);
 				}
 				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
 				{
 					int id = m_onCircuitChange(ComponentType::voltageSource, DEFAULT_VOLTAGE);
-					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Voltage source", ComponentType::voltageSource));
+					AddViewComponent(id, "Voltage source", ComponentType::voltageSource, Vec2(pos.x, pos.y), DEFAULT_ROTATION);
 				}
 				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G))
 				{
 					int id = m_onCircuitChange(ComponentType::ground, 0);
-					m_componentViewList.emplace_back(ComponentView(id, Vec2(pos.x, pos.y), DEFAULT_ROTATION, "Ground", ComponentType::ground));
+					AddViewComponent(id, "Ground", ComponentType::ground, Vec2(pos.x, pos.y), DEFAULT_ROTATION);
 				}
 
 				// Gestione selezione e collegamento terminali:
@@ -193,7 +193,7 @@ void CircuitLab::UI::HandleEvents()
 							bool isConnect = m_onCreateLink(comp1, term1, comp2, term2);
 
 							if (isConnect)
-								m_linkViewList.emplace_back(GetLinkCoords(comp1, term1, comp2, term2));
+								AddViewLink(comp1, term1, comp2, term2);
 						}
 						// Reset selezione
 						m_selectedComponent.state = SelectionState::none;
@@ -293,6 +293,19 @@ void CircuitLab::UI::DrawImageGuiPanel()
 
 	if (ImGui::Button("RunSimulation"))
 		m_simulationOutput = m_onRunSimulation();
+
+	if (ImGui::Button("New"))
+		m_onNew();
+
+	static char pathBuffer[256] = "circuit.json";
+	ImGui::InputText("File", pathBuffer, sizeof(pathBuffer));
+
+	if (ImGui::Button("Save"))
+		m_onSave(pathBuffer);
+
+	if (ImGui::Button("Load"))
+		m_onLoad(pathBuffer);
+
 
 	// Mostra il risultato della simulazione o un messaggio di errore
 	if (m_simulationOutput.simRes == SimulationResult::solve_error)
@@ -436,6 +449,22 @@ CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &t
 CircuitLab::UI::~UI()
 {
 	ImGui::SFML::Shutdown();
+}
+
+void CircuitLab::UI::AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation)
+{
+	m_componentViewList.emplace_back(ComponentView(compId, position, rotation, name, type));
+}
+
+void CircuitLab::UI::AddViewLink(int comp1, int term1, int comp2, int term2)
+{
+	m_linkViewList.emplace_back(GetLinkCoords(comp1, term1, comp2, term2));
+}
+
+void CircuitLab::UI::Clear()
+{
+	m_componentViewList.clear();
+	m_linkViewList.clear();
 }
 
 // Loop principale della UI:

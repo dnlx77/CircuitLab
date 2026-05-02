@@ -38,6 +38,7 @@ CircuitLab::Application::Application()
 
 	m_ui = std::make_unique<UI>(800, 600, "CircuitLab main window");
 	m_circuit = std::make_unique<Circuit>();
+	m_ioManager = std::make_unique<IOManager>();
 
 	m_ui->SetOnRunSimulation([this]()
 		{
@@ -68,6 +69,49 @@ CircuitLab::Application::Application()
 		{
 			// Rimuove il componente dal circuito e ricostruisce le connessioni rimaste
 			m_circuit->RemoveComponent(compId);
+		});
+
+	m_ioManager->SetOnComponentLoad([this](CircuitLab::ComponentType type, double value) -> int
+		{
+			m_circuit->InvalidateCircuit();
+			return m_circuit->AddComponent(MakeComponent(type, value));
+		});
+
+	m_ioManager->SetOnLoadLink([this](int compId1, int termIndex1, int compId2, int termIndex2) -> bool
+		{
+			m_circuit->InvalidateCircuit();
+			// Propaga il risultato al chiamante: false indica un collegamento non valido o duplicato
+			return m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
+		});
+
+	m_ioManager->SetOnComponentViewLoad([this](int compId, const std::string &name, ComponentType type, Vec2 position, float rotation)
+		{
+			m_ui->AddViewComponent(compId, name, type, position, rotation);
+		});
+
+	m_ioManager->SetOnLinkViewLoad([this](int comp1, int term1, int comp2, int term2)
+		{
+			m_ui->AddViewLink(comp1, term1, comp2, term2);
+		});
+
+	m_ui->SetOnSave([this](const std::string &path)
+		{
+			m_ioManager->SaveToFile(path, *m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList());
+		});
+
+	m_ui->SetOnLoad([this](const std::string &path)
+		{
+			m_ioManager->LoadFromFile(path);
+		});
+
+	m_ui->SetOnNew([this]() 
+		{
+			New();
+		});
+
+	m_ioManager->SetOnNew([this]()
+		{
+			New();
 		});
 }
 
@@ -146,6 +190,12 @@ CircuitLab::SimulationOutput CircuitLab::Application::RunSimulation()
 	output.simRes = SimulationResult::success;
 	output.res = outVec;
 	return output;
+}
+
+void CircuitLab::Application::New()
+{
+	m_circuit->Clear();
+	m_ui->Clear();
 }
 
 // Delega il loop principale alla UI

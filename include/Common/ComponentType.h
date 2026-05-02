@@ -1,4 +1,5 @@
 #pragma once
+#include <nlohmann/json.hpp>
 
 namespace CircuitLab {
 
@@ -11,4 +12,10 @@ namespace CircuitLab {
 		resistor,      // Resistenza ideale
 		voltageSource, // Sorgente di tensione ideale
 	};
+
+	NLOHMANN_JSON_SERIALIZE_ENUM(ComponentType, {
+		{ ComponentType::resistor, "Resistor" },
+		{ ComponentType::voltageSource, "VoltageSource" },
+		{ ComponentType::ground, "Ground" },
+	})
 }

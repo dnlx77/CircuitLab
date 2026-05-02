@@ -5,38 +5,9 @@
 #include "Common/ComponentType.h"
 #include "Common/SimulationOutput.h"
 #include "UI/ComponentView.h"
+#include "Common/UICommon.h"
 
 namespace CircuitLab {
-
-	// Stato della selezione corrente nel canvas:
-	// niente selezionato, un componente selezionato, o un terminale selezionato, o trascinamento.
-	enum class SelectionState {
-		none,
-		componentSelected,
-		terminalSelected,
-		dragging
-	};
-
-	// Tiene traccia del componente (o terminale) attualmente selezionato.
-	// Usato per gestire il doppio click sui terminali per creare un collegamento.
-	struct SelecetedComponent {
-		int compId;          // ID del componente selezionato (-1 se nessuno)
-		int terminalIndex;   // Indice del terminale selezionato (-1 se nessuno o se è il corpo)
-		SelectionState state;
-	};
-
-	// Rappresentazione visiva di un collegamento tra due terminali:
-	// semplicemente i due punti estremi del filo nel canvas,
-	// con i riferimenti ai componenti collegati (usati per rimuovere il filo
-	// quando un componente viene eliminato).
-	struct LinkView {
-		sf::Vector2f pointA;
-		sf::Vector2f pointB;
-		int compIdA;   // ID del componente sul primo estremo del filo
-		int compIdB;   // ID del componente sul secondo estremo del filo
-		int termIndexA; // Indice del terminale del componente A
-		int termIndexB; // Indice del terminale del componente B
-	};
 
 	// Classe principale dell'interfaccia grafica.
 	// Gestisce la finestra SFML, il loop degli eventi, il rendering dei componenti
@@ -57,6 +28,10 @@ namespace CircuitLab {
 		using fnGetCompTerminalId = std::function<std::vector<int>(int compId)>;
 		// Callback per eliminare un componente dal circuito
 		using fnDeleteComponent = std::function<void(int compId)>;
+
+		using fnOnSave = std::function<void(const std::string &filePath)>;
+		using fnOnLoad = std::function<void(const std::string &filePath)>;
+		using fnOnNew = std::function<void()>;
 
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
@@ -90,6 +65,9 @@ namespace CircuitLab {
 		fnCreateLink m_onCreateLink;
 		fnGetCompTerminalId m_onGetCompTerminalId; // Richiede i nodeId dei terminali al circuito
 		fnDeleteComponent m_onDeleteComponent;     // Richiede la rimozione di un componente al circuito
+		fnOnSave m_onSave;
+		fnOnLoad m_onLoad;
+		fnOnNew m_onNew;
 
 		// Determina quale componente o terminale è stato cliccato nella posizione pos.
 		// Aggiorna selComp con il risultato.
@@ -125,6 +103,16 @@ namespace CircuitLab {
 		void SetOnCreateLink(const fnCreateLink &func) { m_onCreateLink = func; }
 		void SetOnGetCompTerminalId(const fnGetCompTerminalId &func) { m_onGetCompTerminalId = func; }
 		void SetOnDeleteComponent(const fnDeleteComponent &func) { m_onDeleteComponent = func; }
+		void SetOnSave(const fnOnSave &func) { m_onSave = func; }
+		void SetOnLoad(const fnOnLoad &func) { m_onLoad = func; }
+		void SetOnNew(const fnOnNew &func) { m_onNew = func; }
+
+		void AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation);
+		void AddViewLink(int comp1, int term1, int comp2, int term2);
+		void Clear();
+
+		const std::vector<ComponentView> &GetComponentsViewList() const { return m_componentViewList; }
+		const std::vector<LinkView> &GetLinkVIewList() const { return m_linkViewList; }
 
 		// Avvia il loop principale: gestione eventi, aggiornamento ImGui, rendering
 		void Run();

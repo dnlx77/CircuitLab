@@ -1,8 +1,9 @@
 #include "Components/Ground.h"
+#include "Common/ComponentType.h"
 
 // Il ground ha un solo terminale, il cui nodeId è fissato a 0
 // per convenzione MNA (nodo di riferimento, non appare nella matrice).
-CircuitLab::Ground::Ground() : Component(1)
+CircuitLab::Ground::Ground() : Component(1, ComponentType::ground)
 {
 	m_terminals[0].SetNodeId(0);
 }
@@ -18,5 +19,7 @@ void CircuitLab::Ground::Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B,
 	(void)voltageSourceMap;
 }
 
-void CircuitLab::Ground::SaveSpecificData() {}
-void CircuitLab::Ground::LoadSpecificData() {}
+void CircuitLab::Ground::SaveSpecificData(nlohmann::json &j) const
+{
+	(void)j;
+}

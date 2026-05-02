@@ -52,5 +52,7 @@ namespace CircuitLab {
 		void SetName(const std::string &name) { m_name = name; }
 		void SetComponentLink(int link) { m_componentLink = link; }
 		void SetComponentType(ComponentType type) { m_type = type; }
+
+		void Save(nlohmann::json &j) const;
 	};
 }

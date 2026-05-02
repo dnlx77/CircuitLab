@@ -1,6 +1,7 @@
 #include "Components/Resistor.h"
+#include "Common/ComponentType.h"
 
-CircuitLab::Resistor::Resistor(double value) : Component(2)
+CircuitLab::Resistor::Resistor(double value) : Component(2, ComponentType::resistor)
 {
 	SetResistance(value);
 }
@@ -46,5 +47,7 @@ void CircuitLab::Resistor::Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B,
 	}
 }
 
-void CircuitLab::Resistor::SaveSpecificData() {}
-void CircuitLab::Resistor::LoadSpecificData() {}
+void CircuitLab::Resistor::SaveSpecificData(nlohmann::json &j) const
+{
+	j["value"] = GetResistance();
+}

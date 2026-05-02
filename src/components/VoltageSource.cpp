@@ -1,6 +1,7 @@
 #include "Components/VoltageSource.h"
+#include "Common/ComponentType.h"
 
-CircuitLab::VoltageSource::VoltageSource(double value) : Component(2), m_voltage(value)
+CircuitLab::VoltageSource::VoltageSource(double value) : Component(2, ComponentType::voltageSource), m_voltage(value)
 {}
 
 // Contributo MNA di una sorgente di tensione tra n1 (+) e n2 (-),
@@ -28,6 +29,9 @@ void CircuitLab::VoltageSource::Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B,
 	B[k] = GetVoltage();
 }
 
+void CircuitLab::VoltageSource::SaveSpecificData(nlohmann::json &j) const
+{
+	j["value"] = GetVoltage();
+}
+
 void CircuitLab::VoltageSource::SetVoltage(double value) { m_voltage = value; }
-void CircuitLab::VoltageSource::SaveSpecificData() {}
-void CircuitLab::VoltageSource::LoadSpecificData() {}

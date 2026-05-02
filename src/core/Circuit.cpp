@@ -126,6 +126,14 @@ void CircuitLab::Circuit::PrintCircuit()
 	}
 }
 
+void CircuitLab::Circuit::Clear()
+{
+	m_nextNodeId = 1;
+	m_isDirty = true;
+	m_components.clear();
+	m_links.clear();
+}
+
 // Restituisce la lista dei nodeId dei terminali del componente con l'ID dato
 std::vector<int> CircuitLab::Circuit::GetNodesIdFromComponentId(int compId) const
 {
