@@ -367,11 +367,16 @@ void CircuitLab::UI::DrawComponents()
 		term.setOrigin({ static_cast<float>(des.terminalRadius), static_cast<float>(des.terminalRadius) });
 		std::vector<int> terminalsId = m_onGetCompTerminalId(comp.GetComponentLink());
 
+		int strPosX = 0, strPosY = 0;
+
 		for (int i = 0; i < des.terminalOffset.size(); i++)
 		{
 			sf::Text termLabel(m_font);
 
 			sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, i);
+
+			strPosX = (rotTerm.x >= 0) ? 1 : -1;
+			strPosY = (rotTerm.y >= 0) ? 1 : -1;
 
 			term.setPosition({ comp.GetPosition().x + rotTerm.x,comp.GetPosition().y + rotTerm.y });
 
@@ -393,7 +398,7 @@ void CircuitLab::UI::DrawComponents()
 			termString += std::to_string(terminalsId[i]);
 			termLabel.setString(termString);
 			termLabel.setCharacterSize(12);
-			termLabel.setPosition({ comp.GetPosition().x + rotTerm.x + TEXT_COMPONENT_OFFSET, comp.GetPosition().y + rotTerm.y });
+			termLabel.setPosition({ comp.GetPosition().x + rotTerm.x + strPosX * TEXT_COMPONENT_OFFSET, comp.GetPosition().y + rotTerm.y + strPosY * TEXT_COMPONENT_OFFSET });
 			m_window.draw(termLabel);
 		}
 
@@ -409,10 +414,32 @@ void CircuitLab::UI::DrawComponents()
 
 		compString += std::to_string(comp.GetComponentLink());
 
+		float rot = comp.GetRotation();
+		float cosAngle = static_cast<float>(std::cos(rot * std::numbers::pi / 180.0));
+		float sinAngle = static_cast<float>(std::sin(rot * std::numbers::pi / 180.0));
+
+		float x = 1.0f;
+		float y = 0.0f;
+		float x1 = x * cosAngle - y * sinAngle;
+		float y1 = x * sinAngle + y * cosAngle;
+
 		sf::Text label(m_font);
 		label.setString(compString);
 		label.setCharacterSize(12);
-		label.setPosition({ comp.GetPosition().x + TEXT_COMPONENT_OFFSET, comp.GetPosition().y });
+
+		sf::FloatRect bound = label.getLocalBounds();
+		float originX, originY;
+	
+		if (x1 < 0)       originX = bound.size.x;
+		else if (x1 == 0) originX = bound.size.x / 2;
+		else              originX = 0;
+
+		if (y1 < 0)       originY = bound.size.y;
+		else if (y1 == 0) originY = bound.size.y / 2;
+		else              originY = 0;
+		
+		label.setOrigin({ originX, originY });
+		label.setPosition({ comp.GetPosition().x + x1 * TEXT_COMPONENT_OFFSET, comp.GetPosition().y + y1 * TEXT_COMPONENT_OFFSET });
 		m_window.draw(label);
 	}
 }
