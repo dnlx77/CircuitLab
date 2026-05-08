@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include "Terminal.h"
 #include "Common/ComponentType.h"
+#include "Common/ComponentValue.h"
 
 namespace CircuitLab {
 
@@ -48,5 +49,8 @@ namespace CircuitLab {
 		// Restituisce il numero di variabili extra introdotte nella matrice MNA.
 		// Di default 0; le sorgenti di tensione lo sovrascrivono con 1.
 		virtual int GetExtraVariables() const { return 0; }
+
+		virtual std::map<ComponentValue, double> GetValues() const = 0;
+		virtual void SetValues(const std::map<ComponentValue, double> &values) = 0;
 	};
 }

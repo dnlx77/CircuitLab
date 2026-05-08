@@ -149,26 +149,29 @@ void CircuitLab::UI::HandleEvents()
 			if (mouseEvent->button == sf::Mouse::Button::Left && m_selectedComponent.state != SelectionState::dragging)
 			{
 				// Aggiunta componenti con tasto modificatore + click
-				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
+				if (pos.x < static_cast<int>(m_width - PANEL_WIDTH))
 				{
-					int id = m_onCircuitChange(ComponentType::resistor, DEFAULT_RESISTANCE);
-					AddViewComponent(id, "Resistor", ComponentType::resistor, Vec2(pos.x, pos.y), DEFAULT_ROTATION);
-				}
-				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
-				{
-					int id = m_onCircuitChange(ComponentType::voltageSource, DEFAULT_VOLTAGE);
-					AddViewComponent(id, "Voltage source", ComponentType::voltageSource, Vec2(pos.x, pos.y), DEFAULT_ROTATION);
-				}
-				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G))
-				{
-					int id = m_onCircuitChange(ComponentType::ground, 0);
-					AddViewComponent(id, "Ground", ComponentType::ground, Vec2(pos.x, pos.y), DEFAULT_ROTATION);
+					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
+					{
+						int id = m_onCircuitChange(ComponentType::resistor, DEFAULT_RESISTANCE);
+						AddViewComponent(id, "Resistor", ComponentType::resistor, Vec2(pos.x, pos.y), DEFAULT_ROTATION);
+					}
+					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
+					{
+						int id = m_onCircuitChange(ComponentType::voltageSource, DEFAULT_VOLTAGE);
+						AddViewComponent(id, "Voltage source", ComponentType::voltageSource, Vec2(pos.x, pos.y), DEFAULT_ROTATION);
+					}
+					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G))
+					{
+						int id = m_onCircuitChange(ComponentType::ground, 0);
+						AddViewComponent(id, "Ground", ComponentType::ground, Vec2(pos.x, pos.y), DEFAULT_ROTATION);
+					}
 				}
 
 				// Gestione selezione e collegamento terminali:
 				// - 1° click su un terminale: lo seleziona
 				// - 2° click su un altro terminale: crea il collegamento
-				if (m_selectedComponent.state != SelectionState::terminalSelected)
+				if (m_selectedComponent.state != SelectionState::terminalSelected && !ImGui::GetIO().WantCaptureMouse)
 				{
 					CheckClick(pos, m_selectedComponent);
 				}
@@ -179,7 +182,7 @@ void CircuitLab::UI::HandleEvents()
 					int term1 = m_selectedComponent.terminalIndex;
 
 					SelecetedComponent temp;
-					CheckClick(pos, temp);
+					if (!ImGui::GetIO().WantCaptureMouse) CheckClick(pos, temp);
 
 					if (temp.state == SelectionState::terminalSelected)
 					{
@@ -204,7 +207,7 @@ void CircuitLab::UI::HandleEvents()
 			}
 			else if (mouseEvent->button == sf::Mouse::Button::Right)
 			{
-				CheckClick(pos, m_selectedComponent);
+				if (!ImGui::GetIO().WantCaptureMouse) CheckClick(pos, m_selectedComponent);
 				if (m_selectedComponent.state != SelectionState::none)
 				{
 					for (auto const &comp:m_componentViewList)
@@ -223,8 +226,8 @@ void CircuitLab::UI::HandleEvents()
 			Vec2 newPos;
 			if (m_selectedComponent.state == SelectionState::dragging)
 			{
-				newPos.x = pos.x - m_compClickOffset.x;
-				newPos.y = pos.y - m_compClickOffset.y;
+				newPos.x = std::clamp(pos.x - m_compClickOffset.x, 0.0f, static_cast<float>(m_width- PANEL_WIDTH));
+				newPos.y = std::clamp(pos.y - m_compClickOffset.y, 0.0f, static_cast<float>(m_heigth));
 
 				for (auto &cw : m_componentViewList)
 					if (cw.GetComponentLink() == m_selectedComponent.compId)
@@ -288,8 +291,10 @@ void CircuitLab::UI::HandleEvents()
 
 void CircuitLab::UI::DrawImageGuiPanel()
 {
+	ImGui::SetNextWindowPos({ static_cast<float>(m_width - PANEL_WIDTH), 0.0f });
+	ImGui::SetNextWindowSize({ PANEL_WIDTH, static_cast<float>(m_heigth) });
 	// --- Pannello ImGui ---
-	ImGui::Begin("CircuitLab - Test");
+	ImGui::Begin("CircuitLab - Test", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
 
 	if (ImGui::Button("RunSimulation"))
 		m_simulationOutput = m_onRunSimulation();
@@ -325,6 +330,46 @@ void CircuitLab::UI::DrawImageGuiPanel()
 			ImGui::Text(res.c_str());
 		}
 		ImGui::Text("]");
+	}
+
+	if (m_selectedComponent.state == SelectionState::componentSelected)
+	{
+		float posX, posY, rot;
+		bool edited = false;
+		std::map<ComponentValue, double> values;
+		for (auto &cw : m_componentViewList)
+			if (cw.GetComponentLink() == m_selectedComponent.compId)
+			{
+				posX = cw.GetPosition().x;
+				posY = cw.GetPosition().y;
+				rot = cw.GetRotation();
+				ImGui::InputFloat("Posizione X: ", &posX); if (ImGui::IsItemDeactivatedAfterEdit()) edited = true;
+				ImGui::InputFloat("Posizione Y: ", &posY); if (ImGui::IsItemDeactivatedAfterEdit()) edited = true;
+				ImGui::InputFloat("Rotazione: ", &rot); if (ImGui::IsItemDeactivatedAfterEdit()) edited = true;
+
+				if (edited)
+				{
+					Vec2 newPos;
+					newPos.x = posX;
+					newPos.y = posY;
+					cw.SetRotation(rot);
+					cw.SetPosition(newPos);
+					UpdateLinksForComponent(m_selectedComponent.compId);
+				}
+			}
+
+		values = m_onGetComponentValues(m_selectedComponent.compId);
+		for (auto &[key, value] : values)
+		{
+			std::string label(ComponentValueToString(key));
+			ImGui::InputDouble(label.c_str(), &value);
+			if (ImGui::IsItemDeactivatedAfterEdit())
+			{
+				values.at(key) = value;
+				m_onSetComponentValues(m_selectedComponent.compId, values);
+			}
+		}
+		
 	}
 
 	ImGui::End();
@@ -457,6 +502,19 @@ void CircuitLab::UI::DrawWires()
 	}
 }
 
+std::string_view CircuitLab::UI::ComponentValueToString(CircuitLab::ComponentValue value)
+{
+	switch (value)
+	{
+	case ComponentValue::resistance:
+		return "Resistance";
+	case ComponentValue::voltage:
+		return "Voltage";
+	default:
+		return "";
+	}
+}
+
 // Inizializza la finestra SFML e ImGui-SFML.
 // Lancia un'eccezione se ImGui o il font non riescono ad inizializzarsi.
 CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &title) :
@@ -470,6 +528,8 @@ CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &t
 
 	if (!m_font.openFromFile("JetBrainsMono-Regular.ttf"))
 		throw std::runtime_error("Impossibile caricare il font");
+
+	m_view = sf::View(sf::FloatRect({ 0.0f, 0.0f }, { static_cast<float>(m_width - PANEL_WIDTH), static_cast<float>(m_heigth) }));
 }
 
 // Shutdown di ImGui-SFML alla distruzione della UI
@@ -492,6 +552,9 @@ void CircuitLab::UI::Clear()
 {
 	m_componentViewList.clear();
 	m_linkViewList.clear();
+	m_selectedComponent.compId = -1;
+	m_selectedComponent.terminalIndex = -1;
+	m_selectedComponent.state = SelectionState::none;
 }
 
 // Loop principale della UI:
@@ -516,9 +579,14 @@ void CircuitLab::UI::Run()
 		// --- Rendering canvas ---
 		m_window.clear(BACKGROUND_COLOR);
 
+		m_view.setViewport(sf::FloatRect({ 0.f, 0.f }, { (static_cast<float>(m_width - PANEL_WIDTH) / m_width), 1.f }));
+		m_window.setView(m_view);
+
 		DrawComponents();
 
 		DrawWires();
+
+		m_window.setView(sf::View(sf::FloatRect({ 0.0f, 0.0f }, { static_cast<float>(m_width), static_cast<float>(m_heigth) })));
 
 		// Render ImGui sopra il canvas
 		ImGui::SFML::Render(m_window);

@@ -36,7 +36,7 @@ CircuitLab::Application::Application()
 	Logger::GetInstance().SetMinLogLevel(LogLevel::Debug);
 	Logger::GetInstance().SetLogToFile("circuitlab.log");
 
-	m_ui = std::make_unique<UI>(800, 600, "CircuitLab main window");
+	m_ui = std::make_unique<UI>(1280, 720, "CircuitLab main window");
 	m_circuit = std::make_unique<Circuit>();
 	m_ioManager = std::make_unique<IOManager>();
 
@@ -121,6 +121,16 @@ CircuitLab::Application::Application()
 	m_ioManager->SetOnNew([this]()
 		{
 			New();
+		});
+
+	m_ui->SetOnGetComponentValues([this](int compId) -> std::map<ComponentValue, double>
+		{
+			return m_circuit->GetComponentValues(compId);
+		});
+
+	m_ui->SetOnSetComponentValues([this](int compId, const std::map<ComponentValue, double> &values) 
+		{
+			m_circuit->SetComponentValues(compId, values);
 		});
 }
 

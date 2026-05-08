@@ -14,9 +14,6 @@ namespace CircuitLab {
 	public:
 		VoltageSource(double value);
 
-		double GetVoltage() const { return m_voltage; }
-		void SetVoltage(double value);
-
 		// Stampa il contributo della sorgente nella matrice MNA.
 		// Aggiunge le righe/colonne per la corrente incognita k,
 		// e imposta b[k] = tensione.
@@ -28,5 +25,7 @@ namespace CircuitLab {
 		int GetExtraVariables() const override { return 1; }
 
 		void SaveSpecificData(nlohmann::json &j) const override;
+		std::map<ComponentValue, double> GetValues() const override;
+		void SetValues(const std::map<ComponentValue, double> &values) override;
 	};
 }

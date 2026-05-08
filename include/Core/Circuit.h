@@ -95,5 +95,8 @@ namespace CircuitLab {
 
 		// Restituisce la lista dei link tra terminali (usata da IOManager per la serializzazione)
 		const std::vector<Link> &GetLinksVector() const { return m_links; }
+
+		std::map<ComponentValue, double> GetComponentValues(int compId) const;
+		void SetComponentValues(int compId, const std::map<ComponentValue, double> &values);
 	};
 }

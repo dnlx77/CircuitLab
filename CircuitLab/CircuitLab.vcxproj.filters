@@ -169,5 +169,8 @@
     <ClInclude Include="..\include\IO\IOManager.h">
       <Filter>Include\IO</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\Common\ComponentValue.h">
+      <Filter>Include\Common</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

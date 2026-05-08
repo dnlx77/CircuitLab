@@ -38,16 +38,29 @@ void CircuitLab::Resistor::Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B,
 	int n1 = (GetTerminals()[0].GetNodeId() != 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
 	int n2 = (GetTerminals()[1].GetNodeId() != 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
 
-	if (n1 >= 0) A(n1, n1) += GetConductance();
-	if (n2 >= 0) A(n2, n2) += GetConductance();
+	if (n1 >= 0) A(n1, n1) += m_conductance;
+	if (n2 >= 0) A(n2, n2) += m_conductance;
 
 	if (n1 >= 0 && n2 >= 0) {
-		A(n1, n2) -= GetConductance();
-		A(n2, n1) -= GetConductance();
+		A(n1, n2) -= m_conductance;
+		A(n2, n1) -= m_conductance;
 	}
 }
 
 void CircuitLab::Resistor::SaveSpecificData(nlohmann::json &j) const
 {
-	j["value"] = GetResistance();
+	j["value"] = m_resistance;
+}
+
+std::map<CircuitLab::ComponentValue, double> CircuitLab::Resistor::GetValues() const
+{
+
+	std::map<ComponentValue, double> map;
+	map[ComponentValue::resistance] = m_resistance;
+	return map;
+}
+
+void CircuitLab::Resistor::SetValues(const std::map<ComponentValue, double> &values)
+{
+	SetResistance(values.at(ComponentValue::resistance));
 }

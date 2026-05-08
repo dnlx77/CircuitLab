@@ -11,15 +11,11 @@ namespace CircuitLab {
 		double m_resistance;   // Resistenza in Ohm
 		double m_conductance;  // Conduttanza in Siemens (G = 1/R), usata per lo Stamp
 
-	public:
-		Resistor(double value);
-
-		double GetResistance() const { return m_resistance; }
-		double GetConductance() const { return m_conductance; }
-
 		// Aggiorna la resistenza e ricalcola la conduttanza.
 		// Gestisce il caso R -> 0 con un valore molto grande (cortocircuito approssimato).
 		void SetResistance(double res);
+	public:
+		Resistor(double value);
 
 		// Stampa il contributo della resistenza nella matrice MNA.
 		// Una resistenza tra i nodi n1 e n2 contribuisce con G a (n1,n1), (n2,n2)
@@ -29,5 +25,7 @@ namespace CircuitLab {
 			const std::map<int, int> &voltageSourceMap) override;
 
 		void SaveSpecificData(nlohmann::json &j) const override;
+		std::map<ComponentValue, double> GetValues() const override;
+		void SetValues(const std::map<ComponentValue, double> &values) override;
 	};
 }

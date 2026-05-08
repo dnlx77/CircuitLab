@@ -180,6 +180,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
   <ItemGroup>
     <ClInclude Include="..\include\App\Application.h" />
     <ClInclude Include="..\include\Common\ComponentType.h" />
+    <ClInclude Include="..\include\Common\ComponentValue.h" />
     <ClInclude Include="..\include\Common\Logger.h" />
     <ClInclude Include="..\include\Common\SimulationOutput.h" />
     <ClInclude Include="..\include\Common\UICommon.h" />

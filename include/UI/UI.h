@@ -6,6 +6,7 @@
 #include "Common/SimulationOutput.h"
 #include "UI/ComponentView.h"
 #include "Common/UICommon.h"
+#include "Common/ComponentValue.h"
 
 namespace CircuitLab {
 
@@ -32,12 +33,15 @@ namespace CircuitLab {
 		using fnOnSave = std::function<void(const std::string &filePath)>; // Callback per salvare il circuito su file
 		using fnOnLoad = std::function<void(const std::string &filePath)>; // Callback per caricare il circuito da file
 		using fnOnNew = std::function<void()>;                             // Callback per resettare il canvas
+		using fnGetComponentValues = std::function<std::map<ComponentValue, double>(int compId)>;
+		using fnSetComponentValues = std::function<void(int compId, const std::map<ComponentValue, double> &values)>;
 
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
 		unsigned int m_heigth;  // Altezza della finestra (pixel)
 		std::string m_title;    // Titolo della finestra
 		sf::Font m_font;        // Font usato per le etichette dei componenti sul canvas
+		sf::View m_view;
 
 		// Costanti di configurazione UI
 		static constexpr int CLICK_TOLLERANCE = 5;         // Tolleranza click sui terminali (pixel)
@@ -46,6 +50,7 @@ namespace CircuitLab {
 		static constexpr float DEFAULT_ROTATION = 0.0f;    // Rotazione di default (gradi)
 		static constexpr int OUTLINE_THICKNESS = 2;        // Spessore outline selezione (pixel)
 		static constexpr int TEXT_COMPONENT_OFFSET = 15;   // Offset orizzontale etichetta rispetto al centro del componente (pixel)
+		static constexpr int PANEL_WIDTH = 300;
 		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30); // Colore sfondo canvas
 
 		SimulationOutput m_simulationOutput;  // Ultimo risultato di simulazione ricevuto
@@ -68,6 +73,8 @@ namespace CircuitLab {
 		fnOnSave m_onSave;
 		fnOnLoad m_onLoad;
 		fnOnNew m_onNew;
+		fnGetComponentValues m_onGetComponentValues;
+		fnSetComponentValues m_onSetComponentValues;
 
 		// Determina quale componente o terminale è stato cliccato nella posizione pos.
 		// Aggiorna selComp con il risultato.
@@ -93,6 +100,8 @@ namespace CircuitLab {
 
 		void DrawWires();
 
+		std::string_view ComponentValueToString(ComponentValue value);
+
 	public:
 		UI(unsigned int width, unsigned int heigth, const std::string &title);
 		~UI();
@@ -106,6 +115,8 @@ namespace CircuitLab {
 		void SetOnSave(const fnOnSave &func) { m_onSave = func; }
 		void SetOnLoad(const fnOnLoad &func) { m_onLoad = func; }
 		void SetOnNew(const fnOnNew &func) { m_onNew = func; }
+		void SetOnGetComponentValues(const fnGetComponentValues &func) { m_onGetComponentValues = func; }
+		void SetOnSetComponentValues(const fnSetComponentValues &func) { m_onSetComponentValues = func; }
 
 		// Aggiunge la vista grafica di un componente al canvas
 		void AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation);

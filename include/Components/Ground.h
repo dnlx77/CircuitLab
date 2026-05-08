@@ -20,5 +20,7 @@ namespace CircuitLab {
 		bool IsGround() const { return true; }
 
 		void SaveSpecificData(nlohmann::json &j) const override;
+		std::map<ComponentValue, double> GetValues() const override;
+		void SetValues(const std::map<ComponentValue, double> &values) override;
 	};
 }

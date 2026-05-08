@@ -161,6 +161,17 @@ int CircuitLab::Circuit::GetCurrentFromIndex(int index) const
 	return -1;
 }
 
+std::map<CircuitLab::ComponentValue, double> CircuitLab::Circuit::GetComponentValues(int compId) const
+{
+	return GetComponentById(compId)->GetValues();
+}
+
+void CircuitLab::Circuit::SetComponentValues(int compId, const std::map<CircuitLab::ComponentValue, double> &values)
+{
+	GetComponentById(compId)->SetValues(values);
+	InvalidateCircuit();
+}
+
 bool CircuitLab::Circuit::CircuitHasOnlyGround() const
 {
 	for (auto const &comp : m_components)
