@@ -43,14 +43,18 @@ namespace CircuitLab {
 		sf::Font m_font;        // Font usato per le etichette dei componenti sul canvas
 		sf::View m_view;
 
+		unsigned int m_linkViewIdCount;
+		unsigned int m_nodeViewCount;
+
 		// Costanti di configurazione UI
-		static constexpr int CLICK_TOLLERANCE = 5;         // Tolleranza click sui terminali (pixel)
+		static constexpr int CLICK_TOLLERANCE = 7;         // Tolleranza click sui terminali (pixel)
 		static constexpr double DEFAULT_RESISTANCE = 1.0;  // Resistenza di default (Ohm)
 		static constexpr double DEFAULT_VOLTAGE = 5.0;     // Tensione di default (Volt)
 		static constexpr float DEFAULT_ROTATION = 0.0f;    // Rotazione di default (gradi)
 		static constexpr int OUTLINE_THICKNESS = 2;        // Spessore outline selezione (pixel)
 		static constexpr int TEXT_COMPONENT_OFFSET = 15;   // Offset orizzontale etichetta rispetto al centro del componente (pixel)
 		static constexpr int PANEL_WIDTH = 300;
+		static constexpr int NODE_RADIUS = 4;
 		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30); // Colore sfondo canvas
 
 		SimulationOutput m_simulationOutput;  // Ultimo risultato di simulazione ricevuto
@@ -59,6 +63,7 @@ namespace CircuitLab {
 
 		std::vector<ComponentView> m_componentViewList; // Lista delle viste grafiche dei componenti
 		std::vector<LinkView> m_linkViewList;           // Lista dei collegamenti (fili) da disegnare
+		std::vector<NodeView> m_nodeViewList;
 
 		sf::Vector2f m_compClickOffset;
 
@@ -82,7 +87,7 @@ namespace CircuitLab {
 
 		// Calcola le coordinate pixel dei due estremi di un collegamento,
 		// tenendo conto delle posizioni e degli offset dei terminali.
-		LinkView GetLinkCoords(int comp1, int term1, int comp2, int term2);
+		LinkView GetLinkCoords(int comp1, int term1, int comp2, std::optional<int> term2);
 
 		// Calcola la posizione ruotata di un terminale nel canvas,
 		// tenendo conto della rotazione del componente.
@@ -100,7 +105,13 @@ namespace CircuitLab {
 
 		void DrawWires();
 
+		void DrawNodes();
+
 		std::string_view ComponentValueToString(ComponentValue value);
+
+		float PointToStraightDistance(const sf::Vector2f &A, const sf::Vector2f &B, const sf::Vector2f &P);
+
+		void ConnectTerminalToLink(int compId, int termIndex, int linkViewId, sf::Vector2f clickPos);
 
 	public:
 		UI(unsigned int width, unsigned int heigth, const std::string &title);
