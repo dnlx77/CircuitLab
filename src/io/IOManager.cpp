@@ -3,7 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 
-void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circuit &circ, const std::vector<ComponentView> &compsView, const std::vector<LinkView> &linksView)
+void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circuit &circ, const std::vector<ComponentView> &compsView, const std::vector<LinkView> &linksView, const std::vector<NodeView> &nodesView)
 {
 	nlohmann::json j;
 	j["components"] = nlohmann::json::array();
@@ -46,11 +46,29 @@ void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circui
 	for (auto const &lw : linksView)
 	{
 		nlohmann::json linkViewJson;
+		linkViewJson["id"] = lw.id;
 		linkViewJson["compIdA"] = lw.compIdA;
-		linkViewJson["compIdB"] = lw.compIdB;
+		if (lw.compIdB.has_value()) linkViewJson["compIdB"] = lw.compIdB;
 		linkViewJson["termIndexA"] = lw.termIndexA;
-		linkViewJson["termIndexB"] = lw.termIndexB;
+		if (lw.termIndexB.has_value()) linkViewJson["termIndexB"] = lw.termIndexB;
+		if (lw.nodeViewId.has_value()) linkViewJson["nodeViewId"] = lw.nodeViewId;
 		j["linksView"].push_back(linkViewJson);
+	}
+
+	j["nodeView"] = nlohmann::json::array();
+
+	for (auto const &nv : nodesView)
+	{
+		nlohmann::json nodeViewJson;
+		nodeViewJson["id"] = nv.id;
+		nodeViewJson["nodeId"] = nv.nodeId;
+		nodeViewJson["position"] = { nv.position.x, nv.position.y };
+		nodeViewJson["linksViewId"] = nlohmann::json::array();
+
+		for (const auto &lvi : nv.linkViewIds)
+			nodeViewJson["linksViewId"].push_back(lvi);
+
+		j["nodeView"].push_back(nodeViewJson);
 	}
 
 	std::ofstream o(filePath);
@@ -83,6 +101,8 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 	// nuovi ID progressivi. Questa mappa traduce i riferimenti nei link e nelle viste.
 	std::map<int, int> m_loadVsRealNodeMap;
 
+	std::map<int, int> m_loadVsRealNodeViewMap;
+
 	// Prima passata: crea i componenti e registra la corrispondenza tra ID salvato e ID nuovo
 	for (auto const compJson : j["components"])
 	{
@@ -101,7 +121,21 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 	for (auto const linkJson : j["links"])
 		m_onLinkLoad(m_loadVsRealNodeMap.at(linkJson["compId1"]), linkJson["termIndex1"], m_loadVsRealNodeMap.at(linkJson["compId2"]), linkJson["termIndex2"]);
 
+	for (auto const nodeViewJson : j["nodeView"])
+	{
+		sf::Vector2f pos = { nodeViewJson["position"][0], nodeViewJson["position"][1] };
+		std::vector<int> lvIds;
+		for (auto const linkViewIdJson : nodeViewJson["linksViewId"])
+			lvIds.emplace_back(linkViewIdJson);
+		m_loadVsRealNodeViewMap[nodeViewJson["id"]] = m_onNodeViewLoad(nodeViewJson["nodeId"], pos, lvIds);
+	}
+
 	// Quarta passata: ricrea le viste grafiche dei fili
 	for (auto const linkViewJson : j["linksView"])
-		m_onLinkViewLoad(m_loadVsRealNodeMap.at(linkViewJson["compIdA"]), linkViewJson["termIndexA"], m_loadVsRealNodeMap.at(linkViewJson["compIdB"]), linkViewJson["termIndexB"]);
+	{
+		std::optional<int> compB = (linkViewJson.contains("compIdB")) ? m_loadVsRealNodeMap.at(linkViewJson["compIdB"].get<int>()) : std::optional<int>{};
+		std::optional<int> termIndB = (linkViewJson.contains("termIndexB")) ? linkViewJson["termIndexB"].get<int>() : std::optional<int>{};
+		std::optional<int> nodeViewId = (linkViewJson.contains("nodeViewId")) ? m_loadVsRealNodeViewMap.at(linkViewJson["nodeViewId"].get<int>()) : std::optional<int>{};
+		m_onLinkViewLoad(m_loadVsRealNodeMap.at(linkViewJson["compIdA"]), compB, linkViewJson["termIndexA"], termIndB, nodeViewId);
+	}
 }

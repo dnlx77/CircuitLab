@@ -20,7 +20,9 @@ namespace CircuitLab {
 	using fnComponentViewLoad = std::function<void(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation)>;
 
 	// Aggiunge la vista grafica di un collegamento (filo) alla UI
-	using fnLinkViewLoad = std::function<void(int compIdA, int compIdB, int terminalIndexA, int terminalIndexB)>;
+	using fnLinkViewLoad = std::function<void(int compIdA, std::optional<int> compIdB, int terminalIndexA, std::optional<int> terminalIndexB, std::optional<int> NodeViewId)>;
+
+	using fnNodeViewLoad = std::function<int(int nodeId, sf::Vector2f position, std::vector<int> linkViewIds)>;
 
 	// Resetta lo stato del circuito e della UI prima di caricare un nuovo file
 	using fnOnNew = std::function<void()>;
@@ -34,12 +36,13 @@ namespace CircuitLab {
 		fnLinkLoad m_onLinkLoad;
 		fnComponentViewLoad m_onComponentViewLoad;
 		fnLinkViewLoad m_onLinkViewLoad;
+		fnNodeViewLoad m_onNodeViewLoad;
 		fnOnNew m_onNew;
 
 	public:
 		// Serializza l'intero stato del circuito (componenti, link, viste) in un file JSON.
 		// Il file viene creato o sovrascritto al percorso indicato da filePath.
-		void SaveToFile(const std::string &filePath, const Circuit &circ, const std::vector<ComponentView> &compsView, const std::vector<LinkView> &linksView);
+		void SaveToFile(const std::string &filePath, const Circuit &circ, const std::vector<ComponentView> &compsView, const std::vector<LinkView> &linksView, const std::vector<NodeView> &nodesView);
 
 		// Deserializza un file JSON e ricostruisce il circuito e la UI tramite le callback.
 		// Gestisce il remapping degli ID: gli ID salvati nel file non corrispondono
@@ -52,6 +55,7 @@ namespace CircuitLab {
 		void SetOnLoadLink(const fnLinkLoad &fn) { m_onLinkLoad = fn; }
 		void SetOnComponentViewLoad(const fnComponentViewLoad &fn) { m_onComponentViewLoad = fn; }
 		void SetOnLinkViewLoad(const fnLinkViewLoad &fn) { m_onLinkViewLoad = fn; }
+		void SetOnNodeViewLoad(const fnNodeViewLoad &fn) { m_onNodeViewLoad = fn; }
 		void SetOnNew(const fnOnNew &func) { m_onNew = func; }
 	};
 }

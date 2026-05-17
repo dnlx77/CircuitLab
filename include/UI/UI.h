@@ -135,6 +135,10 @@ namespace CircuitLab {
 		// Aggiunge la vista grafica di un filo al canvas
 		void AddViewLink(int comp1, int term1, int comp2, int term2);
 
+		void AddViewLinkToNode(int comp1, int term1, int nodeViewId);
+
+		int AddNodeView(int nodeId, sf::Vector2f position, std::vector<int> linkViewIds);
+
 		// Rimuove tutte le viste grafiche (componenti e fili) dal canvas
 		void Clear();
 
@@ -143,6 +147,8 @@ namespace CircuitLab {
 
 		// Restituisce la lista delle viste grafiche dei fili (usata da IOManager per la serializzazione)
 		const std::vector<LinkView> &GetLinkVIewList() const { return m_linkViewList; }
+
+		const std::vector<NodeView> &GetNodeViewList() const { return m_nodeViewList; }
 
 		// Avvia il loop principale: gestione eventi, aggiornamento ImGui, rendering
 		void Run();
