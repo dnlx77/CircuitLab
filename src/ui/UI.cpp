@@ -733,6 +733,14 @@ void CircuitLab::UI::ConnectTerminalToLink(int compId, int termIndex, int linkVi
 
 				m_onCreateLink(idCompA, termA, compId, termIndex);
 
+				for (auto &nv : m_nodeViewList)
+				{
+					if (nv.id == lv.nodeViewId)
+					{
+						nv.linkViewIds.emplace_back(newLinkView.id);
+					}
+				}
+
 				return;
 			}
 		}
