@@ -804,9 +804,11 @@ void CircuitLab::UI::ConnectTerminalToLink(int compId, int termIndex, int linkVi
 
 		for (auto &nv : m_nodeViewList)
 		{
-			if (nv.id == m_nodeViewCount)
+			if (nv.id == static_cast<int>(m_nodeViewCount))
 			{
 				nv.nodeId = m_onGetCompTerminalId(compId)[termIndex];
+				nv.linkViewIds.emplace_back(newLinkView1.id);
+				nv.linkViewIds.emplace_back(newLinkView2.id);
 			}
 		}
 	}
