@@ -113,6 +113,8 @@ namespace CircuitLab {
 
 		void ConnectTerminalToLink(int compId, int termIndex, int linkViewId, sf::Vector2f clickPos);
 
+		int RemoveLinkFromNodeView(int nodeViewId, int linkViewId);
+
 	public:
 		UI(unsigned int width, unsigned int heigth, const std::string &title);
 		~UI();

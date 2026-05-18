@@ -383,6 +383,22 @@ void CircuitLab::UI::HandleEvents()
 					m_componentViewList.end()
 				);
 
+				for (const auto &lv : m_linkViewList)
+					if (lv.nodeViewId.has_value() && lv.compIdA == id)
+					{
+						int nvId = lv.nodeViewId.value();
+						if (RemoveLinkFromNodeView(nvId, lv.id) == 0)
+						{
+							m_nodeViewList.erase(
+								std::remove_if(m_nodeViewList.begin(), m_nodeViewList.end(),
+									[nvId](const NodeView &nv) {
+										return nv.id == nvId;
+									}),
+								m_nodeViewList.end()
+							);
+						}
+					}
+
 				// Rimuove i fili collegati al componente eliminato
 				m_linkViewList.erase(
 					std::remove_if(m_linkViewList.begin(), m_linkViewList.end(),
@@ -820,6 +836,25 @@ void CircuitLab::UI::ConnectTerminalToLink(int compId, int termIndex, int linkVi
 			}
 		}
 	}
+}
+
+int CircuitLab::UI::RemoveLinkFromNodeView(int nodeViewId, int linkViewId)
+{
+	for (auto &nv : m_nodeViewList)
+		if (nv.id == nodeViewId)
+		{
+			nv.linkViewIds.erase(
+				std::remove_if(nv.linkViewIds.begin(), nv.linkViewIds.end(),
+					[linkViewId](const int id) {
+						return id == linkViewId;
+					}),
+				nv.linkViewIds.end()
+			);
+		
+			return static_cast<int>(nv.linkViewIds.size());
+		}
+
+	return -1;
 }
 
 // Inizializza la finestra SFML e ImGui-SFML.
