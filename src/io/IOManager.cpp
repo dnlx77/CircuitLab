@@ -103,6 +103,8 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 
 	std::map<int, int> m_loadVsRealNodeViewMap;
 
+	std::map<int, int> m_loadVsRealLinkViewMap;
+
 	// Prima passata: crea i componenti e registra la corrispondenza tra ID salvato e ID nuovo
 	for (auto const compJson : j["components"])
 	{
@@ -127,7 +129,7 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 		std::vector<int> lvIds;
 		for (auto const linkViewIdJson : nodeViewJson["linksViewId"])
 			lvIds.emplace_back(linkViewIdJson);
-		m_loadVsRealNodeViewMap[nodeViewJson["id"]] = m_onNodeViewLoad(nodeViewJson["nodeId"], pos, lvIds);
+		m_loadVsRealNodeViewMap[nodeViewJson["id"]] = m_onNodeViewLoad(nodeViewJson["nodeId"], pos);
 	}
 
 	// Quarta passata: ricrea le viste grafiche dei fili
@@ -136,6 +138,15 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 		std::optional<int> compB = (linkViewJson.contains("compIdB")) ? m_loadVsRealNodeMap.at(linkViewJson["compIdB"].get<int>()) : std::optional<int>{};
 		std::optional<int> termIndB = (linkViewJson.contains("termIndexB")) ? linkViewJson["termIndexB"].get<int>() : std::optional<int>{};
 		std::optional<int> nodeViewId = (linkViewJson.contains("nodeViewId")) ? m_loadVsRealNodeViewMap.at(linkViewJson["nodeViewId"].get<int>()) : std::optional<int>{};
-		m_onLinkViewLoad(m_loadVsRealNodeMap.at(linkViewJson["compIdA"]), compB, linkViewJson["termIndexA"], termIndB, nodeViewId);
+		m_loadVsRealLinkViewMap[linkViewJson["id"]] = m_onLinkViewLoad(m_loadVsRealNodeMap.at(linkViewJson["compIdA"]), compB, linkViewJson["termIndexA"], termIndB, nodeViewId);
+	}
+
+	for (auto const nodeViewJson : j["nodeView"])
+	{
+		std::vector<int> remappedIds;
+		for (auto const linkViewIdJson : nodeViewJson["linksViewId"])
+			remappedIds.emplace_back(m_loadVsRealLinkViewMap.at(linkViewIdJson.get<int>()));
+
+		m_onUpdateNodeViewLinkIds(m_loadVsRealNodeViewMap.at(nodeViewJson["id"].get<int>()), remappedIds);
 	}
 }

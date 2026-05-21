@@ -97,23 +97,25 @@ CircuitLab::Application::Application()
 		});
 
 	// Aggiunge la vista grafica di un filo alla UI durante il caricamento
-	m_ioManager->SetOnLinkViewLoad([this](int comp1, std::optional<int> comp2, int term1, std::optional<int> term2, std::optional<int> NodeViewId)
+	m_ioManager->SetOnLinkViewLoad([this](int comp1, std::optional<int> comp2, int term1, std::optional<int> term2, std::optional<int> NodeViewId) -> int
 		{
 			if (comp2.has_value() && term2.has_value())
-			{
-				m_ui->AddViewLink(comp1, term1, comp2.value(), term2.value());
-				return;
-			}
+				return m_ui->AddViewLink(comp1, term1, comp2.value(), term2.value());
+
 			if (NodeViewId.has_value())
-			{
-				m_ui->AddViewLinkToNode(comp1, term1, NodeViewId.value());
-				return;
-			}
+				return m_ui->AddViewLinkToNode(comp1, term1, NodeViewId.value());
+
+			return -1;
 		});
 
-	m_ioManager->SetOnNodeViewLoad([this](int nodeId, sf::Vector2f position, std::vector<int> linkViewIds) -> int 
+	m_ioManager->SetOnNodeViewLoad([this](int nodeId, sf::Vector2f position) -> int 
 		{
-			return m_ui->AddNodeView(nodeId, position, linkViewIds);
+			return m_ui->AddNodeView(nodeId, position);
+		});
+
+	m_ioManager->SetOnUpdateNodeViewLinkIds([this](int nodeViewId, std::vector<int> linkViewIds)
+		{
+			m_ui->UpdateNodeViewLinkIds(nodeViewId, linkViewIds);
 		});
 
 	m_ui->SetOnSave([this](const std::string &path)

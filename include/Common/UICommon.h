@@ -31,8 +31,10 @@ namespace CircuitLab {
 		none,
 		componentSelected,
 		terminalSelected,
-		dragging,
-		linkSelected
+		draggingComponent,
+		draggingNodeView,
+		linkSelected,
+		nodeViewSelected
 	};
 
 	// Tiene traccia del componente (o terminale) attualmente selezionato.

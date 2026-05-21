@@ -97,6 +97,8 @@ namespace CircuitLab {
 		// dopo che quest'ultimo è stato ruotato o spostato.
 		void UpdateLinksForComponent(int compId);
 
+		void UpdateLinksForNodeView(int nodeViewId);
+
 		void HandleEvents();
 
 		void DrawImageGuiPanel();
@@ -135,11 +137,13 @@ namespace CircuitLab {
 		void AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation);
 
 		// Aggiunge la vista grafica di un filo al canvas
-		void AddViewLink(int comp1, int term1, int comp2, int term2);
+		int AddViewLink(int comp1, int term1, int comp2, int term2);
 
-		void AddViewLinkToNode(int comp1, int term1, int nodeViewId);
+		int AddViewLinkToNode(int comp1, int term1, int nodeViewId);
 
-		int AddNodeView(int nodeId, sf::Vector2f position, std::vector<int> linkViewIds);
+		int AddNodeView(int nodeId, sf::Vector2f position);
+
+		void UpdateNodeViewLinkIds(int nodeViewId, std::vector<int> linkViewIds);
 
 		// Rimuove tutte le viste grafiche (componenti e fili) dal canvas
 		void Clear();
