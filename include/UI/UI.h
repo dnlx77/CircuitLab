@@ -55,6 +55,7 @@ namespace CircuitLab {
 		static constexpr int TEXT_COMPONENT_OFFSET = 15;   // Offset orizzontale etichetta rispetto al centro del componente (pixel)
 		static constexpr int PANEL_WIDTH = 300;
 		static constexpr int NODE_RADIUS = 4;
+		static constexpr float EPSILON = 1.5f;
 		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30); // Colore sfondo canvas
 
 		SimulationOutput m_simulationOutput;  // Ultimo risultato di simulazione ricevuto

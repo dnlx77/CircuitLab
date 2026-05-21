@@ -68,10 +68,10 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 			float dist = PointToStraightDistance(shrunkA, shrunkB, posF);
 
 			if (dist <= CLICK_TOLLERANCE &&
-				posF.x >= std::min(shrunkA.x, shrunkB.x) &&
-				posF.x <= std::max(shrunkA.x, shrunkB.x) &&
-				posF.y >= std::min(shrunkA.y, shrunkB.y) &&
-				posF.y <= std::max(shrunkA.y, shrunkB.y))
+				posF.x >= std::min(shrunkA.x, shrunkB.x) - EPSILON &&
+				posF.x <= std::max(shrunkA.x, shrunkB.x) + EPSILON &&
+				posF.y >= std::min(shrunkA.y, shrunkB.y) - EPSILON &&
+				posF.y <= std::max(shrunkA.y, shrunkB.y) + EPSILON)
 			{
 				selComp.compId = -1;
 				selComp.terminalIndex = -1;
