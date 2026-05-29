@@ -23,4 +23,10 @@ namespace CircuitLab {
 		SimulationResult simRes;                         // Esito della simulazione
 		std::vector<std::pair<std::string, double>> res; // Variabili calcolate: { nome, valore }
 	};
+
+	enum class SimulationStatus {
+		running,
+		stopped,
+		paused
+	};
 }

@@ -31,6 +31,7 @@ namespace CircuitLab {
 		virtual ~Component() = default;
 
 		int GetId() const { return m_id; }
+		static void Reset() { s_nextId = 1; }
 		const std::vector<Terminal> &GetTerminals() const { return m_terminals; }
 		Terminal &GetTerminal(int index) { return m_terminals[index]; }
 		std::vector<int> GetTerminalId() const;

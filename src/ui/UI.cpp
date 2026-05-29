@@ -516,8 +516,12 @@ void CircuitLab::UI::DrawImageGuiPanel()
 	// --- Pannello ImGui ---
 	ImGui::Begin("CircuitLab - Test", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
 
-	if (ImGui::Button("RunSimulation"))
-		m_simulationOutput = m_onRunSimulation();
+	if (ImGui::Button("Start Simulation"))
+		m_onSetSimulationStatus(SimulationStatus::running);
+	if (ImGui::Button("Pause Simulation"))
+		m_onSetSimulationStatus(SimulationStatus::paused);
+	if (ImGui::Button("Stop Simulation"))
+		m_onSetSimulationStatus(SimulationStatus::stopped);
 
 	if (ImGui::Button("New"))
 		m_onNew();
@@ -1039,41 +1043,28 @@ void CircuitLab::UI::Clear()
 	m_nodeViewCount = 0;
 }
 
-// Loop principale della UI:
-//   1. Gestione eventi SFML (chiusura, click mouse, tasto Delete)
-//   2. Aggiornamento ImGui
-//   3. Pannello ImGui con pulsante di simulazione e risultati
-//   4. Rendering canvas: componenti, terminali, etichette, fili
-//   5. Render ImGui sopra il canvas
-void CircuitLab::UI::Run()
+void CircuitLab::UI::Render()
 {
-	sf::Clock deltaClock;
+	// --- Aggiornamento ImGui ---
+	ImGui::SFML::Update(m_window, m_deltaClock.restart());
 
-	while (m_window.isOpen())
-	{
-		HandleEvents();
+	DrawImageGuiPanel();
 
-		// --- Aggiornamento ImGui ---
-		ImGui::SFML::Update(m_window, deltaClock.restart());
+	// --- Rendering canvas ---
+	m_window.clear(BACKGROUND_COLOR);
 
-		DrawImageGuiPanel();
+	m_view.setViewport(sf::FloatRect({ 0.f, 0.f }, { (static_cast<float>(m_width - PANEL_WIDTH) / m_width), 1.f }));
+	m_window.setView(m_view);
 
-		// --- Rendering canvas ---
-		m_window.clear(BACKGROUND_COLOR);
+	DrawComponents();
 
-		m_view.setViewport(sf::FloatRect({ 0.f, 0.f }, { (static_cast<float>(m_width - PANEL_WIDTH) / m_width), 1.f }));
-		m_window.setView(m_view);
+	DrawNodes();
 
-		DrawComponents();
+	DrawWires();
 
-		DrawNodes();
+	m_window.setView(sf::View(sf::FloatRect({ 0.0f, 0.0f }, { static_cast<float>(m_width), static_cast<float>(m_heigth) })));
 
-		DrawWires();
-
-		m_window.setView(sf::View(sf::FloatRect({ 0.0f, 0.0f }, { static_cast<float>(m_width), static_cast<float>(m_heigth) })));
-
-		// Render ImGui sopra il canvas
-		ImGui::SFML::Render(m_window);
-		m_window.display();
-	}
+	// Render ImGui sopra il canvas
+	ImGui::SFML::Render(m_window);
+	m_window.display();
 }

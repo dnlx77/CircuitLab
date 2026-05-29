@@ -19,6 +19,8 @@ namespace CircuitLab {
 	// Usa lazy evaluation: la matrice viene ricalcolata solo se il circuito
 	// è stato modificato (flag m_isDirty).
 	class Circuit {
+	public:
+		using fnOnFactorize = std::function<void(const Eigen::MatrixXd &matrix)>;
 	private:
 		std::vector<std::unique_ptr<Component>> m_components; // Componenti del circuito
 		Eigen::MatrixXd m_circuitMatrix;  // Matrice A del sistema MNA
@@ -28,6 +30,8 @@ namespace CircuitLab {
 		std::vector<Link> m_links;             // Lista dei collegamenti tra terminali
 		int m_nextNodeId;  // Prossimo ID disponibile per i nodi
 		bool m_isDirty;    // true se il circuito è stato modificato e va ricalcolato
+
+		fnOnFactorize m_onFactorize;
 
 		// Costruisce le mappe nodi/sorgenti e restituisce la dimensione della matrice MNA
 		int ComputeNodes();
@@ -98,5 +102,7 @@ namespace CircuitLab {
 
 		std::map<ComponentValue, double> GetComponentValues(int compId) const;
 		void SetComponentValues(int compId, const std::map<ComponentValue, double> &values);
+
+		void SetOnFactorize(const fnOnFactorize &func) { m_onFactorize = func; }
 	};
 }

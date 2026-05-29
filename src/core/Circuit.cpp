@@ -61,6 +61,8 @@ void CircuitLab::Circuit::ComputeCircuit()
 	for (const auto &comp : m_components)
 		comp->Stamp(m_circuitMatrix, m_circuitVector, m_nodesMap, m_voltageSourceMap);
 
+	if(m_onFactorize)
+		m_onFactorize(m_circuitMatrix);
 	m_isDirty = false;
 
 	// LOG
@@ -132,6 +134,7 @@ void CircuitLab::Circuit::Clear()
 	m_isDirty = true;
 	m_components.clear();
 	m_links.clear();
+	Component::Reset();
 }
 
 // Restituisce la lista dei nodeId dei terminali del componente con l'ID dato

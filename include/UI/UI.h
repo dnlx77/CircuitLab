@@ -35,6 +35,7 @@ namespace CircuitLab {
 		using fnOnNew = std::function<void()>;                             // Callback per resettare il canvas
 		using fnGetComponentValues = std::function<std::map<ComponentValue, double>(int compId)>;
 		using fnSetComponentValues = std::function<void(int compId, const std::map<ComponentValue, double> &values)>;
+		using fnSetSimulationStatus = std::function<void(const SimulationStatus status)>;
 
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
@@ -69,6 +70,7 @@ namespace CircuitLab {
 		sf::Vector2f m_compClickOffset;
 
 		sf::RenderWindow m_window; // Finestra SFML
+		sf::Clock m_deltaClock;
 
 		// Callback impostati da Application
 		std::function<SimulationOutput()> m_onRunSimulation;
@@ -81,6 +83,7 @@ namespace CircuitLab {
 		fnOnNew m_onNew;
 		fnGetComponentValues m_onGetComponentValues;
 		fnSetComponentValues m_onSetComponentValues;
+		fnSetSimulationStatus m_onSetSimulationStatus;
 
 		// Determina quale componente o terminale è stato cliccato nella posizione pos.
 		// Aggiorna selComp con il risultato.
@@ -99,8 +102,6 @@ namespace CircuitLab {
 		void UpdateLinksForComponent(int compId);
 
 		void UpdateLinksForNodeView(int nodeViewId);
-
-		void HandleEvents();
 
 		void DrawImageGuiPanel();
 
@@ -133,6 +134,7 @@ namespace CircuitLab {
 		void SetOnNew(const fnOnNew &func) { m_onNew = func; }
 		void SetOnGetComponentValues(const fnGetComponentValues &func) { m_onGetComponentValues = func; }
 		void SetOnSetComponentValues(const fnSetComponentValues &func) { m_onSetComponentValues = func; }
+		void SetOnSetSimulationStatus(const fnSetSimulationStatus &func) { m_onSetSimulationStatus = func; }
 
 		// Aggiunge la vista grafica di un componente al canvas
 		void AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation);
@@ -149,6 +151,10 @@ namespace CircuitLab {
 		// Rimuove tutte le viste grafiche (componenti e fili) dal canvas
 		void Clear();
 
+		void HandleEvents();
+
+		void Render();
+
 		// Restituisce la lista delle viste grafiche dei componenti (usata da IOManager per la serializzazione)
 		const std::vector<ComponentView> &GetComponentsViewList() const { return m_componentViewList; }
 
@@ -157,7 +163,8 @@ namespace CircuitLab {
 
 		const std::vector<NodeView> &GetNodeViewList() const { return m_nodeViewList; }
 
-		// Avvia il loop principale: gestione eventi, aggiornamento ImGui, rendering
-		void Run();
+		bool IsWindowOpen() const { return m_window.isOpen(); }
+
+		void UpdateSimulation(SimulationOutput output) { m_simulationOutput = output; }
 	};
 }

@@ -2,6 +2,7 @@
 #include <memory>
 #include <Eigen/Dense>
 #include "Core/Circuit.h"
+#include "Core/Solver.h"
 #include "Common/ComponentType.h"
 #include "Common/SimulationOutput.h"
 #include "IO/IOManager.h"
@@ -19,12 +20,17 @@ namespace CircuitLab {
 	private:
 		std::unique_ptr<Circuit> m_circuit;         // Il circuito elettrico
 		std::unique_ptr<UI> m_ui;                   // L'interfaccia grafica
+		std::unique_ptr<Solver> m_solver;
 		Eigen::VectorXd m_simulationResult;         // Ultimo vettore soluzione MNA
 		std::unique_ptr<IOManager> m_ioManager;		// Gestisce salvataggio e caricamento su file JSON
+		sf::Clock m_deltaClock;
+		SimulationStatus m_simStatus;
 
 		// Factory method: crea il componente corretto in base al tipo richiesto dalla UI.
 		// Restituisce nullptr per tipi non riconosciuti.
 		std::unique_ptr<Component> MakeComponent(ComponentType type, double value);
+
+		static constexpr float SIMULATION_STEP = (1.0f / 60.0f);
 
 	public:
 		Application();
@@ -33,9 +39,11 @@ namespace CircuitLab {
 		// Esegue la simulazione MNA sull'attuale stato del circuito.
 		// Chiamato dalla UI tramite callback m_onRunSimulation.
 		// Restituisce un SimulationOutput con il risultato e i valori calcolati.
-		SimulationOutput RunSimulation();
+		SimulationOutput Simulate();
 
 		const Eigen::VectorXd &GetResult() const { return m_simulationResult; }
+
+		void SetSimulationStatus(SimulationStatus status) { m_simStatus = status; }
 
 		// Resetta il circuito e la UI allo stato iniziale (canvas vuoto)
 		void New();

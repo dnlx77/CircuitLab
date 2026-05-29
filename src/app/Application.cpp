@@ -39,10 +39,13 @@ CircuitLab::Application::Application()
 	m_ui = std::make_unique<UI>(1280, 720, "CircuitLab main window");
 	m_circuit = std::make_unique<Circuit>();
 	m_ioManager = std::make_unique<IOManager>();
+	m_solver = std::make_unique<Solver>();
 
-	m_ui->SetOnRunSimulation([this]()
+	m_simStatus = SimulationStatus::stopped;
+
+	m_ui->SetOnSetSimulationStatus([this](SimulationStatus status)
 		{
-			return RunSimulation();
+			return SetSimulationStatus(status);
 		});
 
 	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type, double value) -> int
@@ -148,6 +151,11 @@ CircuitLab::Application::Application()
 		{
 			m_circuit->SetComponentValues(compId, values);
 		});
+
+	m_circuit->SetOnFactorize([this](const Eigen::MatrixXd &matrix) 
+		{
+			m_solver->Factorize(matrix);
+		});
 }
 
 CircuitLab::Application::~Application() = default;
@@ -156,7 +164,7 @@ CircuitLab::Application::~Application() = default;
 // Controlla prima i casi degeneri (circuito nullo o vuoto),
 // poi risolve il sistema A*x = b e costruisce il vettore di output
 // con i nomi delle variabili (tensioni Vn e correnti nei rami).
-CircuitLab::SimulationOutput CircuitLab::Application::RunSimulation()
+CircuitLab::SimulationOutput CircuitLab::Application::Simulate()
 {
 	// LOG
 	m_circuit->PrintCircuit();
@@ -184,7 +192,7 @@ CircuitLab::SimulationOutput CircuitLab::Application::RunSimulation()
 	}
 
 	// Risolve il sistema MNA; restituisce nullopt se la matrice è singolare
-	auto result = Solver::SolveCircuit(m_circuit->GetCircuitMatrix(), m_circuit->GetCircuitVector());
+	auto result = m_solver->SolveCircuit(m_circuit->GetCircuitVector());
 
 	if (!result.has_value())
 	{
@@ -236,5 +244,17 @@ void CircuitLab::Application::New()
 // Delega il loop principale alla UI
 void CircuitLab::Application::Run()
 {
-	m_ui->Run();
+	while (m_ui->IsWindowOpen())
+	{
+		sf::Time elapsed = m_deltaClock.getElapsedTime();
+		if (elapsed >= sf::seconds(SIMULATION_STEP) && m_simStatus == SimulationStatus::running)
+		{
+			m_deltaClock.restart();
+			auto output = Simulate();
+			m_ui->UpdateSimulation(output);
+		}
+		m_ui->HandleEvents();
+
+		m_ui->Render();
+	}
 }
