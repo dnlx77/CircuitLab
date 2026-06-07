@@ -3,9 +3,11 @@
 void CircuitLab::Solver::Factorize(const Eigen::MatrixXd &A)
 {
 	m_matrix = A.colPivHouseholderQr();
+	m_isMatrixInvertible = m_matrix.isInvertible();
+
 }
 
-CircuitLab::Solver::Solver()
+CircuitLab::Solver::Solver() : m_isMatrixInvertible(false)
 {}
 
 // Tenta di risolvere A*x = b con decomposizione QR con pivoting per colonna.
@@ -14,7 +16,7 @@ CircuitLab::Solver::Solver()
 // invece di produrre un risultato silenziosamente errato.
 std::optional<Eigen::VectorXd> CircuitLab::Solver::SolveCircuit(const Eigen::VectorXd &b)
 {
-	if (m_matrix.isInvertible())
+	if (m_isMatrixInvertible)
 		return m_matrix.solve(b);
 
 	return std::nullopt;

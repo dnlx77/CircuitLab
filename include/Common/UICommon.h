@@ -16,13 +16,11 @@ namespace CircuitLab {
 	// quando un componente viene eliminato).
 	struct LinkView {
 		int id;
-		sf::Vector2f pointA;
-		sf::Vector2f pointB;
+		sf::Vector2f startPos;
+		sf::Vector2f targetPos;
 		int compIdA;   // ID del componente sul primo estremo del filo
 		int termIndexA; // Indice del terminale del componente A
-		std::optional<int> compIdB;   // ID del componente sul secondo estremo del filo
-		std::optional<int> termIndexB; // Indice del terminale del componente B
-		std::optional<int> nodeViewId;
+		int nodeViewId;
 	};
 
 	// Stato della selezione corrente nel canvas:
@@ -42,8 +40,15 @@ namespace CircuitLab {
 	struct SelecetedComponent {
 		int compId = -1;        // ID del componente selezionato (-1 se nessuno)
 		int terminalIndex = -1; // Indice del terminale selezionato (-1 se nessuno o se è il corpo)
-		int linkId = -1;		// ID del link selezionato (-1 se nessuno) 
+		int linkId = -1;		// ID del link selezionato (-1 se nessuno)
+		int nodeViewId = -1;	// ID del nodeView selezionato (-1 se nessuno)
 		SelectionState state = SelectionState::none;
 		sf::Vector2f clickPos;
+	};
+
+	struct LinkPararticles {
+		int linkViewId;
+		float offset;
+		int count;
 	};
 }

@@ -155,6 +155,11 @@ int CircuitLab::Circuit::GetNodesFromIndex(int index) const
 	return -1;
 }
 
+int CircuitLab::Circuit::GetIndexFromNodes(int nodeId) const
+{
+	return m_nodesMap.at(nodeId);
+}
+
 // Ricerca inversa nella mappa sorgenti: dato un indice nella matrice, restituisce il componentId (-1 se non trovato)
 int CircuitLab::Circuit::GetCurrentFromIndex(int index) const
 {
@@ -173,6 +178,33 @@ void CircuitLab::Circuit::SetComponentValues(int compId, const std::map<CircuitL
 {
 	GetComponentById(compId)->SetValues(values);
 	InvalidateCircuit();
+}
+
+std::vector<int> CircuitLab::Circuit::GetComponentsByNodeId(int nodeId) const
+{
+	std::vector<int> connectComp;
+	for (const auto &comp : m_components)
+	{
+		std::vector<int> terms = comp->GetTerminalId();
+		for (const auto term : terms)
+		{
+			if (term == nodeId)
+			{
+				connectComp.emplace_back(comp->GetId());
+				break;
+			}
+		}
+	}
+	return connectComp;
+}
+
+CircuitLab::ComponentType CircuitLab::Circuit::GetComponentType(int compId) const
+{
+	for (const auto &comp:m_components)
+		if (comp->GetId() == compId)
+			return comp->GetType();
+
+	return ComponentType::node;
 }
 
 bool CircuitLab::Circuit::CircuitHasOnlyGround() const

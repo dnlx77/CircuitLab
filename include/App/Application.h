@@ -1,6 +1,5 @@
 #pragma once
 #include <memory>
-#include <Eigen/Dense>
 #include "Core/Circuit.h"
 #include "Core/Solver.h"
 #include "Common/ComponentType.h"
@@ -43,7 +42,7 @@ namespace CircuitLab {
 
 		const Eigen::VectorXd &GetResult() const { return m_simulationResult; }
 
-		void SetSimulationStatus(SimulationStatus status) { m_simStatus = status; }
+		void SetSimulationStatus(SimulationStatus status);
 
 		// Resetta il circuito e la UI allo stato iniziale (canvas vuoto)
 		void New();

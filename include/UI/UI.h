@@ -36,6 +36,8 @@ namespace CircuitLab {
 		using fnGetComponentValues = std::function<std::map<ComponentValue, double>(int compId)>;
 		using fnSetComponentValues = std::function<void(int compId, const std::map<ComponentValue, double> &values)>;
 		using fnSetSimulationStatus = std::function<void(const SimulationStatus status)>;
+		using fnGetComponentsByNodeId = std::function<std::vector<int>(int nodeId)>;
+		using fnGetComponentTypeById = std::function<ComponentType(int compId)>;
 
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
@@ -57,6 +59,9 @@ namespace CircuitLab {
 		static constexpr int PANEL_WIDTH = 300;
 		static constexpr int NODE_RADIUS = 4;
 		static constexpr float EPSILON = 1.5f;
+		static constexpr int PARTICLE_SIZE = 5;
+		static constexpr int PARTICLE_SPACING_FACTOR = 3;
+		static constexpr float PARTICLE_SPEED_SCALE = 0.1f;
 		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30); // Colore sfondo canvas
 
 		SimulationOutput m_simulationOutput;  // Ultimo risultato di simulazione ricevuto
@@ -66,6 +71,8 @@ namespace CircuitLab {
 		std::vector<ComponentView> m_componentViewList; // Lista delle viste grafiche dei componenti
 		std::vector<LinkView> m_linkViewList;           // Lista dei collegamenti (fili) da disegnare
 		std::vector<NodeView> m_nodeViewList;
+		std::unordered_map<int, double> m_linkViewCurrentList;
+		std::vector<LinkPararticles> m_linkParticlesList;
 
 		sf::Vector2f m_compClickOffset;
 
@@ -84,6 +91,8 @@ namespace CircuitLab {
 		fnGetComponentValues m_onGetComponentValues;
 		fnSetComponentValues m_onSetComponentValues;
 		fnSetSimulationStatus m_onSetSimulationStatus;
+		fnGetComponentsByNodeId m_onGetComponentsByNodeId;
+		fnGetComponentTypeById m_onGetComponentTypeById;
 
 		// Determina quale componente o terminale è stato cliccato nella posizione pos.
 		// Aggiorna selComp con il risultato.
@@ -91,17 +100,21 @@ namespace CircuitLab {
 
 		// Calcola le coordinate pixel dei due estremi di un collegamento,
 		// tenendo conto delle posizioni e degli offset dei terminali.
-		LinkView GetLinkCoords(int comp1, int term1, int comp2, std::optional<int> term2);
+		CircuitLab::LinkView GetLinkCoords(int comp1, int term1, NodeView nodeView);
 
 		// Calcola la posizione ruotata di un terminale nel canvas,
 		// tenendo conto della rotazione del componente.
-		sf::Vector2f GetRotatedTermnialPos(const ComponentView &cw, int termIndex);
+		sf::Vector2f GetRotatedTerminalPos(const ComponentView &cw, int termIndex) const;
 
 		// Aggiorna le coordinate dei fili collegati a un componente
 		// dopo che quest'ultimo è stato ruotato o spostato.
 		void UpdateLinksForComponent(int compId);
 
-		void UpdateLinksForNodeView(int nodeViewId);
+		std::vector<sf::Vector2f> GetTerminalPositionbyCompId(int compId) const;
+
+		int GetNodeViewIdByLinkId(int linkId) const;
+
+		NodeView GetNodeViewById(int nodeViewId) const;
 
 		void DrawImageGuiPanel();
 
@@ -111,13 +124,25 @@ namespace CircuitLab {
 
 		void DrawNodes();
 
+		void DrawParticles(int linkId);
+
 		std::string_view ComponentValueToString(ComponentValue value);
 
 		float PointToStraightDistance(const sf::Vector2f &A, const sf::Vector2f &B, const sf::Vector2f &P);
 
-		void ConnectTerminalToLink(int compId, int termIndex, int linkViewId, sf::Vector2f clickPos);
+		//void ConnectTerminalToLink(int compId, int termIndex, int linkViewId, sf::Vector2f clickPos);
 
 		int RemoveLinkFromNodeView(int nodeViewId, int linkViewId);
+
+		void UpdateParticles(float dt);
+
+		NodeView GetNodeViewFromLInkId(int linkViewId);
+
+		sf::Vector2f GetNodeviewPositionByNodeViewId(int nodeViewId);
+
+		int GetNodeViewIdByTerminal(int compId, int termIndex) const;
+
+		void UpdateLinksForNodeView(int nodeViewId, sf::Vector2f newPos);
 
 	public:
 		UI(unsigned int width, unsigned int heigth, const std::string &title);
@@ -135,14 +160,16 @@ namespace CircuitLab {
 		void SetOnGetComponentValues(const fnGetComponentValues &func) { m_onGetComponentValues = func; }
 		void SetOnSetComponentValues(const fnSetComponentValues &func) { m_onSetComponentValues = func; }
 		void SetOnSetSimulationStatus(const fnSetSimulationStatus &func) { m_onSetSimulationStatus = func; }
+		void SetOnGetComponentsByNodeId(const fnGetComponentsByNodeId &func) { m_onGetComponentsByNodeId = func; }
+		void SetOnGetComponentTypeById(const fnGetComponentTypeById &func) { m_onGetComponentTypeById = func; }
 
 		// Aggiunge la vista grafica di un componente al canvas
 		void AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation);
 
 		// Aggiunge la vista grafica di un filo al canvas
-		int AddViewLink(int comp1, int term1, int comp2, int term2);
+		int AddViewLink(int comp1, int term1, int nodeViewId);
 
-		int AddViewLinkToNode(int comp1, int term1, int nodeViewId);
+		//int AddViewLinkToNode(int comp1, int term1, int nodeViewId);
 
 		int AddNodeView(int nodeId, sf::Vector2f position);
 
@@ -166,5 +193,9 @@ namespace CircuitLab {
 		bool IsWindowOpen() const { return m_window.isOpen(); }
 
 		void UpdateSimulation(SimulationOutput output) { m_simulationOutput = output; }
+
+		void CreateLinkParticlesList();
+
+		void CreateLinkViewCurrentList();
 	};
 }

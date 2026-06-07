@@ -100,15 +100,9 @@ CircuitLab::Application::Application()
 		});
 
 	// Aggiunge la vista grafica di un filo alla UI durante il caricamento
-	m_ioManager->SetOnLinkViewLoad([this](int comp1, std::optional<int> comp2, int term1, std::optional<int> term2, std::optional<int> NodeViewId) -> int
+	m_ioManager->SetOnLinkViewLoad([this](int comp1, int term1, int NodeViewId) -> int
 		{
-			if (comp2.has_value() && term2.has_value())
-				return m_ui->AddViewLink(comp1, term1, comp2.value(), term2.value());
-
-			if (NodeViewId.has_value())
-				return m_ui->AddViewLinkToNode(comp1, term1, NodeViewId.value());
-
-			return -1;
+			return m_ui->AddViewLink(comp1, term1, NodeViewId);
 		});
 
 	m_ioManager->SetOnNodeViewLoad([this](int nodeId, sf::Vector2f position) -> int 
@@ -152,6 +146,16 @@ CircuitLab::Application::Application()
 			m_circuit->SetComponentValues(compId, values);
 		});
 
+	m_ui->SetOnGetComponentTypeById([this](int compId)->ComponentType 
+		{
+			return m_circuit->GetComponentType(compId);
+		});
+
+	m_ui->SetOnGetComponentsByNodeId([this](int nodeId)->std::vector<int>
+		{
+			return m_circuit->GetComponentsByNodeId(nodeId);
+		});
+
 	m_circuit->SetOnFactorize([this](const Eigen::MatrixXd &matrix) 
 		{
 			m_solver->Factorize(matrix);
@@ -167,7 +171,7 @@ CircuitLab::Application::~Application() = default;
 CircuitLab::SimulationOutput CircuitLab::Application::Simulate()
 {
 	// LOG
-	m_circuit->PrintCircuit();
+	//m_circuit->PrintCircuit();
 
 	SimulationOutput output;
 
@@ -207,13 +211,20 @@ CircuitLab::SimulationOutput CircuitLab::Application::Simulate()
 	//   - se l'indice corrisponde a un nodo -> "Vn" (tensione al nodo n)
 	//   - se l'indice corrisponde a una sorgente -> "I(Vn_m)" (corrente nella sorgente tra nodi n e m)
 	std::vector<std::pair<std::string, double>> outVec;
+	std::unordered_map<int, double> componentCurrent;
+	std::map<std::tuple<int, int, int>, double> branchCurrent;
+	std::unordered_map<int, double> nodeToVoltage;
+	nodeToVoltage[0] = 0.0;
 	for (int i = 0; i < m_simulationResult.size(); i++)
 	{
 		int vNode = m_circuit->GetNodesFromIndex(i);
 		int iNode = m_circuit->GetCurrentFromIndex(i);
 
 		if (vNode != -1)
+		{
 			outVec.emplace_back("V" + std::to_string(vNode), m_simulationResult[i]);
+			nodeToVoltage[vNode] = m_simulationResult[i];
+		}
 
 		if (iNode != -1)
 		{
@@ -227,12 +238,45 @@ CircuitLab::SimulationOutput CircuitLab::Application::Simulate()
 					compString += "_";
 			}
 			outVec.emplace_back("I(V" + compString + ")", m_simulationResult[i]);
+			componentCurrent[iNode] = m_simulationResult[i];
+			branchCurrent[{terminalsId[0], terminalsId[1], iNode}] = m_simulationResult[i];
+		}
+	}
+		
+	const std::vector<std::unique_ptr<Component>> &compList = m_circuit->GetComponentsVector();
+	double v1, v2;
+	for (auto &comp : compList)
+	{
+		if (comp->GetType() == ComponentType::resistor)
+		{
+			std::vector<int> termList = comp->GetTerminalId();
+			if (termList[0] == 0)
+				v1 = 0.0;
+			else 
+				v1 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[0])];
+			if (termList[1] == 0)
+				v2 = 0.0;
+			else
+				v2 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[1])];
+			double current = (v1 - v2) / comp->GetValues().at(ComponentValue::resistance);
+			componentCurrent[comp->GetId()] = current;
+			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
 		}
 	}
 
 	output.simRes = SimulationResult::success;
 	output.res = outVec;
+	output.currentComp = componentCurrent;
+	output.currentBranch = branchCurrent;
+	output.nodeVoltages = nodeToVoltage;
 	return output;
+}
+
+void CircuitLab::Application::SetSimulationStatus(SimulationStatus status)
+{
+	m_simStatus = status;
+	if (status == SimulationStatus::running)
+		m_ui->CreateLinkParticlesList();
 }
 
 void CircuitLab::Application::New()
@@ -252,6 +296,7 @@ void CircuitLab::Application::Run()
 			m_deltaClock.restart();
 			auto output = Simulate();
 			m_ui->UpdateSimulation(output);
+			m_ui->CreateLinkViewCurrentList();
 		}
 		m_ui->HandleEvents();
 

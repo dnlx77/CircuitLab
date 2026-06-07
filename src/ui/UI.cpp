@@ -28,6 +28,9 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 		int i = 0;
 		for (const auto &terminal : des.terminalOffset)
 		{
+			LOG_DEBUG("checking terminal " << i << " of comp " << comp.GetComponentLink()
+				<< " x1=" << x1 << " y1=" << y1
+				<< " termX=" << terminal.x << " termY=" << terminal.y);
 			// Click dentro la zona di tolleranza del terminale?
 			if ((x1 >= terminal.x - CLICK_TOLLERANCE) && (x1 <= terminal.x + CLICK_TOLLERANCE) &&
 				(y1 >= terminal.y - CLICK_TOLLERANCE) && (y1 <= terminal.y + CLICK_TOLLERANCE))
@@ -35,6 +38,7 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 				selComp.compId = comp.GetComponentLink();
 				selComp.terminalIndex = i;
 				selComp.linkId = -1;
+				selComp.nodeViewId = -1;
 				selComp.state = SelectionState::terminalSelected;
 				selComp.clickPos = sf::Vector2f({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
 				return;
@@ -51,137 +55,107 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 			selComp.compId = comp.GetComponentLink();
 			selComp.terminalIndex = -1;
 			selComp.linkId = -1;
+			selComp.nodeViewId = -1;
 			selComp.state = SelectionState::componentSelected;
 			selComp.clickPos = sf::Vector2f({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
 			return;
 		}
+	}
 
-		// click su un linkView
-		sf::Vector2f posF(static_cast<float>(pos.x), static_cast<float>(pos.y));
-		for (auto const &link : m_linkViewList)
+	// click su un linkView
+	sf::Vector2f posF(static_cast<float>(pos.x), static_cast<float>(pos.y));
+	for (auto const &link : m_linkViewList)
+	{
+		NodeView nv = GetNodeViewFromLInkId(link.id);
+		sf::Vector2f diffVec({ link.targetPos.x - link.startPos.x, link.targetPos.y - link.startPos.y });
+
+		if (diffVec == sf::Vector2f(0.f, 0.f))
+			continue;
+		sf::Vector2f unitaryVec = diffVec.normalized();
+		sf::Vector2f shrunkA({ link.startPos.x + unitaryVec.x * CLICK_TOLLERANCE, link.startPos.y + unitaryVec.y * CLICK_TOLLERANCE });
+		sf::Vector2f shrunkB({ link.targetPos.x - unitaryVec.x * CLICK_TOLLERANCE, link.targetPos.y - unitaryVec.y * CLICK_TOLLERANCE });
+
+		float dist = PointToStraightDistance(shrunkA, shrunkB, posF);
+
+		if (dist <= CLICK_TOLLERANCE &&
+			posF.x >= std::min(shrunkA.x, shrunkB.x) - EPSILON &&
+			posF.x <= std::max(shrunkA.x, shrunkB.x) + EPSILON &&
+			posF.y >= std::min(shrunkA.y, shrunkB.y) - EPSILON &&
+			posF.y <= std::max(shrunkA.y, shrunkB.y) + EPSILON)
 		{
-			sf::Vector2f diffVec({ link.pointB.x - link.pointA.x, link.pointB.y - link.pointA.y });
-			sf::Vector2f unitaryVec = diffVec.normalized();
-			sf::Vector2f shrunkA({ link.pointA.x + unitaryVec.x * CLICK_TOLLERANCE, link.pointA.y + unitaryVec.y * CLICK_TOLLERANCE });
-			sf::Vector2f shrunkB({ link.pointB.x - unitaryVec.x * CLICK_TOLLERANCE, link.pointB.y - unitaryVec.y * CLICK_TOLLERANCE });
+			selComp.compId = -1;
+			selComp.terminalIndex = -1;
+			selComp.linkId = link.id;
+			selComp.nodeViewId = -1;
+			selComp.state = SelectionState::linkSelected;
+			selComp.clickPos = sf::Vector2f({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
+			LOG_DEBUG("CheckClick found link id: " << link.id);
+			return;
+		}
 
-			float dist = PointToStraightDistance(shrunkA, shrunkB, posF);
+	}
 
-			if (dist <= CLICK_TOLLERANCE &&
-				posF.x >= std::min(shrunkA.x, shrunkB.x) - EPSILON &&
-				posF.x <= std::max(shrunkA.x, shrunkB.x) + EPSILON &&
-				posF.y >= std::min(shrunkA.y, shrunkB.y) - EPSILON &&
-				posF.y <= std::max(shrunkA.y, shrunkB.y) + EPSILON)
+	// click su un nodeView
+	for (const auto &nv : m_nodeViewList)
+	{
+		if (nv.linkViewIds.size() > 2)
+		{
+			// Click dentro la zona di tolleranza del terminale?
+			if ((posF.x >= nv.position.x - CLICK_TOLLERANCE) && (posF.x <= nv.position.x + CLICK_TOLLERANCE) &&
+				(posF.y >= nv.position.y - CLICK_TOLLERANCE) && (posF.y <= nv.position.y + CLICK_TOLLERANCE))
 			{
 				selComp.compId = -1;
 				selComp.terminalIndex = -1;
-				selComp.linkId = link.id;
-				selComp.state = SelectionState::linkSelected;
-				selComp.clickPos = sf::Vector2f({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
-				return;
-			}
-
-		}
-
-		// click su un nodeView
-		for (const auto &nv : m_nodeViewList)
-		{
-			// Click dentro la zona di tolleranza del terminale?
-			if ((pos.x >= nv.position.x - CLICK_TOLLERANCE) && (pos.x <= nv.position.x + CLICK_TOLLERANCE) &&
-				(pos.y >= nv.position.y - CLICK_TOLLERANCE) && (pos.y <= nv.position.y + CLICK_TOLLERANCE))
-			{
-				selComp.compId = nv.id;
-				selComp.terminalIndex = -1;
 				selComp.linkId = -1;
+				selComp.nodeViewId = nv.id;
 				selComp.state = SelectionState::nodeViewSelected;
-				selComp.clickPos = sf::Vector2f({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
+				selComp.clickPos = sf::Vector2f({ posF.x, posF.y });
 				return;
 			}
 		}
-
-		// Nessun componente trovato sotto il click
-		selComp.compId = -1;
-		selComp.terminalIndex = -1;
-		selComp.linkId = -1;
-		selComp.state = SelectionState::none;
-		selComp.clickPos = sf::Vector2f({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
 	}
+
+	// Nessun componente trovato sotto il click
+	selComp.compId = -1;
+	selComp.terminalIndex = -1;
+	selComp.linkId = -1;
+	selComp.nodeViewId = -1;
+	selComp.state = SelectionState::none;
+	selComp.clickPos = sf::Vector2f({ posF.x, posF.y });
 }
 
-// Calcola le coordinate pixel dei due estremi di un collegamento tra terminali.
+// Calcola le coordinate pixel dei due estremi di un collegamento tra terminali e nodeView.
 // L'offset verticale del raggio sposta il punto di attacco sul bordo del cerchio
 // del terminale, non sul suo centro.
-CircuitLab::LinkView CircuitLab::UI::GetLinkCoords(int comp1, int term1, int comp2, std::optional<int> term2)
+CircuitLab::LinkView CircuitLab::UI::GetLinkCoords(int comp1, int term1, NodeView nodeView)
 {
 	sf::Vector2f pA, pB;
 
-	if (term2 != std::nullopt) {
-		for (const auto &comp : m_componentViewList)
-		{
-			if (comp.GetComponentLink() == comp1)
-			{
-				sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, term1);
-				pA.x = comp.GetPosition().x + rotTerm.x;
-				pA.y = comp.GetPosition().y + rotTerm.y;
-			}
-
-			if (comp.GetComponentLink() == comp2)
-			{
-				sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, term2.value());
-				pB.x = comp.GetPosition().x + rotTerm.x;
-				pB.y = comp.GetPosition().y + rotTerm.y;
-			}
-		}
-
-		LinkView link;
-		link.id = ++m_linkViewIdCount;
-		link.pointA = pA;
-		link.pointB = pB;
-		link.compIdA = comp1;
-		link.termIndexA = term1;
-		link.compIdB = comp2;
-		link.termIndexB = term2;
-		link.nodeViewId = std::nullopt;
-		return link;
-	}
-	else
+	for (const auto &comp : m_componentViewList)
 	{
-		for (const auto &comp : m_componentViewList)
+		if (comp.GetComponentLink() == comp1)
 		{
-			if (comp.GetComponentLink() == comp1)
-			{
-				sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, term1);
-				pA.x = comp.GetPosition().x + rotTerm.x;
-				pA.y = comp.GetPosition().y + rotTerm.y;
-			}
-
+			sf::Vector2f rotTerm = GetRotatedTerminalPos(comp, term1);
+			pA.x = comp.GetPosition().x + rotTerm.x;
+			pA.y = comp.GetPosition().y + rotTerm.y;
 		}
 
-		int nodeViewId;
-		for (const auto &nv : m_nodeViewList)
-			if (nv.id == comp2)
-			{
-				pB = nv.position;
-				nodeViewId = nv.id;
-			}
-
-		LinkView link;
-		link.id = ++m_linkViewIdCount;
-		link.pointA = pA;
-		link.pointB = pB;
-		link.compIdA = comp1;
-		link.termIndexA = term1;
-		link.compIdB = std::nullopt;
-		link.termIndexB = std::nullopt;
-		link.nodeViewId = nodeViewId;
-		return link;
 	}
+
+	LinkView link;
+	link.id = ++m_linkViewIdCount;
+	link.startPos = pA;
+	link.targetPos = nodeView.position;
+	link.compIdA = comp1;
+	link.termIndexA = term1;
+	link.nodeViewId = nodeView.id;
+	return link;
 }
 
 // Calcola la posizione ruotata di un terminale rispetto al centro del componente.
 // Applica la matrice di rotazione 2D all'offset del terminale,
 // tenendo conto del raggio per attaccare il filo al bordo del cerchio.
-sf::Vector2f CircuitLab::UI::GetRotatedTermnialPos(const ComponentView &cw, int termIndex)
+sf::Vector2f CircuitLab::UI::GetRotatedTerminalPos(const ComponentView &cw, int termIndex) const
 {
 	ComponentDesign des = cw.GetComponetDesign();
 	float cosAngle = static_cast<float>(std::cos(cw.GetRotation() * std::numbers::pi / 180.0));
@@ -195,8 +169,6 @@ sf::Vector2f CircuitLab::UI::GetRotatedTermnialPos(const ComponentView &cw, int 
 	return sf::Vector2f({ x1, y1 });
 }
 
-// Aggiorna le coordinate dei fili collegati al componente specificato,
-// in modo che i fili seguano il componente dopo una rotazione o uno spostamento.
 void CircuitLab::UI::UpdateLinksForComponent(int compId)
 {
 	for (auto &cv : m_componentViewList)
@@ -206,40 +178,74 @@ void CircuitLab::UI::UpdateLinksForComponent(int compId)
 			ComponentDesign des = cv.GetComponetDesign();
 			for (int i = 0; i < des.terminalOffset.size(); i++)
 			{
-				sf::Vector2f rotTer = GetRotatedTermnialPos(cv, i);
+				sf::Vector2f rotTer = GetRotatedTerminalPos(cv, i);
 				sf::Vector2f posTer;
 				posTer.x = cv.GetPosition().x + rotTer.x;
 				posTer.y = cv.GetPosition().y + rotTer.y;
 
 				for (auto &lv : m_linkViewList)
-				{
 					if (lv.compIdA == compId && lv.termIndexA == i)
-						lv.pointA = posTer;
-					else if (lv.compIdB == compId && lv.termIndexB == i)
-						lv.pointB = posTer;
-				}
+					{
+						lv.startPos = posTer;
+
+						// Se il nodeView è fantasma, segue il terminale
+						for (auto &nv : m_nodeViewList)
+							if (nv.id == lv.nodeViewId && nv.linkViewIds.size() <= 2)
+							{
+								nv.position = posTer;
+								// Aggiorna targetPos di tutti i link collegati al nodeView
+								for (int lvId : nv.linkViewIds)
+									for (auto &otherLv : m_linkViewList)
+										if (otherLv.id == lvId)
+											otherLv.targetPos = posTer;
+								break;
+							}
+					}
 			}
 		}
 	}
 }
 
-void CircuitLab::UI::UpdateLinksForNodeView(int nodeViewId)
+std::vector<sf::Vector2f> CircuitLab::UI::GetTerminalPositionbyCompId(int compId) const
 {
-	for (auto &nv : m_nodeViewList)
+	std::vector<sf::Vector2f> terminalsPos;
+	for (auto &cv : m_componentViewList)
 	{
-		if (nv.id == nodeViewId)
+		if (cv.GetComponentLink() == compId)
 		{
-			for (auto linkId : nv.linkViewIds)
+			ComponentDesign des = cv.GetComponetDesign();
+			for (int i = 0; i < des.terminalOffset.size(); i++)
 			{
-				for (auto &lv : m_linkViewList)
-				{
-					if (lv.id == linkId)
-						lv.pointB = nv.position;
-				}
+				sf::Vector2f rotTer = GetRotatedTerminalPos(cv, i);
+				sf::Vector2f terPos;
+				terPos.x = cv.GetPosition().x + rotTer.x;
+				terPos.y = cv.GetPosition().y + rotTer.y;
+				terminalsPos.emplace_back(terPos);
 			}
-			return;
+			return terminalsPos;
 		}
 	}
+	return terminalsPos;
+}
+
+int CircuitLab::UI::GetNodeViewIdByLinkId(int linkId) const
+{
+	for (const auto lv : m_linkViewList)
+	{
+		LOG_DEBUG("looking for linkId: " << linkId << " found: " << lv.id << " nodeViewId: " << lv.nodeViewId);
+		if (lv.id == linkId)
+			return lv.nodeViewId;
+	}
+	return -1;
+}
+
+CircuitLab::NodeView CircuitLab::UI::GetNodeViewById(int nodeViewId) const
+{
+	for (const auto &nv : m_nodeViewList)
+		if (nv.id == nodeViewId)
+			return nv;
+
+	throw std::runtime_error("NodeView not found for id: " + std::to_string(nodeViewId));
 }
 
 void CircuitLab::UI::UpdateNodeViewLinkIds(int nodeViewId, std::vector<int> linkViewIds)
@@ -264,6 +270,7 @@ void CircuitLab::UI::HandleEvents()
 
 		else if (const auto *mouseEvent = event->getIf<sf::Event::MouseButtonPressed>())
 		{
+			LOG_DEBUG("MouseButtonPressed state: " << static_cast<int>(m_selectedComponent.state));
 			LOG_DEBUG("state: "<<static_cast<int>(m_selectedComponent.state));
 			auto pos = mouseEvent->position;
 
@@ -294,6 +301,7 @@ void CircuitLab::UI::HandleEvents()
 				// - 2° click su un altro terminale: crea il collegamento
 				if (m_selectedComponent.state != SelectionState::terminalSelected && m_selectedComponent.state != SelectionState::linkSelected && !ImGui::GetIO().WantCaptureMouse)
 				{
+					LOG_DEBUG("CheckClick on m_selectedComponent");
 					CheckClick(pos, m_selectedComponent);
 				}
 				else if (m_selectedComponent.state == SelectionState::terminalSelected)
@@ -307,34 +315,143 @@ void CircuitLab::UI::HandleEvents()
 
 					if (temp.state == SelectionState::terminalSelected)
 					{
-						// secondo click su terminale dopo primo su terminale
 						int comp2 = temp.compId;
 						int term2 = temp.terminalIndex;
 						int nodeIdTerm1 = m_onGetCompTerminalId(comp1)[term1];
 						int nodeIdTerm2 = m_onGetCompTerminalId(comp2)[term2];
 
-						// Notifica il circuito e aggiunge il filo alla lista visiva
 						if (comp1 != comp2 && (nodeIdTerm1 != nodeIdTerm2 || (nodeIdTerm1 == -1 && nodeIdTerm2 == -1)))
 						{
-							// Notifica il circuito: aggiunge il filo alla lista visiva solo se il collegamento è valido
 							bool isConnect = m_onCreateLink(comp1, term1, comp2, term2);
 
 							if (isConnect)
-								AddViewLink(comp1, term1, comp2, term2);
+							{
+								int mathNodeId = m_onGetCompTerminalId(comp1)[term1];
+
+								int nvId1 = GetNodeViewIdByTerminal(comp1, term1);
+								int nvId2 = GetNodeViewIdByTerminal(comp2, term2);
+
+								sf::Vector2f comp1TermPos = GetTerminalPositionbyCompId(comp1)[term1];
+								sf::Vector2f comp2TermPos = GetTerminalPositionbyCompId(comp2)[term2];
+
+								if (nvId1 == -1 && nvId2 == -1)
+								{
+									// Scenario 1: nessun nodeView esistente
+									//sf::Vector2f newPos = { (comp1TermPos.x + comp2TermPos.x) / 2.0f,
+									//						(comp1TermPos.y + comp2TermPos.y) / 2.0f };
+
+									sf::Vector2f newPos = comp2TermPos;
+
+									NodeView newNV;
+									newNV.id = ++m_nodeViewCount;
+									newNV.nodeId = mathNodeId;
+									newNV.position = newPos;
+
+									LinkView lv1, lv2;
+									lv1.id = ++m_linkViewIdCount;
+									lv1.startPos = comp1TermPos;
+									lv1.targetPos = comp2TermPos;
+									lv1.compIdA = comp1;
+									lv1.termIndexA = term1;
+									lv1.nodeViewId = newNV.id;
+
+									lv2.id = ++m_linkViewIdCount;
+									lv2.startPos = comp2TermPos;
+									lv2.targetPos = comp2TermPos;
+									lv2.compIdA = comp2;
+									lv2.termIndexA = term2;
+									lv2.nodeViewId = newNV.id;
+
+									newNV.linkViewIds.push_back(lv1.id);
+									newNV.linkViewIds.push_back(lv2.id);
+
+									m_nodeViewList.push_back(newNV);
+									m_linkViewList.push_back(lv1);
+									m_linkViewList.push_back(lv2);
+								}
+								else if (nvId1 != -1 && nvId2 == -1)
+								{
+									// Scenario 2: term1 ha già un nodeView
+									LinkView lv2;
+									lv2.id = ++m_linkViewIdCount;
+									lv2.startPos = comp2TermPos;
+									lv2.targetPos = GetNodeViewById(nvId1).position;
+									lv2.compIdA = comp2;
+									lv2.termIndexA = term2;
+									lv2.nodeViewId = nvId1;
+
+									m_linkViewList.push_back(lv2);
+
+									for (auto &nv : m_nodeViewList)
+										if (nv.id == nvId1)
+										{
+											nv.linkViewIds.push_back(lv2.id);
+											break;
+										}
+								}
+								else if (nvId1 == -1 && nvId2 != -1)
+								{
+									// Scenario 3: term2 ha già un nodeView
+									LinkView lv1;
+									lv1.id = ++m_linkViewIdCount;
+									lv1.startPos = comp1TermPos;
+									lv1.targetPos = GetNodeViewById(nvId2).position;
+									lv1.compIdA = comp1;
+									lv1.termIndexA = term1;
+									lv1.nodeViewId = nvId2;
+
+									m_linkViewList.push_back(lv1);
+
+									for (auto &nv : m_nodeViewList)
+										if (nv.id == nvId2)
+										{
+											nv.linkViewIds.push_back(lv1.id);
+											break;
+										}
+								}
+								else if (nvId1 != -1 && nvId2 != -1 && nvId1 != nvId2)
+								{
+									// Scenario 4: merge dei due nodeView
+									auto itNv2 = std::find_if(m_nodeViewList.begin(), m_nodeViewList.end(),
+										[nvId2](const NodeView &nv) { return nv.id == nvId2; });
+
+									if (itNv2 != m_nodeViewList.end())
+									{
+										for (int linkIdToMove : itNv2->linkViewIds)
+										{
+											for (auto &lv : m_linkViewList)
+												if (lv.id == linkIdToMove)
+												{
+													lv.nodeViewId = nvId1;
+													lv.targetPos = GetNodeViewById(nvId1).position;
+													break;
+												}
+
+											for (auto &nv : m_nodeViewList)
+												if (nv.id == nvId1)
+												{
+													nv.linkViewIds.push_back(linkIdToMove);
+													break;
+												}
+										}
+										m_nodeViewList.erase(itNv2);
+									}
+								}
+							}
 						}
-						// Reset selezione
+
 						m_selectedComponent.state = SelectionState::none;
 						m_selectedComponent.compId = -1;
 						m_selectedComponent.terminalIndex = -1;
+						m_selectedComponent.nodeViewId = -1;
 					}
-					else if (temp.state == SelectionState::linkSelected)
+					else if (temp.state == SelectionState::linkSelected || temp.state == SelectionState::nodeViewSelected)
 					{
 						bool isDuplicated = false;
 						// secondo click su link dopo primo su terminale
 						for (const auto &lv : m_linkViewList)
 						{
-							if ((lv.compIdA == m_selectedComponent.compId && lv.termIndexA == m_selectedComponent.terminalIndex) ||
-								lv.compIdB == m_selectedComponent.compId && lv.termIndexB == m_selectedComponent.terminalIndex)
+							if (lv.compIdA == m_selectedComponent.compId && lv.termIndexA == m_selectedComponent.terminalIndex)
 							{
 								isDuplicated = true;
 								break;
@@ -342,40 +459,207 @@ void CircuitLab::UI::HandleEvents()
 						}	
 						if (!isDuplicated)
 						{
-							sf::Vector2f floatPos({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
-							ConnectTerminalToLink(m_selectedComponent.compId, m_selectedComponent.terminalIndex, temp.linkId, floatPos);
+							LinkView newLink;
+							
+							newLink.id = ++m_linkViewIdCount;
+							newLink.startPos = GetTerminalPositionbyCompId(m_selectedComponent.compId)[m_selectedComponent.terminalIndex];
+							newLink.compIdA = m_selectedComponent.compId;
+							newLink.termIndexA = m_selectedComponent.terminalIndex;
+							if (temp.state == SelectionState::linkSelected)
+								newLink.nodeViewId = GetNodeViewIdByLinkId(temp.linkId);
+							else
+								newLink.nodeViewId = temp.nodeViewId;
+
+							newLink.targetPos = GetNodeViewById(newLink.nodeViewId).position;
+
+							m_linkViewList.emplace_back(newLink);
+
+							for (auto &nv:m_nodeViewList)
+								if (nv.id == newLink.nodeViewId)
+								{
+									nv.linkViewIds.emplace_back(newLink.id);
+									break;
+								}
+
+							// Trova un compId già collegato al nodeView per notificare Circuit
+							NodeView nv;
+							if (temp.state == SelectionState::linkSelected)
+								nv = GetNodeViewFromLInkId(temp.linkId);
+							else
+								nv = GetNodeViewById(temp.nodeViewId);
+							int existingCompId = -1;
+							int existingTermIndex = -1;
+							for (const auto &lv : m_linkViewList)
+								if (lv.nodeViewId == nv.id)
+								{
+									existingCompId = lv.compIdA;
+									existingTermIndex = lv.termIndexA;
+									break;
+								}
+
+							m_onCreateLink(m_selectedComponent.compId, m_selectedComponent.terminalIndex, existingCompId, existingTermIndex);
+						}
+						else
+						{
+							int nvId1 = GetNodeViewIdByTerminal(m_selectedComponent.compId, m_selectedComponent.terminalIndex);
+							int nvId2 = (temp.state == SelectionState::linkSelected) ?
+								GetNodeViewIdByLinkId(temp.linkId) :
+								temp.nodeViewId;
+
+							// Scenario 4: merge
+							auto itNv2 = std::find_if(m_nodeViewList.begin(), m_nodeViewList.end(),
+								[nvId2](const NodeView &nv) { return nv.id == nvId2; });
+
+							if (itNv2 != m_nodeViewList.end() && nvId1 != nvId2)
+							{
+								for (int linkIdToMove : itNv2->linkViewIds)
+								{
+									for (auto &lv : m_linkViewList)
+										if (lv.id == linkIdToMove)
+										{
+											lv.nodeViewId = nvId1;
+											lv.targetPos = GetNodeViewById(nvId1).position;
+											break;
+										}
+
+									for (auto &nv : m_nodeViewList)
+										if (nv.id == nvId1)
+										{
+											nv.linkViewIds.push_back(linkIdToMove);
+											break;
+										}
+								}
+								m_nodeViewList.erase(itNv2);
+
+								// Notifica Circuit
+								int existingCompId = -1, existingTermIndex = -1;
+								for (const auto &lv : m_linkViewList)
+									if (lv.nodeViewId == nvId1 && !(lv.compIdA == m_selectedComponent.compId && lv.termIndexA == m_selectedComponent.terminalIndex))
+									{
+										existingCompId = lv.compIdA;
+										existingTermIndex = lv.termIndexA;
+										break;
+									}
+								m_onCreateLink(m_selectedComponent.compId, m_selectedComponent.terminalIndex, existingCompId, existingTermIndex);
+							}
 						}
 							
 						// Reset selezione
 						m_selectedComponent.state = SelectionState::none;
 						m_selectedComponent.compId = -1;
 						m_selectedComponent.terminalIndex = -1;
+						m_selectedComponent.nodeViewId = -1;
 					}
 				}
-				else if (m_selectedComponent.state == SelectionState::linkSelected)
+				else if (m_selectedComponent.state == SelectionState::linkSelected || m_selectedComponent.state == SelectionState::nodeViewSelected)
 				{
 					// Ho cliccato su un terminale dopo aver cliccato su un link devo creare il nodeview
 					SelecetedComponent temp;
 					if (!ImGui::GetIO().WantCaptureMouse) CheckClick(pos, temp);
+		
 					if (temp.state == SelectionState::terminalSelected)
 					{
 						bool isDuplicated = false;
 						// secondo click su terminale dopo primo su link
-						//sf::Vector2f floatPos({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
 						for (const auto &lv : m_linkViewList)
 						{
-							if ((lv.compIdA == temp.compId && lv.termIndexA == temp.terminalIndex) ||
-								lv.compIdB == temp.compId && lv.termIndexB == temp.terminalIndex)
+							if (lv.compIdA == temp.compId && lv.termIndexA == temp.terminalIndex)
 							{
 								isDuplicated = true;
 								break;
 							}
 						}
+						
 						if (!isDuplicated)
-							ConnectTerminalToLink(temp.compId, temp.terminalIndex, m_selectedComponent.linkId, m_selectedComponent.clickPos);
+						{
+							LinkView newLink;
+							newLink.id = ++m_linkViewIdCount;
+							newLink.startPos = GetTerminalPositionbyCompId(temp.compId)[temp.terminalIndex];
+							newLink.compIdA = temp.compId;
+							newLink.termIndexA = temp.terminalIndex;
+							if (m_selectedComponent.state == SelectionState::linkSelected)
+								newLink.nodeViewId = GetNodeViewIdByLinkId(m_selectedComponent.linkId);
+							else
+								newLink.nodeViewId = m_selectedComponent.nodeViewId;
+
+							newLink.targetPos = GetNodeViewById(newLink.nodeViewId).position;
+
+							m_linkViewList.emplace_back(newLink);
+
+							for (auto &nv : m_nodeViewList)
+								if (nv.id == newLink.nodeViewId)
+								{
+									nv.linkViewIds.emplace_back(newLink.id);
+									break;
+								}
+
+							// Trova un compId già collegato al nodeView per notificare Circuit
+							NodeView nv;
+							if (m_selectedComponent.state == SelectionState::linkSelected)
+								nv = GetNodeViewFromLInkId(m_selectedComponent.linkId);
+							else
+								nv = GetNodeViewById(m_selectedComponent.nodeViewId);
+							int existingCompId = -1;
+							int existingTermIndex = -1;
+							for (const auto &lv : m_linkViewList)
+								if (lv.nodeViewId == nv.id && lv.id != newLink.id)
+								{
+									existingCompId = lv.compIdA;
+									existingTermIndex = lv.termIndexA;
+									break;
+								}
+
+							m_onCreateLink(temp.compId, temp.terminalIndex, existingCompId, existingTermIndex);
+						}
+						else
+						{
+							int nvId1 = (m_selectedComponent.state == SelectionState::linkSelected) ?
+								GetNodeViewIdByLinkId(m_selectedComponent.linkId) :
+								m_selectedComponent.nodeViewId;
+							int nvId2 = GetNodeViewIdByTerminal(temp.compId, temp.terminalIndex);
+
+							// Scenario 4: merge
+							auto itNv2 = std::find_if(m_nodeViewList.begin(), m_nodeViewList.end(),
+								[nvId2](const NodeView &nv) { return nv.id == nvId2; });
+
+							if (itNv2 != m_nodeViewList.end() && nvId1 != nvId2)
+							{
+								for (int linkIdToMove : itNv2->linkViewIds)
+								{
+									for (auto &lv : m_linkViewList)
+										if (lv.id == linkIdToMove)
+										{
+											lv.nodeViewId = nvId1;
+											lv.targetPos = GetNodeViewById(nvId1).position;
+											break;
+										}
+
+									for (auto &nv : m_nodeViewList)
+										if (nv.id == nvId1)
+										{
+											nv.linkViewIds.push_back(linkIdToMove);
+											break;
+										}
+								}
+								m_nodeViewList.erase(itNv2);
+
+								// Notifica Circuit
+								int existingCompId = -1, existingTermIndex = -1;
+								for (const auto &lv : m_linkViewList)
+									if (lv.nodeViewId == nvId1 && !(lv.compIdA == m_selectedComponent.compId && lv.termIndexA == m_selectedComponent.terminalIndex))
+									{
+										existingCompId = lv.compIdA;
+										existingTermIndex = lv.termIndexA;
+										break;
+									}
+								m_onCreateLink(temp.compId, temp.terminalIndex, existingCompId, existingTermIndex);
+							}
+						}
+
 						// Reset selezione
 						m_selectedComponent.state = SelectionState::none;
 						m_selectedComponent.compId = -1;
+						m_selectedComponent.nodeViewId = -1;
 						m_selectedComponent.terminalIndex = -1;
 					}
 				}
@@ -427,12 +711,12 @@ void CircuitLab::UI::HandleEvents()
 				newPos.y = std::clamp(pos.y - m_compClickOffset.y, 0.0f, static_cast<float>(m_heigth));
 
 				for (auto &nv : m_nodeViewList)
-					if (nv.id == m_selectedComponent.compId)
+					if (nv.id == m_selectedComponent.nodeViewId)
 					{
 						nv.position.x = newPos.x;
 						nv.position.y = newPos.y;
 
-						UpdateLinksForNodeView(m_selectedComponent.compId);
+						UpdateLinksForNodeView(m_selectedComponent.compId, sf::Vector2f(newPos.x, newPos.y));
 						break;
 					}
 			}
@@ -461,9 +745,9 @@ void CircuitLab::UI::HandleEvents()
 
 				LOG_DEBUG("nodeView count before: " << m_nodeViewList.size());
 				for (const auto &lv : m_linkViewList)
-					if (lv.nodeViewId.has_value() && lv.compIdA == id)
+					if (lv.compIdA == id)
 					{
-						int nvId = lv.nodeViewId.value();
+						int nvId = lv.nodeViewId;
 						if (RemoveLinkFromNodeView(nvId, lv.id) == 0)
 						{
 							LOG_DEBUG("removing nodeView: " << nvId);
@@ -482,7 +766,7 @@ void CircuitLab::UI::HandleEvents()
 				m_linkViewList.erase(
 					std::remove_if(m_linkViewList.begin(), m_linkViewList.end(),
 						[id](const LinkView &lw) {
-							return (lw.compIdA == id || lw.compIdB == id);
+							return (lw.compIdA == id);
 						}),
 					m_linkViewList.end()
 				);
@@ -493,6 +777,7 @@ void CircuitLab::UI::HandleEvents()
 				m_selectedComponent.state = SelectionState::none;
 				m_selectedComponent.compId = -1;
 				m_selectedComponent.terminalIndex = -1;
+				m_selectedComponent.nodeViewId = -1;
 			}
 		}
 		else if (const auto *keyboardEvent = event->getIf<sf::Event::KeyPressed>())
@@ -552,6 +837,14 @@ void CircuitLab::UI::DrawImageGuiPanel()
 		{
 			std::string res = r.first + " " + std::to_string(r.second) + " ";
 			ImGui::Text(res.c_str());
+		}
+		ImGui::Text("]");
+
+		ImGui::Text("Correnti: [");
+		for (const auto &i : m_simulationOutput.currentComp)
+		{
+			std::string cur = "comp" + std::to_string(i.first) + " " + std::to_string(i.second) + " ";
+			ImGui::Text(cur.c_str());
 		}
 		ImGui::Text("]");
 	}
@@ -643,7 +936,7 @@ void CircuitLab::UI::DrawComponents()
 		{
 			sf::Text termLabel(m_font);
 
-			sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, i);
+			sf::Vector2f rotTerm = GetRotatedTerminalPos(comp, i);
 
 			strPosX = (rotTerm.x >= 0) ? 1 : -1;
 			strPosY = (rotTerm.y >= 0) ? 1 : -1;
@@ -721,10 +1014,12 @@ void CircuitLab::UI::DrawWires()
 	for (const auto &wire : m_linkViewList)
 	{
 		sf::Vertex line[2] = {
-			sf::Vertex{wire.pointA, (m_selectedComponent.state == SelectionState::linkSelected && wire.id == m_selectedComponent.linkId) ? sf::Color::Red : sf::Color::White},
-			sf::Vertex{wire.pointB, (m_selectedComponent.state == SelectionState::linkSelected && wire.id == m_selectedComponent.linkId) ? sf::Color::Red : sf::Color::White}
+			sf::Vertex{wire.startPos, (m_selectedComponent.state == SelectionState::linkSelected && wire.id == m_selectedComponent.linkId) ? sf::Color::Red : sf::Color::White},
+			sf::Vertex{GetNodeviewPositionByNodeViewId(wire.nodeViewId), (m_selectedComponent.state == SelectionState::linkSelected && wire.id == m_selectedComponent.linkId) ? sf::Color::Red : sf::Color::White}
 		};
 		m_window.draw(line, 2, sf::PrimitiveType::Lines);
+		
+		DrawParticles(wire.id);
 	}
 }
 
@@ -752,6 +1047,35 @@ void CircuitLab::UI::DrawNodes()
 	}
 }
 
+void CircuitLab::UI::DrawParticles(int linkId)
+{
+	for (const auto &lv : m_linkViewList)
+	{
+		if (lv.id == linkId)
+		{
+			sf::Vector2f nodeViewPos = GetNodeviewPositionByNodeViewId(lv.nodeViewId);
+			for (const auto &lp : m_linkParticlesList)
+			{
+				if (lp.linkViewId == linkId)
+				{
+					for (int i = 0; i < lp.count; i++)
+					{
+						float t_i = std::fmod(lp.offset + static_cast<float>(i) / lp.count, 1.0f);
+						sf::Vector2f pPos;
+						pPos.x = lv.startPos.x + (nodeViewPos.x - lv.startPos.x) * t_i;
+						pPos.y = lv.startPos.y + (nodeViewPos.y - lv.startPos.y) * t_i;
+						sf::CircleShape particle(NODE_RADIUS);
+						particle.setFillColor(sf::Color::Yellow);
+						particle.setOrigin({ NODE_RADIUS, NODE_RADIUS });
+						particle.setPosition({ pPos.x,pPos.y });
+						m_window.draw(particle);
+					}
+				}
+			}
+		}
+	}
+}
+
 std::string_view CircuitLab::UI::ComponentValueToString(CircuitLab::ComponentValue value)
 {
 	switch (value)
@@ -774,155 +1098,6 @@ float CircuitLab::UI::PointToStraightDistance(const sf::Vector2f &A, const sf::V
 	return std::abs(dot)/distAB;
 }
 
-void CircuitLab::UI::ConnectTerminalToLink(int compId, int termIndex, int linkViewId, sf::Vector2f clickPos)
-{
-	bool isTerminal = false;
-	int idCompA = -1, idCompB = -1, termA = -1, termB = -1;
-	sf::Vector2f posCompA, posCompB, posNodeView;
-
-	for (const auto &lv : m_linkViewList)
-	{
-		if (lv.id == linkViewId)
-		{
-			// Il link collega 2 terminali
-			if (lv.termIndexB != std::nullopt)
-			{
-				isTerminal = true;
-				idCompA = lv.compIdA;
-				idCompB = lv.compIdB.value();
-				termA = lv.termIndexA;
-				termB = lv.termIndexB.value();
-				for (const auto &comp : m_componentViewList)
-				{
-					if (comp.GetComponentLink() == idCompA)
-					{
-						sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, termA);
-						posCompA = { comp.GetPosition().x + rotTerm.x, comp.GetPosition().y + rotTerm.y };
-					}
-					if (comp.GetComponentLink() == idCompB)
-					{
-						sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, termB);
-						posCompB = { comp.GetPosition().x + rotTerm.x, comp.GetPosition().y + rotTerm.y };
-					}
-				}
-			}
-			// Il link collega un terminal e un nodeView
-			else
-			{
-				idCompA = lv.compIdA; 
-				termA = lv.termIndexA;
-				for (const auto &comp : m_componentViewList)
-				{
-					if (comp.GetComponentLink() == compId)
-					{
-						sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, termIndex);
-						posCompA = { comp.GetPosition().x + rotTerm.x, comp.GetPosition().y + rotTerm.y };
-						break;
-					}
-				}
-
-				LinkView newLinkView;
-
-				newLinkView.id = ++m_linkViewIdCount;
-				newLinkView.pointA = posCompA;
-				newLinkView.pointB = lv.pointB;
-				newLinkView.compIdA = compId;
-				newLinkView.termIndexA = termIndex;
-				newLinkView.nodeViewId = lv.nodeViewId;
-
-				m_linkViewList.emplace_back(newLinkView);
-
-				m_onCreateLink(idCompA, termA, compId, termIndex);
-
-				for (auto &nv : m_nodeViewList)
-				{
-					if (nv.id == lv.nodeViewId)
-					{
-						nv.linkViewIds.emplace_back(newLinkView.id);
-					}
-				}
-
-				return;
-			}
-		}
-	}
-
-	// Rimuove il filo selezionato
-	m_linkViewList.erase(
-		std::remove_if(m_linkViewList.begin(), m_linkViewList.end(),
-			[linkViewId](const LinkView &lv) {
-				return (lv.id == linkViewId);
-			}),
-		m_linkViewList.end()
-	);
-
-	// Creo il nuovo NodeVIew;
-	NodeView newNodeView;
-	newNodeView.id = ++m_nodeViewCount;
-	newNodeView.nodeId = m_onGetCompTerminalId(compId)[termIndex];
-	newNodeView.position = clickPos;
-
-	sf::Vector2f posNewComp;
-	for (const auto &comp : m_componentViewList)
-	{
-		if (comp.GetComponentLink() == compId)
-		{
-			sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, termIndex);
-			posNewComp = { comp.GetPosition().x + rotTerm.x, comp.GetPosition().y + rotTerm.y };
-			break;
-		}
-	}
-
-	// creo un nuovo link tra il nodeView creato e il componente
-	LinkView newLinkView;
-	newLinkView.id = ++m_linkViewIdCount;
-	newLinkView.pointA = posNewComp;
-	newLinkView.pointB = newNodeView.position;
-	newLinkView.compIdA = compId;
-	newLinkView.termIndexA = termIndex;
-	newLinkView.nodeViewId = newNodeView.id;
-	m_linkViewList.emplace_back(newLinkView);
-
-	newNodeView.linkViewIds.emplace_back(newLinkView.id);
-
-	m_nodeViewList.emplace_back(newNodeView);
-
-	// Se il link spezzato collegava 2 terminali
-	if (isTerminal)
-	{
-		// Creo i nuovi link
-		LinkView newLinkView1, newLinkView2;
-		
-		newLinkView1.id = ++m_linkViewIdCount;
-		newLinkView1.pointA = sf::Vector2f({ posCompA.x, posCompA.y });
-		newLinkView1.pointB = newNodeView.position;
-		newLinkView1.compIdA = idCompA;
-		newLinkView1.termIndexA = termA;
-		newLinkView1.nodeViewId = newNodeView.id;
-		m_linkViewList.emplace_back(newLinkView1);
-		
-		newLinkView2.id = ++m_linkViewIdCount;
-		newLinkView2.pointA = sf::Vector2f({ posCompB.x, posCompB.y });
-		newLinkView2.pointB = newNodeView.position;
-		newLinkView2.compIdA = idCompB;
-		newLinkView2.termIndexA = termB;
-		newLinkView2.nodeViewId = newNodeView.id;
-		m_linkViewList.emplace_back(newLinkView2);
-
-		m_onCreateLink(idCompA, termA, compId, termIndex);
-
-		for (auto &nv : m_nodeViewList)
-		{
-			if (nv.id == static_cast<int>(m_nodeViewCount))
-			{
-				nv.nodeId = m_onGetCompTerminalId(compId)[termIndex];
-				nv.linkViewIds.emplace_back(newLinkView1.id);
-				nv.linkViewIds.emplace_back(newLinkView2.id);
-			}
-		}
-	}
-}
-
 int CircuitLab::UI::RemoveLinkFromNodeView(int nodeViewId, int linkViewId)
 {
 	for (auto &nv : m_nodeViewList)
@@ -942,6 +1117,89 @@ int CircuitLab::UI::RemoveLinkFromNodeView(int nodeViewId, int linkViewId)
 		}
 	}
 	return -1;
+}
+
+void CircuitLab::UI::CreateLinkViewCurrentList()
+{
+	m_linkViewCurrentList.clear();
+	for (const auto &lv : m_linkViewList)
+	{
+		std::vector<int> termList = m_onGetCompTerminalId(lv.compIdA);
+		if (termList.size() < 2)
+		{
+			m_linkViewCurrentList[lv.id] = 0.0;
+			continue;
+		}
+		int nodeId1 = termList[0];
+		int nodeId2 = termList[1];
+		double current = m_simulationOutput.currentBranch[{nodeId1, nodeId2, lv.compIdA}];
+		m_linkViewCurrentList[lv.id] = (lv.termIndexA == 0) ? -current : current;
+	}
+}
+
+void CircuitLab::UI::CreateLinkParticlesList()
+{
+	m_linkParticlesList.clear();
+	for (const auto &lv : m_linkViewList)
+	{
+		sf::Vector2f nodeViewPos = GetNodeviewPositionByNodeViewId(lv.nodeViewId);
+		LinkPararticles newLinkParticles;
+		float linkLenght = std::sqrt(((nodeViewPos.x - lv.startPos.x)* (nodeViewPos.x - lv.startPos.x)) + ((nodeViewPos.y - lv.startPos.y) * (nodeViewPos.y - lv.startPos.y)));
+		newLinkParticles.linkViewId = lv.id;
+		newLinkParticles.offset = 0.0f;
+		newLinkParticles.count = static_cast<int>(linkLenght / (PARTICLE_SIZE * PARTICLE_SPACING_FACTOR));
+		m_linkParticlesList.emplace_back(newLinkParticles);
+	}
+}
+
+void CircuitLab::UI::UpdateParticles(float dt)
+{
+	for (auto &lp : m_linkParticlesList)
+	{
+		lp.offset = std::fmod(lp.offset + m_linkViewCurrentList[lp.linkViewId] * dt * PARTICLE_SPEED_SCALE + 1.0f, 1.0f);
+	}
+}
+
+CircuitLab::NodeView CircuitLab::UI::GetNodeViewFromLInkId(int linkViewId)
+{
+	for (auto &nv : m_nodeViewList)
+		for (const auto &lv : nv.linkViewIds)
+			if (lv == linkViewId)
+				return nv;
+
+	// non dovrebbe mai succedere se i dati sono consistenti
+	throw std::runtime_error("NodeView not found for linkViewId: " + std::to_string(linkViewId));
+}
+
+sf::Vector2f CircuitLab::UI::GetNodeviewPositionByNodeViewId(int nodeViewId)
+{
+	for (const auto &nv : m_nodeViewList)
+		if (nv.id == nodeViewId)
+			return nv.position;
+	
+	throw std::runtime_error("NodeView not found for id: " + std::to_string(nodeViewId));
+}
+
+int CircuitLab::UI::GetNodeViewIdByTerminal(int compId, int termIndex) const
+{
+	for (const auto &lv : m_linkViewList)
+		if (lv.compIdA == compId && lv.termIndexA == termIndex)
+			return lv.nodeViewId;
+	return -1;
+}
+
+void CircuitLab::UI::UpdateLinksForNodeView(int nodeViewId, sf::Vector2f newPos)
+{
+	for (auto &nv : m_nodeViewList)
+		if (nv.id == nodeViewId)
+		{
+			nv.position = newPos;
+			for (int lvId : nv.linkViewIds)
+				for (auto &lv : m_linkViewList)
+					if (lv.id == lvId)
+						lv.targetPos = newPos;
+			break;
+		}
 }
 
 // Inizializza la finestra SFML e ImGui-SFML.
@@ -975,48 +1233,49 @@ void CircuitLab::UI::AddViewComponent(int compId, const std::string &name, Compo
 	m_componentViewList.emplace_back(ComponentView(compId, position, rotation, name, type));
 }
 
-int CircuitLab::UI::AddViewLink(int comp1, int term1, int comp2, int term2)
+int CircuitLab::UI::AddViewLink(int comp1, int term1, int nodeViewId)
 {
-	LinkView newLink = GetLinkCoords(comp1, term1, comp2, term2);
+	NodeView nv = GetNodeViewById(nodeViewId);
+	LinkView newLink = GetLinkCoords(comp1, term1, nv);
 	m_linkViewList.emplace_back(newLink);
 	return newLink.id;
 }
 
-int CircuitLab::UI::AddViewLinkToNode(int comp1, int term1, int nodeViewId)
-{
-	sf::Vector2f pA, pB;
-	LinkView newLink;
-	for (const auto &comp : m_componentViewList)
-	{
-		if (comp.GetComponentLink() == comp1)
-		{
-			sf::Vector2f rotTerm = GetRotatedTermnialPos(comp, term1);
-			pA.x = comp.GetPosition().x + rotTerm.x;
-			pA.y = comp.GetPosition().y + rotTerm.y;
-			break;
-		}
-
-	}
-
-	for (const auto &nv : m_nodeViewList)
-		if (nv.id == nodeViewId)
-		{
-			pB = nv.position;
-			break;
-		}
-
-	newLink.id = ++m_linkViewIdCount;
-	newLink.pointA = pA;
-	newLink.pointB = pB;
-	newLink.compIdA = comp1;
-	newLink.termIndexA = term1;
-	newLink.compIdB = std::nullopt;
-	newLink.termIndexB = std::nullopt;
-	newLink.nodeViewId = nodeViewId;
-	m_linkViewList.emplace_back(newLink);
-
-	return newLink.id;
-}
+//int CircuitLab::UI::AddViewLinkToNode(int comp1, int term1, int nodeViewId)
+//{
+//	sf::Vector2f pA, pB;
+//	LinkView newLink;
+//	for (const auto &comp : m_componentViewList)
+//	{
+//		if (comp.GetComponentLink() == comp1)
+//		{
+//			sf::Vector2f rotTerm = GetRotatedTerminalPos(comp, term1);
+//			pA.x = comp.GetPosition().x + rotTerm.x;
+//			pA.y = comp.GetPosition().y + rotTerm.y;
+//			break;
+//		}
+//
+//	}
+//
+//	for (const auto &nv : m_nodeViewList)
+//		if (nv.id == nodeViewId)
+//		{
+//			pB = nv.position;
+//			break;
+//		}
+//
+//	newLink.id = ++m_linkViewIdCount;
+//	newLink.pointA = pA;
+//	newLink.pointB = pB;
+//	newLink.compIdA = comp1;
+//	newLink.termIndexA = term1;
+//	newLink.compIdB = std::nullopt;
+//	newLink.termIndexB = std::nullopt;
+//	newLink.nodeViewId = nodeViewId;
+//	m_linkViewList.emplace_back(newLink);
+//
+//	return newLink.id;
+//}
 
 int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position)
 {
@@ -1045,8 +1304,9 @@ void CircuitLab::UI::Clear()
 
 void CircuitLab::UI::Render()
 {
+	sf::Time dt = m_deltaClock.restart();
 	// --- Aggiornamento ImGui ---
-	ImGui::SFML::Update(m_window, m_deltaClock.restart());
+	ImGui::SFML::Update(m_window, dt);
 
 	DrawImageGuiPanel();
 
@@ -1059,6 +1319,8 @@ void CircuitLab::UI::Render()
 	DrawComponents();
 
 	DrawNodes();
+
+	UpdateParticles(dt.asSeconds());
 
 	DrawWires();
 

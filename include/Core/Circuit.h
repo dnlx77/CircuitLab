@@ -91,6 +91,8 @@ namespace CircuitLab {
 		// Dato un indice nella matrice, restituisce il nodeId corrispondente (-1 se non trovato)
 		int GetNodesFromIndex(int index) const;
 
+		int GetIndexFromNodes(int nodeId) const;
+
 		// Dato un indice nella matrice, restituisce il componentId della sorgente di tensione (-1 se non trovato)
 		int GetCurrentFromIndex(int index) const;
 
@@ -104,5 +106,9 @@ namespace CircuitLab {
 		void SetComponentValues(int compId, const std::map<ComponentValue, double> &values);
 
 		void SetOnFactorize(const fnOnFactorize &func) { m_onFactorize = func; }
+
+		std::vector<int> GetComponentsByNodeId(int nodeId) const;
+
+		ComponentType GetComponentType(int compId) const;
 	};
 }

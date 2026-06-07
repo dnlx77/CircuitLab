@@ -9,6 +9,7 @@ namespace CircuitLab {
 	class Solver {
 	private:
 		Eigen::ColPivHouseholderQR<Eigen::MatrixXd> m_matrix;
+		bool m_isMatrixInvertible;
 		
 	public:
 		Solver();

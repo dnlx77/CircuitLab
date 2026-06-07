@@ -22,6 +22,9 @@ namespace CircuitLab {
 	struct SimulationOutput {
 		SimulationResult simRes;                         // Esito della simulazione
 		std::vector<std::pair<std::string, double>> res; // Variabili calcolate: { nome, valore }
+		std::unordered_map<int, double> currentComp;
+		std::map<std::tuple<int, int, int>, double> currentBranch;
+		std::unordered_map<int, double> nodeVoltages; // NodeId -> tensione
 	};
 
 	enum class SimulationStatus {

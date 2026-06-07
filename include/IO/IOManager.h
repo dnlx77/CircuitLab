@@ -20,7 +20,7 @@ namespace CircuitLab {
 	using fnComponentViewLoad = std::function<void(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation)>;
 
 	// Aggiunge la vista grafica di un collegamento (filo) alla UI
-	using fnLinkViewLoad = std::function<int(int compIdA, std::optional<int> compIdB, int terminalIndexA, std::optional<int> terminalIndexB, std::optional<int> NodeViewId)>;
+	using fnLinkViewLoad = std::function<int(int compIdA, int terminalIndexA, int NodeViewId)>;
 
 	using fnNodeViewLoad = std::function<int(int nodeId, sf::Vector2f position)>;
 
