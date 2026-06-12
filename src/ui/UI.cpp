@@ -28,9 +28,6 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 		int i = 0;
 		for (const auto &terminal : des.terminalOffset)
 		{
-			LOG_DEBUG("checking terminal " << i << " of comp " << comp.GetComponentLink()
-				<< " x1=" << x1 << " y1=" << y1
-				<< " termX=" << terminal.x << " termY=" << terminal.y);
 			// Click dentro la zona di tolleranza del terminale?
 			if ((x1 >= terminal.x - CLICK_TOLLERANCE) && (x1 <= terminal.x + CLICK_TOLLERANCE) &&
 				(y1 >= terminal.y - CLICK_TOLLERANCE) && (y1 <= terminal.y + CLICK_TOLLERANCE))
@@ -231,11 +228,8 @@ std::vector<sf::Vector2f> CircuitLab::UI::GetTerminalPositionbyCompId(int compId
 int CircuitLab::UI::GetNodeViewIdByLinkId(int linkId) const
 {
 	for (const auto lv : m_linkViewList)
-	{
-		LOG_DEBUG("looking for linkId: " << linkId << " found: " << lv.id << " nodeViewId: " << lv.nodeViewId);
 		if (lv.id == linkId)
 			return lv.nodeViewId;
-	}
 	return -1;
 }
 
@@ -270,8 +264,6 @@ void CircuitLab::UI::HandleEvents()
 
 		else if (const auto *mouseEvent = event->getIf<sf::Event::MouseButtonPressed>())
 		{
-			LOG_DEBUG("MouseButtonPressed state: " << static_cast<int>(m_selectedComponent.state));
-			LOG_DEBUG("state: "<<static_cast<int>(m_selectedComponent.state));
 			auto pos = mouseEvent->position;
 
 			if (mouseEvent->button == sf::Mouse::Button::Left && (m_selectedComponent.state != SelectionState::draggingComponent || m_selectedComponent.state != SelectionState::draggingNodeView))
@@ -301,7 +293,6 @@ void CircuitLab::UI::HandleEvents()
 				// - 2° click su un altro terminale: crea il collegamento
 				if (m_selectedComponent.state != SelectionState::terminalSelected && m_selectedComponent.state != SelectionState::linkSelected && !ImGui::GetIO().WantCaptureMouse)
 				{
-					LOG_DEBUG("CheckClick on m_selectedComponent");
 					CheckClick(pos, m_selectedComponent);
 				}
 				else if (m_selectedComponent.state == SelectionState::terminalSelected)
@@ -1156,7 +1147,7 @@ void CircuitLab::UI::UpdateParticles(float dt)
 {
 	for (auto &lp : m_linkParticlesList)
 	{
-		lp.offset = std::fmod(lp.offset + m_linkViewCurrentList[lp.linkViewId] * dt * PARTICLE_SPEED_SCALE + 1.0f, 1.0f);
+		lp.offset = std::fmod(lp.offset + static_cast<float>(m_linkViewCurrentList[lp.linkViewId]) * dt * PARTICLE_SPEED_SCALE + 1.0f, 1.0f);
 	}
 }
 

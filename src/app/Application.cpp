@@ -25,6 +25,44 @@ std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(Co
 	}
 }
 
+void CircuitLab::Application::SimulationLoop()
+{
+	while (m_ui->IsWindowOpen())
+	{
+		sf::Time elapsed = m_deltaClock.getElapsedTime();
+		if (elapsed >= sf::seconds(SIMULATION_STEP) && m_simStatus == SimulationStatus::running)
+		{
+			m_deltaClock.restart();
+			Simulate();
+		}
+	}
+}
+
+void CircuitLab::Application::RenderLoop()
+{
+	while (m_ui->IsWindowOpen())
+	{
+		if (m_newOutputReady)
+		{
+			SimulationOutput localOutput;
+			{
+				std::lock_guard<std::mutex> lock(m_swapMutex);
+				localOutput = m_buffers[m_frontIndex];
+			}
+
+			m_ui->UpdateSimulation(localOutput);
+			m_ui->CreateLinkViewCurrentList();
+			m_newOutputReady = false;
+
+		}
+
+		m_ui->HandleEvents();
+
+		m_ui->Render();
+	}
+	m_isRunning = false;
+}
+
 // Costruisce UI e Circuit, poi collega i cinque callback:
 //   - onRunSimulation:     la UI chiama RunSimulation() su Application
 //   - onCircuitChange:     la UI chiede ad Application di aggiungere un componente al circuito
@@ -168,31 +206,32 @@ CircuitLab::Application::~Application() = default;
 // Controlla prima i casi degeneri (circuito nullo o vuoto),
 // poi risolve il sistema A*x = b e costruisce il vettore di output
 // con i nomi delle variabili (tensioni Vn e correnti nei rami).
-CircuitLab::SimulationOutput CircuitLab::Application::Simulate()
+void CircuitLab::Application::Simulate()
 {
 	// LOG
 	//m_circuit->PrintCircuit();
 
-	SimulationOutput output;
+	SimulationOutput &output = m_buffers[m_backIndex];
+	output = SimulationOutput{};
 
 	// Questi controlli sono difensivi: m_circuit non dovrebbe mai essere nullptr
 	// dato che viene creato nel costruttore, ma è buona pratica verificarlo
 	if (m_circuit == nullptr)
 	{
 		output.simRes = SimulationResult::no_circuit;
-		return output;
+		return;
 	}
 
 	if (m_circuit->IsCircuitEmpty())
 	{
 		output.simRes = SimulationResult::empty_circuit;
-		return output;
+		return;
 	}
 
 	if (m_circuit->CircuitHasOnlyGround())
 	{
 		output.simRes = SimulationResult::only_ground_circuit;
-		return output;
+		return;
 	}
 
 	// Risolve il sistema MNA; restituisce nullopt se la matrice è singolare
@@ -201,7 +240,7 @@ CircuitLab::SimulationOutput CircuitLab::Application::Simulate()
 	if (!result.has_value())
 	{
 		output.simRes = SimulationResult::solve_error;
-		return output;
+		return;
 	}
 
 	m_simulationResult = result.value();
@@ -269,7 +308,12 @@ CircuitLab::SimulationOutput CircuitLab::Application::Simulate()
 	output.currentComp = componentCurrent;
 	output.currentBranch = branchCurrent;
 	output.nodeVoltages = nodeToVoltage;
-	return output;
+
+	{
+		std::lock_guard<std::mutex> lock(m_swapMutex);
+		std::swap(m_backIndex, m_frontIndex);
+	}
+	m_newOutputReady = true;
 }
 
 void CircuitLab::Application::SetSimulationStatus(SimulationStatus status)
@@ -288,18 +332,7 @@ void CircuitLab::Application::New()
 // Delega il loop principale alla UI
 void CircuitLab::Application::Run()
 {
-	while (m_ui->IsWindowOpen())
-	{
-		sf::Time elapsed = m_deltaClock.getElapsedTime();
-		if (elapsed >= sf::seconds(SIMULATION_STEP) && m_simStatus == SimulationStatus::running)
-		{
-			m_deltaClock.restart();
-			auto output = Simulate();
-			m_ui->UpdateSimulation(output);
-			m_ui->CreateLinkViewCurrentList();
-		}
-		m_ui->HandleEvents();
-
-		m_ui->Render();
-	}
+	std::thread simThread(&Application::SimulationLoop, this);
+	RenderLoop();
+	simThread.join();
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <mutex>
 #include "Core/Circuit.h"
 #include "Core/Solver.h"
 #include "Common/ComponentType.h"
@@ -23,7 +24,13 @@ namespace CircuitLab {
 		Eigen::VectorXd m_simulationResult;         // Ultimo vettore soluzione MNA
 		std::unique_ptr<IOManager> m_ioManager;		// Gestisce salvataggio e caricamento su file JSON
 		sf::Clock m_deltaClock;
-		SimulationStatus m_simStatus;
+		std::atomic<SimulationStatus> m_simStatus;
+		std::atomic<bool> m_newOutputReady = false;
+		std::atomic<bool> m_isRunning = true;
+		SimulationOutput m_buffers[2];
+		int m_backIndex = 0;
+		int m_frontIndex = 1;
+		std::mutex m_swapMutex;
 
 		// Factory method: crea il componente corretto in base al tipo richiesto dalla UI.
 		// Restituisce nullptr per tipi non riconosciuti.
@@ -31,6 +38,8 @@ namespace CircuitLab {
 
 		static constexpr float SIMULATION_STEP = (1.0f / 60.0f);
 
+		void SimulationLoop();
+		void RenderLoop();
 	public:
 		Application();
 		~Application();
@@ -38,7 +47,7 @@ namespace CircuitLab {
 		// Esegue la simulazione MNA sull'attuale stato del circuito.
 		// Chiamato dalla UI tramite callback m_onRunSimulation.
 		// Restituisce un SimulationOutput con il risultato e i valori calcolati.
-		SimulationOutput Simulate();
+		void Simulate();
 
 		const Eigen::VectorXd &GetResult() const { return m_simulationResult; }
 
