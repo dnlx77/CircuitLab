@@ -20,9 +20,14 @@ namespace CircuitLab {
 		// Stampa il contributo della resistenza nella matrice MNA.
 		// Una resistenza tra i nodi n1 e n2 contribuisce con G a (n1,n1), (n2,n2)
 		// e con -G a (n1,n2), (n2,n1).
-		void Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B,
+		void StampMatrix(Eigen::MatrixXd &A, 
 			const std::map<int, int> &nodeMap,
 			const std::map<int, int> &voltageSourceMap) override;
+
+		void StampVector(Eigen::VectorXd &B,
+			const std::map<int, int> &nodeMap,
+			const std::map<int, int> &voltageSourceMap,
+			const StampContext &ctx) override;
 
 		void SaveSpecificData(nlohmann::json &j) const override;
 		std::map<ComponentValue, double> GetValues() const override;

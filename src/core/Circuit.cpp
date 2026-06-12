@@ -43,9 +43,7 @@ int CircuitLab::Circuit::ComputeNodes()
 	return static_cast<int>(nodes.size() + m_voltageSourceMap.size());
 }
 
-// Ricalcola la matrice MNA e il vettore b solo se il circuito è stato modificato.
-// Azzera le mappe, le ricostruisce, poi chiede a ogni componente di "stamparsi".
-void CircuitLab::Circuit::ComputeCircuit()
+void CircuitLab::Circuit::ComputeMatrix()
 {
 	if (!m_isDirty)
 		return;
@@ -59,15 +57,20 @@ void CircuitLab::Circuit::ComputeCircuit()
 	m_circuitVector = Eigen::VectorXd::Zero(num_nodes);
 
 	for (const auto &comp : m_components)
-		comp->Stamp(m_circuitMatrix, m_circuitVector, m_nodesMap, m_voltageSourceMap);
+		comp->StampMatrix(m_circuitMatrix, m_nodesMap, m_voltageSourceMap);
 
-	if(m_onFactorize)
+	if (m_onFactorize)
 		m_onFactorize(m_circuitMatrix);
 	m_isDirty = false;
+}
 
-	// LOG
-	LOG_DEBUG("Matrice del sistema: " << std::endl << m_circuitMatrix);
-	LOG_DEBUG("Vettore del sistema: " << std::endl << m_circuitVector);
+void CircuitLab::Circuit::ComputeVector(const StampContext &ctx)
+{
+	assert(!m_isDirty && "ComputerVector called before ComputeMatrix");
+	m_circuitVector = Eigen::VectorXd::Zero(m_circuitMatrix.rows());
+
+	for (const auto &comp : m_components)
+		comp->StampVector(m_circuitVector, m_nodesMap, m_voltageSourceMap, ctx);
 }
 
 // Restituisce l'ID del terminale dato il componente e l'indice del terminale (-1 se non trovato)
@@ -330,13 +333,12 @@ CircuitLab::Circuit::Circuit() : m_isDirty(true), m_nextNodeId(1)
 // I getter usano lazy evaluation: delegano a ComputeCircuit() che agisce solo se dirty
 const Eigen::MatrixXd &CircuitLab::Circuit::GetCircuitMatrix()
 {
-	ComputeCircuit();
+	ComputeMatrix();
 	return m_circuitMatrix;
 }
 
 const Eigen::VectorXd &CircuitLab::Circuit::GetCircuitVector()
 {
-	ComputeCircuit();
 	return m_circuitVector;
 }
 

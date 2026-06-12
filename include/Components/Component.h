@@ -9,6 +9,12 @@
 
 namespace CircuitLab {
 
+	struct StampContext {
+		double t = 0.0;
+		double companionState = 0.0;
+		double h = 0.0;
+	};
+
 	// Classe base astratta per tutti i componenti elettrici.
 	// Ogni componente ha un ID univoco, un certo numero di terminali
 	// e deve implementare il metodo Stamp() per contribuire alla matrice MNA.
@@ -43,9 +49,15 @@ namespace CircuitLab {
 		// Stampa il contributo del componente nella matrice MNA (A) e nel vettore (b).
 		// nodeMap mappa nodeId -> indice di riga/colonna nella matrice.
 		// voltageSourceMap mappa componentId -> indice della riga extra per le sorgenti di tensione.
-		virtual void Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B,
+
+		virtual void StampMatrix(Eigen::MatrixXd &A,
 			const std::map<int, int> &nodeMap,
 			const std::map<int, int> &voltageSourceMap) = 0;
+
+		virtual void StampVector(Eigen::VectorXd &B,
+			const std::map<int, int> &nodeMap,
+			const std::map<int, int> &voltageSourceMap,
+			const StampContext& ctx) = 0;
 
 		// Restituisce il numero di variabili extra introdotte nella matrice MNA.
 		// Di default 0; le sorgenti di tensione lo sovrascrivono con 1.

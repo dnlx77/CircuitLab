@@ -24,6 +24,7 @@ namespace CircuitLab {
 		Eigen::VectorXd m_simulationResult;         // Ultimo vettore soluzione MNA
 		std::unique_ptr<IOManager> m_ioManager;		// Gestisce salvataggio e caricamento su file JSON
 		sf::Clock m_deltaClock;
+		double m_simulationTime;
 		std::atomic<SimulationStatus> m_simStatus;
 		std::atomic<bool> m_newOutputReady = false;
 		std::atomic<bool> m_isRunning = true;

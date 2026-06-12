@@ -12,9 +12,14 @@ namespace CircuitLab {
 		Ground();
 
 		// Non contribuisce alla matrice MNA
-		void Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B,
+		void StampMatrix(Eigen::MatrixXd &A,
 			const std::map<int, int> &nodeMap,
 			const std::map<int, int> &voltageSourceMap) override;
+
+		void StampVector(Eigen::VectorXd &B,
+			const std::map<int, int> &nodeMap,
+			const std::map<int, int> &voltageSourceMap,
+			const StampContext &ctx) override;
 
 		// Segnala che questo componente è il nodo di riferimento del circuito
 		bool IsGround() const { return true; }

@@ -69,7 +69,7 @@ void CircuitLab::Application::RenderLoop()
 //   - onCreateLink:        la UI chiede ad Application di collegare due terminali
 //   - onGetCompTerminalId: la UI chiede i nodeId dei terminali di un componente
 //   - onDeleteComponent:   la UI chiede ad Application di rimuovere un componente
-CircuitLab::Application::Application()
+CircuitLab::Application::Application() : m_simulationTime(0.0)
 {
 	Logger::GetInstance().SetMinLogLevel(LogLevel::Debug);
 	Logger::GetInstance().SetLogToFile("circuitlab.log");
@@ -234,7 +234,13 @@ void CircuitLab::Application::Simulate()
 		return;
 	}
 
+	StampContext ctx;
+	ctx.t = m_simulationTime;
+	ctx.h = SIMULATION_STEP;
+
 	// Risolve il sistema MNA; restituisce nullopt se la matrice è singolare
+	m_circuit->ComputeMatrix();
+	m_circuit->ComputeVector(ctx);
 	auto result = m_solver->SolveCircuit(m_circuit->GetCircuitVector());
 
 	if (!result.has_value())
@@ -308,6 +314,8 @@ void CircuitLab::Application::Simulate()
 	output.currentComp = componentCurrent;
 	output.currentBranch = branchCurrent;
 	output.nodeVoltages = nodeToVoltage;
+
+	m_simulationTime += SIMULATION_STEP;
 
 	{
 		std::lock_guard<std::mutex> lock(m_swapMutex);

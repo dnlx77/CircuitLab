@@ -36,9 +36,6 @@ namespace CircuitLab {
 		// Costruisce le mappe nodi/sorgenti e restituisce la dimensione della matrice MNA
 		int ComputeNodes();
 
-		// Ricalcola matrice e vettore MNA se il circuito è dirty
-		void ComputeCircuit();
-
 		// Restituisce l'ID del terminale dato il componente e l'indice del terminale
 		int GetTerminalId(int compId, int termIndex) const;
 
@@ -80,6 +77,10 @@ namespace CircuitLab {
 		// (false quando si ricostruiscono le connessioni dopo una rimozione).
 		// Restituisce false se il collegamento non è valido o è duplicato.
 		bool ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2, bool addLink = true);
+
+		// Ricalcola matrice e vettore MNA se il circuito è dirty
+		void ComputeMatrix();
+		void ComputeVector(const StampContext &ctx);
 
 		void PrintCircuit();
 

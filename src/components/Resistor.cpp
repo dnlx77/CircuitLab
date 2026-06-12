@@ -27,11 +27,10 @@ void CircuitLab::Resistor::SetResistance(double res)
 //
 // I nodi connessi a ground (nodeId == 0) hanno indice -1
 // e non vengono scritti nella matrice.
-void CircuitLab::Resistor::Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B,
+void CircuitLab::Resistor::StampMatrix(Eigen::MatrixXd &A,
 	const std::map<int, int> &nodeMap,
 	const std::map<int, int> &voltageSourceMap)
 {
-	(void)B;
 	(void)voltageSourceMap;
 
 	// Recupera gli indici nella matrice (-1 se il terminale è a ground)
@@ -45,6 +44,14 @@ void CircuitLab::Resistor::Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B,
 		A(n1, n2) -= m_conductance;
 		A(n2, n1) -= m_conductance;
 	}
+}
+
+void CircuitLab::Resistor::StampVector(Eigen::VectorXd &B, const std::map<int, int> &nodeMap, const std::map<int, int> &voltageSourceMap, const StampContext &ctx)
+{
+	(void)B;
+	(void)nodeMap;
+	(void)voltageSourceMap;
+	(void)ctx;
 }
 
 void CircuitLab::Resistor::SaveSpecificData(nlohmann::json &j) const

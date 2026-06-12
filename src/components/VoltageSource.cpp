@@ -3,17 +3,7 @@
 CircuitLab::VoltageSource::VoltageSource(double value) : Component(2, ComponentType::voltageSource), m_voltage(value)
 {}
 
-// Contributo MNA di una sorgente di tensione tra n1 (+) e n2 (-),
-// con variabile extra k (corrente attraverso la sorgente):
-//
-//        n1    n2    k
-//  n1  [  0    0   +1 ]
-//  n2  [  0    0   -1 ]
-//   k  [ +1   -1    0 ]   b[k] = V
-//
-void CircuitLab::VoltageSource::Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B,
-	const std::map<int, int> &nodeMap,
-	const std::map<int, int> &voltageSourceMap)
+void CircuitLab::VoltageSource::StampMatrix(Eigen::MatrixXd & A, const std::map<int, int>&nodeMap, const std::map<int, int>&voltageSourceMap)
 {
 	// Recupera gli indici nella matrice (-1 se il terminale è a ground)
 	int n1 = (GetTerminals()[0].GetNodeId() != 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
@@ -24,6 +14,14 @@ void CircuitLab::VoltageSource::Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B,
 
 	if (n1 >= 0) { A(n1, k) += 1; A(k, n1) += 1; }
 	if (n2 >= 0) { A(n2, k) -= 1; A(k, n2) -= 1; }
+}
+
+void CircuitLab::VoltageSource::StampVector(Eigen::VectorXd & B, const std::map<int, int>&nodeMap, const std::map<int, int>&voltageSourceMap, const StampContext & ctx)
+{
+	(void)nodeMap;
+	(void)ctx;
+	// k è l'indice della riga extra per la corrente incognita
+	int k = voltageSourceMap.at(GetId());
 
 	B[k] = m_voltage;
 }

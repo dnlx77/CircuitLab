@@ -17,9 +17,14 @@ namespace CircuitLab {
 		// Stampa il contributo della sorgente nella matrice MNA.
 		// Aggiunge le righe/colonne per la corrente incognita k,
 		// e imposta b[k] = tensione.
-		void Stamp(Eigen::MatrixXd &A, Eigen::VectorXd &B,
+		void StampMatrix(Eigen::MatrixXd &A,
 			const std::map<int, int> &nodeMap,
 			const std::map<int, int> &voltageSourceMap) override;
+
+		void StampVector(Eigen::VectorXd &B,
+			const std::map<int, int> &nodeMap,
+			const std::map<int, int> &voltageSourceMap,
+			const StampContext &ctx) override;
 
 		// Segnala al Circuit che questa sorgente occupa una riga extra nella matrice
 		int GetExtraVariables() const override { return 1; }
