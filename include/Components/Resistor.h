@@ -30,6 +30,7 @@ namespace CircuitLab {
 			const StampContext &ctx) override;
 
 		void SaveSpecificData(nlohmann::json &j) const override;
+		void LoadSpecificData(const nlohmann::json &j) override;
 		std::map<ComponentValue, double> GetValues() const override;
 		void SetValues(const std::map<ComponentValue, double> &values) override;
 	};

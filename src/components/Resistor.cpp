@@ -59,6 +59,11 @@ void CircuitLab::Resistor::SaveSpecificData(nlohmann::json &j) const
 	j["value"] = m_resistance;
 }
 
+void CircuitLab::Resistor::LoadSpecificData(const nlohmann::json &j)
+{
+	SetResistance(j["value"]);
+}
+
 std::map<CircuitLab::ComponentValue, double> CircuitLab::Resistor::GetValues() const
 {
 

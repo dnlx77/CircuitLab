@@ -42,10 +42,6 @@ namespace CircuitLab {
 		// Restituisce l'ID del componente che possiede il terminale con l'ID dato
 		int GetComponentId(int terminalId) const;
 
-		// Restituisce un puntatore al componente con l'ID dato (nullptr se non trovato)
-		const Component *GetComponentById(int compId) const;
-		Component *GetComponentById(int compId);
-
 		// Controlla se il collegamento esiste già nella lista dei link (in entrambe le direzioni)
 		bool IsDuplicate(Link newLink) const;
 
@@ -55,6 +51,10 @@ namespace CircuitLab {
 		// Getter con lazy evaluation: ricalcolano il circuito se necessario
 		const Eigen::MatrixXd &GetCircuitMatrix();
 		const Eigen::VectorXd &GetCircuitVector();
+
+		// Restituisce un puntatore al componente con l'ID dato (nullptr se non trovato)
+		Component *GetComponentById(int compId);
+		const Component *GetComponentById(int compId) const;
 
 		// Aggiunge un componente al circuito e restituisce il suo ID
 		int AddComponent(std::unique_ptr<Component> comp);

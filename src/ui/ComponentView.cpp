@@ -6,7 +6,7 @@
 const std::map<CircuitLab::ComponentType, CircuitLab::ComponentDesign> CircuitLab::ComponentView::s_design = {
 	// { tipo, { larghezza, altezza, raggioTerminale, { offsetTerm0, offsetTerm1, ... } } }
 	{ CircuitLab::ComponentType::resistor,      { 20, 40, 4, { {0, -20}, {0, 20} }, -1 } },
-	{ CircuitLab::ComponentType::voltageSource,  { 20, 40, 4, { {0, -20}, {0, 20} }, 0 } },
+	{ CircuitLab::ComponentType::voltageGenerator,  { 20, 40, 4, { {0, -20}, {0, 20} }, 0 } },
 	{ CircuitLab::ComponentType::ground,         { 20, 20, 4, { {0, -20} }, -1 } },
 };
 

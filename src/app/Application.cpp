@@ -1,10 +1,10 @@
 #include <memory>
-#include <iostream>
+#include <nlohmann/json.hpp>
 
 #include "App/Application.h"
 #include "Core/Solver.h"
 #include "Components/Resistor.h"
-#include "Components/VoltageSource.h"
+#include "Components/VoltageGenerator.h"
 #include "Components/Ground.h"
 #include "Common/SimulationOutput.h"
 #include "UI/Ui.h"
@@ -15,13 +15,13 @@
 //   - resistor:      valore in Ohm
 //   - voltageSource: valore in Volt
 //   - ground:        valore ignorato
-std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type, double value)
+std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type)
 {
 	switch (type) {
-	case ComponentType::resistor:      return std::make_unique<Resistor>(value);
-	case ComponentType::voltageSource: return std::make_unique<VoltageSource>(value);
-	case ComponentType::ground:        return std::make_unique<Ground>();
-	default:                           return nullptr;
+	case ComponentType::resistor:			return std::make_unique<Resistor>(1000.0);
+	case ComponentType::voltageGenerator:	return std::make_unique<VoltageGenerator>(WaveForm::Create(WaveFormType::dcWaveForm));
+	case ComponentType::ground:				return std::make_unique<Ground>();
+	default:								return nullptr;
 	}
 }
 
@@ -86,10 +86,10 @@ CircuitLab::Application::Application() : m_simulationTime(0.0)
 			return SetSimulationStatus(status);
 		});
 
-	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type, double value) -> int
+	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type) -> int
 		{
 			m_circuit->InvalidateCircuit();
-			return m_circuit->AddComponent(MakeComponent(type, value));
+			return m_circuit->AddComponent(MakeComponent(type));
 		});
 
 	m_ui->SetOnCreateLink([this](int compId1, int termIndex1, int compId2, int termIndex2) -> bool
@@ -117,10 +117,15 @@ CircuitLab::Application::Application() : m_simulationTime(0.0)
 	// IOManager non conosce né Circuit né UI direttamente.
 
 	// Crea un componente nel circuito durante il caricamento da file
-	m_ioManager->SetOnComponentLoad([this](CircuitLab::ComponentType type, double value) -> int
+	m_ioManager->SetOnComponentLoad([this](CircuitLab::ComponentType type) -> int
 		{
 			m_circuit->InvalidateCircuit();
-			return m_circuit->AddComponent(MakeComponent(type, value));
+			return m_circuit->AddComponent(MakeComponent(type));
+		});
+
+	m_ioManager->SetOnComponentLoadData([this](int compId, const nlohmann::json &j)
+		{
+			m_circuit->GetComponentById(compId)->Load(j);
 		});
 
 	// Collega due terminali nel circuito durante il caricamento da file

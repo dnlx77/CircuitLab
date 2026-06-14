@@ -273,17 +273,17 @@ void CircuitLab::UI::HandleEvents()
 				{
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
 					{
-						int id = m_onCircuitChange(ComponentType::resistor, DEFAULT_RESISTANCE);
+						int id = m_onCircuitChange(ComponentType::resistor);
 						AddViewComponent(id, "Resistor", ComponentType::resistor, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
 					}
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
 					{
-						int id = m_onCircuitChange(ComponentType::voltageSource, DEFAULT_VOLTAGE);
-						AddViewComponent(id, "Voltage source", ComponentType::voltageSource, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+						int id = m_onCircuitChange(ComponentType::voltageGenerator);
+						AddViewComponent(id, "Voltage source", ComponentType::voltageGenerator, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
 					}
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G))
 					{
-						int id = m_onCircuitChange(ComponentType::ground, 0);
+						int id = m_onCircuitChange(ComponentType::ground);
 						AddViewComponent(id, "Ground", ComponentType::ground, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
 					}
 				}
@@ -899,7 +899,7 @@ void CircuitLab::UI::DrawComponents()
 		// Colore del corpo in base al tipo
 		if (comp.GetComponentType() == ComponentType::resistor)
 			rect.setFillColor(sf::Color::Green);
-		else if (comp.GetComponentType() == ComponentType::voltageSource)
+		else if (comp.GetComponentType() == ComponentType::voltageGenerator)
 			rect.setFillColor(sf::Color::Red);
 		else if (comp.GetComponentType() == ComponentType::ground)
 			rect.setFillColor(sf::Color::White);
@@ -962,7 +962,7 @@ void CircuitLab::UI::DrawComponents()
 		std::string compString;
 		if (comp.GetComponentType() == ComponentType::resistor)
 			compString += "R";
-		else if (comp.GetComponentType() == ComponentType::voltageSource)
+		else if (comp.GetComponentType() == ComponentType::voltageGenerator)
 			compString += "V";
 		else if (comp.GetComponentType() == ComponentType::ground)
 			compString += "G";

@@ -104,9 +104,6 @@
     <ClCompile Include="..\src\ui\UI.cpp">
       <Filter>src\UI</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\components\VoltageSource.cpp">
-      <Filter>src\Components</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\ui\ComponentView.cpp">
       <Filter>src\UI</Filter>
     </ClCompile>
@@ -118,6 +115,21 @@
     </ClCompile>
     <ClCompile Include="..\src\io\IOManager.cpp">
       <Filter>src\IO</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\components\WaveForm.cpp">
+      <Filter>src\Components</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\components\DCWaveForm.cpp">
+      <Filter>src\Components</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\components\SineWaveForm.cpp">
+      <Filter>src\Components</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\components\SquareWaveForm.cpp">
+      <Filter>src\Components</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\components\VoltageGenerator.cpp">
+      <Filter>src\Components</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -151,9 +163,6 @@
     <ClInclude Include="..\include\UI\ComponentView.h">
       <Filter>Include\UI</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\Components\VoltageSource.h">
-      <Filter>Include\Components</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\Components\Ground.h">
       <Filter>Include\Components</Filter>
     </ClInclude>
@@ -171,6 +180,21 @@
     </ClInclude>
     <ClInclude Include="..\include\Common\ComponentValue.h">
       <Filter>Include\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Components\WaveForm.h">
+      <Filter>Include\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Components\DCWaveForm.h">
+      <Filter>Include\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Components\SineWaveForm.h">
+      <Filter>Include\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Components\SquareWaveForm.h">
+      <Filter>Include\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Components\VoltageGenerator.h">
+      <Filter>Include\Components</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

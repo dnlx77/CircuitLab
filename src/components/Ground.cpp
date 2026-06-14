@@ -27,6 +27,11 @@ void CircuitLab::Ground::SaveSpecificData(nlohmann::json &j) const
 	(void)j;
 }
 
+void CircuitLab::Ground::LoadSpecificData(const nlohmann::json &j)
+{
+	(void)j;
+}
+
 std::map<CircuitLab::ComponentValue, double> CircuitLab::Ground::GetValues() const
 {
 	std::map<ComponentValue, double> map;

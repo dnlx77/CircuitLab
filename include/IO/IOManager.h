@@ -11,7 +11,9 @@ namespace CircuitLab {
 	// ad Application e UI senza conoscerle direttamente (pattern Mediator).
 
 	// Crea un componente nel circuito dato tipo e valore; restituisce il nuovo ID assegnato
-	using fnComponentLoad = std::function<int(CircuitLab::ComponentType type, double value)>;
+	using fnComponentLoad = std::function<int(CircuitLab::ComponentType type)>;
+
+	using fnComponentLoadData = std::function<void(int compId, const nlohmann::json &j)>;
 
 	// Collega due terminali nel circuito; restituisce true se il collegamento è valido
 	using fnLinkLoad = std::function<bool(int compId1, int termComp1, int compId2, int termComp2)>;
@@ -41,6 +43,7 @@ namespace CircuitLab {
 		fnNodeViewLoad m_onNodeViewLoad;
 		fnOnNew m_onNew;
 		fnUpdateNodeViewLinkIds m_onUpdateNodeViewLinkIds;
+		fnComponentLoadData m_onComponentLoadData;
 
 	public:
 		// Serializza l'intero stato del circuito (componenti, link, viste) in un file JSON.
@@ -61,5 +64,6 @@ namespace CircuitLab {
 		void SetOnNodeViewLoad(const fnNodeViewLoad &fn) { m_onNodeViewLoad = fn; }
 		void SetOnNew(const fnOnNew &fn) { m_onNew = fn; }
 		void SetOnUpdateNodeViewLinkIds(const fnUpdateNodeViewLinkIds &fn) { m_onUpdateNodeViewLinkIds = fn; }
+		void SetOnComponentLoadData(const fnComponentLoadData &fn) { m_onComponentLoadData = fn; }
 	};
 }

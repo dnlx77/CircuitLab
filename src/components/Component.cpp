@@ -18,3 +18,8 @@ void CircuitLab::Component::Save(nlohmann::json &j) const
 
 	SaveSpecificData(j);
 }
+
+void CircuitLab::Component::Load(const nlohmann::json &j)
+{
+	LoadSpecificData(j);
+}

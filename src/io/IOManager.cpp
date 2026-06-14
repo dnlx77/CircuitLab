@@ -104,10 +104,12 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 	std::map<int, int> m_loadVsRealLinkViewMap;
 
 	// Prima passata: crea i componenti e registra la corrispondenza tra ID salvato e ID nuovo
-	for (auto const compJson : j["components"])
+	for (auto const &compJson : j["components"])
 	{
-		double value = compJson.contains("value") ? compJson["value"].get<double>() : 0.0;
-		m_loadVsRealNodeMap[compJson["id"]] = m_onComponentLoad(compJson["type"].get<ComponentType>(), value);
+		int newId = m_onComponentLoad(compJson["type"].get<ComponentType>());
+		m_loadVsRealNodeMap[compJson["id"]] = newId;
+		if (m_onComponentLoadData)
+			m_onComponentLoadData(newId, compJson);
 	}
 
 	// Seconda passata: crea le viste grafiche, traducendo l'ID salvato con quello reale

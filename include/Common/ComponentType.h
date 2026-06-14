@@ -10,12 +10,24 @@ namespace CircuitLab {
 		node,          // Nodo generico (riservato per usi futuri)
 		ground,        // Nodo di riferimento (massa)
 		resistor,      // Resistenza ideale
-		voltageSource, // Sorgente di tensione ideale
+		voltageGenerator, // Sorgente di tensione ideale
 	};
 
 	NLOHMANN_JSON_SERIALIZE_ENUM(ComponentType, {
 		{ ComponentType::resistor, "Resistor" },
-		{ ComponentType::voltageSource, "VoltageSource" },
+		{ ComponentType::voltageGenerator, "VoltageGenerator" },
 		{ ComponentType::ground, "Ground" },
+	})
+
+	enum class WaveFormType {
+		dcWaveForm,
+		sineWaveForm,
+		squareWaveForm
+	};
+
+	NLOHMANN_JSON_SERIALIZE_ENUM(WaveFormType, {
+		{ WaveFormType::dcWaveForm, "DC" },
+		{ WaveFormType::sineWaveForm, "Sine" },
+		{ WaveFormType::squareWaveForm, "Square" },
 	})
 }

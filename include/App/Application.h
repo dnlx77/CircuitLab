@@ -35,7 +35,7 @@ namespace CircuitLab {
 
 		// Factory method: crea il componente corretto in base al tipo richiesto dalla UI.
 		// Restituisce nullptr per tipi non riconosciuti.
-		std::unique_ptr<Component> MakeComponent(ComponentType type, double value);
+		std::unique_ptr<Component> MakeComponent(ComponentType type);
 
 		static constexpr float SIMULATION_STEP = (1.0f / 60.0f);
 

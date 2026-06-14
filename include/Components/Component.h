@@ -28,6 +28,7 @@ namespace CircuitLab {
 
 		// Metodi per la serializzazione - da implementare nelle classi derivate
 		virtual void SaveSpecificData(nlohmann::json &j) const = 0;
+		virtual void LoadSpecificData(const nlohmann::json &j) = 0;
 
 	public:
 		// Il costruttore alloca automaticamente il numero corretto di terminali
@@ -45,6 +46,7 @@ namespace CircuitLab {
 		ComponentType GetType() const { return m_componentType; }
 
 		void Save(nlohmann::json &j) const;
+		void Load(const nlohmann::json &j);
 
 		// Stampa il contributo del componente nella matrice MNA (A) e nel vettore (b).
 		// nodeMap mappa nodeId -> indice di riga/colonna nella matrice.

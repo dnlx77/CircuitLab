@@ -3,6 +3,9 @@
 namespace CircuitLab {
 	enum class ComponentValue {
 		resistance,
-		voltage
+		voltage,
+		amplitude,
+		frequency,
+		phase
 	};
 }
