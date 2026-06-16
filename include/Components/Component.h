@@ -65,6 +65,9 @@ namespace CircuitLab {
 		// Di default 0; le sorgenti di tensione lo sovrascrivono con 1.
 		virtual int GetExtraVariables() const { return 0; }
 
+		virtual WaveFormType GetWaveFormType() const { return WaveFormType::none; }
+		virtual void SetWaveFormType(WaveFormType type) { (void)type; }
+
 		virtual std::map<ComponentValue, double> GetValues() const = 0;
 		virtual void SetValues(const std::map<ComponentValue, double> &values) = 0;
 	};

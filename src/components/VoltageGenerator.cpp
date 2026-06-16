@@ -27,6 +27,16 @@ void CircuitLab::VoltageGenerator::StampVector(Eigen::VectorXd &B, const std::ma
 	B[k] = m_waveForm->Evaluate(ctx.t);
 }
 
+CircuitLab::WaveFormType CircuitLab::VoltageGenerator::GetWaveFormType() const
+{
+	return m_waveForm->GetType();
+}
+
+void CircuitLab::VoltageGenerator::SetWaveFormType(WaveFormType type)
+{
+	SetWaveForm(WaveForm::Create(type));
+}
+
 void CircuitLab::VoltageGenerator::SetWaveForm(std::unique_ptr<WaveForm> waveForm)
 {
 	m_waveForm = std::move(waveForm);

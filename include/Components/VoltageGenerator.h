@@ -29,8 +29,10 @@ namespace CircuitLab {
 
 		// Segnala al Circuit che questa sorgente occupa una riga extra nella matrice
 		int GetExtraVariables() const override { return 1; }
-
+		WaveFormType GetWaveFormType() const override;
+		void SetWaveFormType(WaveFormType type) override;
 		void SetWaveForm(std::unique_ptr<WaveForm> waveForm);
+
 
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;

@@ -877,6 +877,28 @@ void CircuitLab::UI::DrawImageGuiPanel()
 				m_onSetComponentValues(m_selectedComponent.compId, values);
 			}
 		}
+
+		// Combo box waveform — visibile solo per VoltageGenerator
+		WaveFormType currentWaveForm = m_onGetWaveFormType(m_selectedComponent.compId);
+		if (currentWaveForm != WaveFormType::none)
+		{
+			const char *waveFormNames[] = { "DC", "Sine", "Square" };
+			WaveFormType waveFormValues[] = {
+				WaveFormType::dcWaveForm,
+				WaveFormType::sineWaveForm,
+				WaveFormType::squareWaveForm
+			};
+
+			constexpr int waveFormCount = static_cast<int>(std::size(waveFormNames));
+
+			int currentIndex = 0;
+			for (int i = 0; i < waveFormCount; i++)
+				if (waveFormValues[i] == currentWaveForm)
+					currentIndex = i;
+
+			if (ImGui::Combo("Waveform", &currentIndex, waveFormNames, waveFormCount))
+				m_onSetWaveFormType(m_selectedComponent.compId, waveFormValues[currentIndex]);
+		}
 		
 	}
 
@@ -1071,12 +1093,12 @@ std::string_view CircuitLab::UI::ComponentValueToString(CircuitLab::ComponentVal
 {
 	switch (value)
 	{
-	case ComponentValue::resistance:
-		return "Resistance";
-	case ComponentValue::voltage:
-		return "Voltage";
-	default:
-		return "";
+	case ComponentValue::resistance: return "Resistance";
+	case ComponentValue::voltage:    return "Voltage";
+	case ComponentValue::amplitude:  return "Amplitude";
+	case ComponentValue::frequency:  return "Frequency";
+	case ComponentValue::phase:      return "Phase";
+	default:                         return "Unknown";
 	}
 }
 
@@ -1231,42 +1253,6 @@ int CircuitLab::UI::AddViewLink(int comp1, int term1, int nodeViewId)
 	m_linkViewList.emplace_back(newLink);
 	return newLink.id;
 }
-
-//int CircuitLab::UI::AddViewLinkToNode(int comp1, int term1, int nodeViewId)
-//{
-//	sf::Vector2f pA, pB;
-//	LinkView newLink;
-//	for (const auto &comp : m_componentViewList)
-//	{
-//		if (comp.GetComponentLink() == comp1)
-//		{
-//			sf::Vector2f rotTerm = GetRotatedTerminalPos(comp, term1);
-//			pA.x = comp.GetPosition().x + rotTerm.x;
-//			pA.y = comp.GetPosition().y + rotTerm.y;
-//			break;
-//		}
-//
-//	}
-//
-//	for (const auto &nv : m_nodeViewList)
-//		if (nv.id == nodeViewId)
-//		{
-//			pB = nv.position;
-//			break;
-//		}
-//
-//	newLink.id = ++m_linkViewIdCount;
-//	newLink.pointA = pA;
-//	newLink.pointB = pB;
-//	newLink.compIdA = comp1;
-//	newLink.termIndexA = term1;
-//	newLink.compIdB = std::nullopt;
-//	newLink.termIndexB = std::nullopt;
-//	newLink.nodeViewId = nodeViewId;
-//	m_linkViewList.emplace_back(newLink);
-//
-//	return newLink.id;
-//}
 
 int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position)
 {

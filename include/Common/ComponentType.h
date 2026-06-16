@@ -20,12 +20,14 @@ namespace CircuitLab {
 	})
 
 	enum class WaveFormType {
+		none,
 		dcWaveForm,
 		sineWaveForm,
 		squareWaveForm
 	};
 
 	NLOHMANN_JSON_SERIALIZE_ENUM(WaveFormType, {
+		{ WaveFormType::none, "None" },
 		{ WaveFormType::dcWaveForm, "DC" },
 		{ WaveFormType::sineWaveForm, "Sine" },
 		{ WaveFormType::squareWaveForm, "Square" },

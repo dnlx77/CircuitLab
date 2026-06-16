@@ -199,6 +199,17 @@ CircuitLab::Application::Application() : m_simulationTime(0.0)
 			return m_circuit->GetComponentsByNodeId(nodeId);
 		});
 
+	m_ui->SetOnGetWaveFormType([this](int compId) -> WaveFormType
+		{
+			return m_circuit->GetComponentById(compId)->GetWaveFormType();
+		});
+
+	m_ui->SetOnSetWaveFormType([this](int compId, WaveFormType type)
+		{
+			m_circuit->InvalidateCircuit();
+			m_circuit->GetComponentById(compId)->SetWaveFormType(type);
+		});
+
 	m_circuit->SetOnFactorize([this](const Eigen::MatrixXd &matrix) 
 		{
 			m_solver->Factorize(matrix);

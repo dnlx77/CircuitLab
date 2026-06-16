@@ -38,7 +38,9 @@ namespace CircuitLab {
 		using fnSetSimulationStatus = std::function<void(const SimulationStatus status)>;
 		using fnGetComponentsByNodeId = std::function<std::vector<int>(int nodeId)>;
 		using fnGetComponentTypeById = std::function<ComponentType(int compId)>;
-
+		using fnGetWaveFormType = std::function<WaveFormType(int)>;
+		using fnSetWaveFormType = std::function<void(int, WaveFormType)>;
+		
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
 		unsigned int m_heigth;  // Altezza della finestra (pixel)
@@ -93,6 +95,8 @@ namespace CircuitLab {
 		fnSetSimulationStatus m_onSetSimulationStatus;
 		fnGetComponentsByNodeId m_onGetComponentsByNodeId;
 		fnGetComponentTypeById m_onGetComponentTypeById;
+		fnGetWaveFormType m_onGetWaveFormType;
+		fnSetWaveFormType m_onSetWaveFormType;
 
 		// Determina quale componente o terminale è stato cliccato nella posizione pos.
 		// Aggiorna selComp con il risultato.
@@ -162,6 +166,8 @@ namespace CircuitLab {
 		void SetOnSetSimulationStatus(const fnSetSimulationStatus &func) { m_onSetSimulationStatus = func; }
 		void SetOnGetComponentsByNodeId(const fnGetComponentsByNodeId &func) { m_onGetComponentsByNodeId = func; }
 		void SetOnGetComponentTypeById(const fnGetComponentTypeById &func) { m_onGetComponentTypeById = func; }
+		void SetOnGetWaveFormType(const fnGetWaveFormType &func) { m_onGetWaveFormType = func; }
+		void SetOnSetWaveFormType(const fnSetWaveFormType &func) { m_onSetWaveFormType = func; }
 
 		// Aggiunge la vista grafica di un componente al canvas
 		void AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation);
