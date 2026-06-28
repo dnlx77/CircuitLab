@@ -70,5 +70,7 @@ namespace CircuitLab {
 
 		virtual std::map<ComponentValue, double> GetValues() const = 0;
 		virtual void SetValues(const std::map<ComponentValue, double> &values) = 0;
+
+		static std::string ComponentTypeName(ComponentType type);
 	};
 }

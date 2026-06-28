@@ -73,13 +73,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(SolutionDir)bin\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\</IntDir>
-    <IncludePath>$(SolutionDir)external\SFML\include;$(SolutionDir)external\imgui;$(SolutionDir)external\imgui-sfml;$(SolutionDir)external\nlohmann-json\include;$(SolutionDir)include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)external\SFML\include;$(SolutionDir)external\imgui;$(SolutionDir)external\imgui-sfml;$(SolutionDir)external\nlohmann-json\include;$(SolutionDir)include;$(SolutionDIr)external\implot;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)lib\SFML\$(Configuration);$(SolutionDir)lib\imgui-sfml\$(Configuration);$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(SolutionDir)bin\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)obj\$(ProjectName)\$(Configuration)\</IntDir>
-    <IncludePath>$(SolutionDir)external\SFML\include;$(SolutionDir)external\imgui;$(SolutionDir)external\imgui-sfml;$(SolutionDir)external\nlohmann-json\include;$(SolutionDir)include;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)external\SFML\include;$(SolutionDir)external\imgui;$(SolutionDir)external\imgui-sfml;$(SolutionDir)external\nlohmann-json\include;$(SolutionDir)include;$(SolutionDIr)external\implot;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)lib\SFML\$(Configuration);$(SolutionDir)lib\imgui-sfml\$(Configuration);$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -163,6 +163,8 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClCompile Include="..\external\imgui\imgui_draw.cpp" />
     <ClCompile Include="..\external\imgui\imgui_tables.cpp" />
     <ClCompile Include="..\external\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="..\external\implot\implot.cpp" />
+    <ClCompile Include="..\external\implot\implot_items.cpp" />
     <ClCompile Include="..\src\app\Application.cpp" />
     <ClCompile Include="..\src\Common\Logger.cpp" />
     <ClCompile Include="..\src\components\Component.cpp" />
@@ -186,6 +188,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClInclude Include="..\include\Common\ComponentType.h" />
     <ClInclude Include="..\include\Common\ComponentValue.h" />
     <ClInclude Include="..\include\Common\Logger.h" />
+    <ClInclude Include="..\include\Common\OscilloscopeChannel.h" />
     <ClInclude Include="..\include\Common\SimulationOutput.h" />
     <ClInclude Include="..\include\Common\UICommon.h" />
     <ClInclude Include="..\include\Components\Component.h" />

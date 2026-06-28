@@ -1,5 +1,6 @@
 #include <imgui-SFML.h>
 #include <imgui.h>
+#include <implot.h>
 #include <numbers>
 
 #include "UI/Ui.h"
@@ -811,6 +812,10 @@ void CircuitLab::UI::DrawImageGuiPanel()
 	if (ImGui::Button("Load"))
 		m_onLoad(pathBuffer);
 
+	ImGui::Separator();
+	if (ImGui::Button(m_showOscilloscope ? "Hide Oscilloscope" : "Show Oscilloscope"))
+		m_showOscilloscope = !m_showOscilloscope;
+	ImGui::Separator();
 
 	// Mostra il risultato della simulazione o un messaggio di errore
 	if (m_simulationOutput.simRes == SimulationResult::solve_error)
@@ -903,6 +908,10 @@ void CircuitLab::UI::DrawImageGuiPanel()
 	}
 
 	ImGui::End();
+
+	// Dopo ImGui::End() chiama DrawOscilloscope se visibile
+	if (m_showOscilloscope)
+		DrawOscilloscope();
 }
 
 void CircuitLab::UI::DrawComponents()
@@ -1089,6 +1098,157 @@ void CircuitLab::UI::DrawParticles(int linkId)
 	}
 }
 
+void CircuitLab::UI::DrawOscilloscope()
+{
+	ImGui::Begin("Oscilloscope", &m_showOscilloscope);
+
+	// Raccogli nodi disponibili
+	std::vector<int> nodeIds;
+	for (auto &[id, v] : m_simulationOutput.nodeVoltages)
+		nodeIds.push_back(id);
+	std::sort(nodeIds.begin(), nodeIds.end());
+
+	// Raccogli componenti disponibili
+	std::vector<int> compIds;
+	for (auto &[id, v] : m_simulationOutput.currentComp)
+		compIds.push_back(id);
+
+	// Combo ProbeType
+	const char *probeTypeNames[] = { "Node Voltage", "Differential Voltage", "Component Current", "Branch Current" };
+	ImGui::Combo("Probe Type", &m_oscProbeType, probeTypeNames, std::size(probeTypeNames));
+
+	ProbeType selectedType = static_cast<ProbeType>(m_oscProbeType);
+
+	// Combo idA
+	if (selectedType == ProbeType::nodeVoltage ||
+		selectedType == ProbeType::differentialVoltage ||
+		selectedType == ProbeType::branchCurrent)
+	{
+		std::vector<std::string> nodeLabels;
+		for (int id : nodeIds) nodeLabels.push_back("Node " + std::to_string(id));
+		std::vector<const char *> nodeLabelPtrs;
+		for (auto &s : nodeLabels) nodeLabelPtrs.push_back(s.c_str());
+		ImGui::Combo("Node A", &m_oscIdA, nodeLabelPtrs.data(), static_cast<int>(nodeLabelPtrs.size()));
+	}
+	else
+	{
+		std::vector<std::string> compLabels;
+		for (int id : compIds) compLabels.push_back("Comp " + std::to_string(id));
+		std::vector<const char *> compLabelPtrs;
+		for (auto &s : compLabels) compLabelPtrs.push_back(s.c_str());
+		ImGui::Combo("Component", &m_oscCompId, compLabelPtrs.data(), static_cast<int>(compLabelPtrs.size()));
+	}
+
+	// Combo idB
+	if (selectedType == ProbeType::differentialVoltage ||
+		selectedType == ProbeType::branchCurrent)
+	{
+		std::vector<std::string> nodeLabels;
+		for (int id : nodeIds) nodeLabels.push_back("Node " + std::to_string(id));
+		std::vector<const char *> nodeLabelPtrs;
+		for (auto &s : nodeLabels) nodeLabelPtrs.push_back(s.c_str());
+		ImGui::Combo("Node B", &m_oscIdB, nodeLabelPtrs.data(), static_cast<int>(nodeLabelPtrs.size()));
+	}
+
+	// Combo compId per branchCurrent
+	if (selectedType == ProbeType::branchCurrent)
+	{
+		std::vector<std::string> compLabels;
+		for (int id : compIds) compLabels.push_back("Comp " + std::to_string(id));
+		std::vector<const char *> compLabelPtrs;
+		for (auto &s : compLabels) compLabelPtrs.push_back(s.c_str());
+		ImGui::Combo("Branch Component", &m_oscCompId, compLabelPtrs.data(), static_cast<int>(compLabelPtrs.size()));
+	}
+
+	// Pulsante aggiungi
+	if (ImGui::Button("Add Channel"))
+	{
+		int idA = -1, idB = -1, compId = -1;
+
+		if (selectedType == ProbeType::componentCurrent)
+			compId = compIds.empty() ? -1 : compIds[m_oscCompId];
+		else
+			idA = nodeIds.empty() ? -1 : nodeIds[m_oscIdA];
+
+		if (selectedType == ProbeType::differentialVoltage ||
+			selectedType == ProbeType::branchCurrent)
+			idB = nodeIds.empty() ? -1 : nodeIds[m_oscIdB];
+
+		if (selectedType == ProbeType::branchCurrent)
+			compId = compIds.empty() ? -1 : compIds[m_oscCompId];
+
+		if (idA != -1 || compId != -1)
+			m_onAddChannel(selectedType, idA, idB, compId);
+	}
+
+	ImGui::Separator();
+
+	// Lista canali — FUORI dal blocco ImPlot
+	auto channels = m_onGetOscilloscopeChannels();
+	bool removedChannel = false;
+	for (int i = 0; i < static_cast<int>(channels.size()); i++)
+	{
+		auto &channel = channels[i];
+
+		bool active = channel.active;
+		if (ImGui::Checkbox(("##active" + channel.label).c_str(), &active))
+			m_onSetChannelActive(i, active);
+
+		ImGui::SameLine();
+
+		if (ImGui::Button(("X##" + channel.label).c_str()))
+		{
+			m_onRemoveChannel(i);
+			removedChannel = true;
+			break;
+		}
+
+		ImGui::SameLine();
+
+		ImGui::TextColored(
+			ImVec4(channel.channelColor.r, channel.channelColor.g, channel.channelColor.b, 1.0f),
+			channel.label.c_str());
+	}
+
+	ImGui::Separator();
+
+	// Plot — solo se non abbiamo appena rimosso un canale
+	if (!removedChannel && ImPlot::BeginPlot("##oscilloscope", ImVec2(-1, 300)))
+	{
+		ImPlot::SetupAxes("Samples", "Value");
+
+		for (auto &channel : channels)
+		{
+			if (!channel.active || channel.samples.empty())
+				continue;
+
+			std::vector<float> samples;
+			samples.reserve(channel.samples.size());
+			std::transform(channel.samples.begin(), channel.samples.end(),
+				std::back_inserter(samples),
+				[](double d) { return static_cast<float>(d); });
+
+			ImPlotSpec spec;
+			spec.LineColor = ImVec4(
+				channel.channelColor.r,
+				channel.channelColor.g,
+				channel.channelColor.b,
+				1.0f);
+
+			ImPlot::PlotLine(channel.label.c_str(),
+				samples.data(),
+				static_cast<int>(samples.size()),
+				1.0,
+				0.0,
+				spec);
+		}
+
+		ImPlot::EndPlot();
+	}
+
+	ImGui::End();
+}
+
 std::string_view CircuitLab::UI::ComponentValueToString(CircuitLab::ComponentValue value)
 {
 	switch (value)
@@ -1221,10 +1381,13 @@ CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &t
 	m_width(width),
 	m_heigth(heigth),
 	m_title(title),
-	m_window(sf::VideoMode({ m_width, m_heigth }), m_title)
+	m_window(sf::VideoMode({ m_width, m_heigth }), m_title),
+	m_showOscilloscope(false)
 {
 	if (!ImGui::SFML::Init(m_window))
 		throw std::runtime_error("Impossibile inizializzare ImGui-SFML");
+
+	ImPlot::CreateContext();
 
 	if (!m_font.openFromFile("JetBrainsMono-Regular.ttf"))
 		throw std::runtime_error("Impossibile caricare il font");
@@ -1238,6 +1401,7 @@ CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &t
 // Shutdown di ImGui-SFML alla distruzione della UI
 CircuitLab::UI::~UI()
 {
+	ImPlot::DestroyContext();
 	ImGui::SFML::Shutdown();
 }
 

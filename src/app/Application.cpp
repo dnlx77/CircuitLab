@@ -79,6 +79,15 @@ CircuitLab::Application::Application() : m_simulationTime(0.0)
 	m_ioManager = std::make_unique<IOManager>();
 	m_solver = std::make_unique<Solver>();
 
+	m_channelPalette = {
+			{1.0f, 0.4f, 0.4f},  // rosso
+			{0.4f, 1.0f, 0.4f},  // verde
+			{0.4f, 0.6f, 1.0f},  // blu
+			{1.0f, 1.0f, 0.4f},  // giallo
+			{1.0f, 0.6f, 0.2f},  // arancio
+			{0.8f, 0.4f, 1.0f},  // viola
+	};
+
 	m_simStatus = SimulationStatus::stopped;
 
 	m_ui->SetOnSetSimulationStatus([this](SimulationStatus status)
@@ -210,6 +219,31 @@ CircuitLab::Application::Application() : m_simulationTime(0.0)
 			m_circuit->GetComponentById(compId)->SetWaveFormType(type);
 		});
 
+	m_ui->SetOnGetOscilloscopeChannels([this]() -> std::vector<OscilloscopeChannel> 
+		{
+			std::lock_guard<std::mutex> lock(m_channelsMutex);
+			return m_channels;
+		});
+
+	m_ui->SetOnAddChannel([this](ProbeType type, int idA, int idB, int compId)
+		{
+			AddChannel(type, idA, idB, compId);
+		});
+
+	m_ui->SetOnSetChannelActive([this](int index, bool active)
+		{
+			std::lock_guard<std::mutex> lock(m_channelsMutex);
+			if (index < static_cast<int>(m_channels.size()))
+				m_channels[index].active = active;
+		});
+
+	m_ui->SetOnRemoveChannel([this](int index)
+		{
+			std::lock_guard<std::mutex> lock(m_channelsMutex);
+			if (index < static_cast<int>(m_channels.size()))
+				m_channels.erase(m_channels.begin() + index);
+		});
+
 	m_circuit->SetOnFactorize([this](const Eigen::MatrixXd &matrix) 
 		{
 			m_solver->Factorize(matrix);
@@ -332,6 +366,40 @@ void CircuitLab::Application::Simulate()
 	output.nodeVoltages = nodeToVoltage;
 
 	m_simulationTime += SIMULATION_STEP;
+	{
+		std::lock_guard<std::mutex> lock(m_channelsMutex);
+		// Aggiorna i buffer dell'oscilloscopio
+		for (auto &channel : m_channels)
+		{
+			if (!channel.active) continue;
+
+			double value = 0.0;
+			switch (channel.type)
+			{
+			case ProbeType::nodeVoltage:
+				if (output.nodeVoltages.count(channel.idA))
+					value = output.nodeVoltages.at(channel.idA);
+				break;
+			case ProbeType::differentialVoltage:
+				if (output.nodeVoltages.count(channel.idA) && output.nodeVoltages.count(channel.idB))
+					value = output.nodeVoltages.at(channel.idA) - output.nodeVoltages.at(channel.idB);
+				break;
+			case ProbeType::componentCurrent:
+				if (output.currentComp.count(channel.idA))
+					value = output.currentComp.at(channel.idA);
+				break;
+			case ProbeType::branchCurrent:
+				auto key = std::make_tuple(channel.idA, channel.idB, channel.compId);
+				if (output.currentBranch.count(key))
+					value = output.currentBranch.at(key);
+				break;
+			}
+
+			channel.samples.push_back(value);
+			if ((int)channel.samples.size() > channel.maxSamples)
+				channel.samples.pop_front();
+		}
+	}
 
 	{
 		std::lock_guard<std::mutex> lock(m_swapMutex);
@@ -345,6 +413,30 @@ void CircuitLab::Application::SetSimulationStatus(SimulationStatus status)
 	m_simStatus = status;
 	if (status == SimulationStatus::running)
 		m_ui->CreateLinkParticlesList();
+}
+
+void CircuitLab::Application::AddChannel(ProbeType type, int idA, int idB, int compId)
+{
+	std::string label;
+	OscilloscopeChannel channel;
+
+	switch (type)
+	{
+	case ProbeType::nodeVoltage:          label = "V(" + std::to_string(idA) + ")"; break;
+	case ProbeType::differentialVoltage:  label = "V(" + std::to_string(idA) + "," + std::to_string(idB) + ")"; break;
+	case ProbeType::componentCurrent:     label = "I(" + Component::ComponentTypeName(m_circuit->GetComponentType(compId)) + std::to_string(compId) + ")"; break;
+	case ProbeType::branchCurrent:        label = "I(" + std::to_string(idA) + "," + std::to_string(idB) + ")"; break;
+	}
+
+	channel.type = type;
+	channel.idA = idA;
+	channel.idB = idB;
+	channel.compId = compId;
+	channel.label = label;
+	channel.channelColor = m_channelPalette[(m_nextChannelColorIndex) % m_channelPalette.size()];
+	m_nextChannelColorIndex++;
+
+	m_channels.push_back(std::move(channel));
 }
 
 void CircuitLab::Application::New()

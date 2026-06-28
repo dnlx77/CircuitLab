@@ -60,6 +60,9 @@
     <Filter Include="src\IO">
       <UniqueIdentifier>{ec763395-81f3-4ea7-936f-9255c5af89a9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="External\ImPlot">
+      <UniqueIdentifier>{aa639ae1-3128-4105-b884-817809c09edf}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\external\imgui-sfml\imgui-SFML.cpp">
@@ -131,6 +134,12 @@
     <ClCompile Include="..\src\components\VoltageGenerator.cpp">
       <Filter>src\Components</Filter>
     </ClCompile>
+    <ClCompile Include="..\external\implot\implot.cpp">
+      <Filter>External\ImPlot</Filter>
+    </ClCompile>
+    <ClCompile Include="..\external\implot\implot_items.cpp">
+      <Filter>External\ImPlot</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\Components\Terminal.h">
@@ -195,6 +204,9 @@
     </ClInclude>
     <ClInclude Include="..\include\Components\VoltageGenerator.h">
       <Filter>Include\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Common\OscilloscopeChannel.h">
+      <Filter>Include\Common</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

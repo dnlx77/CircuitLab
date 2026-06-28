@@ -7,6 +7,7 @@
 #include "UI/ComponentView.h"
 #include "Common/UICommon.h"
 #include "Common/ComponentValue.h"
+#include "Common/OscilloscopeChannel.h"
 
 namespace CircuitLab {
 
@@ -40,6 +41,10 @@ namespace CircuitLab {
 		using fnGetComponentTypeById = std::function<ComponentType(int compId)>;
 		using fnGetWaveFormType = std::function<WaveFormType(int)>;
 		using fnSetWaveFormType = std::function<void(int, WaveFormType)>;
+		using fnGetOscilloscopeChannels = std::function<std::vector<OscilloscopeChannel>()>;
+		using fnAddChannel = std::function<void(ProbeType, int, int, int)>;
+		using fnSetChannelActive = std::function<void(int, bool)>;
+		using fnRemoveChannel = std::function<void(int)>;
 		
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
@@ -67,6 +72,12 @@ namespace CircuitLab {
 		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30); // Colore sfondo canvas
 
 		SimulationOutput m_simulationOutput;  // Ultimo risultato di simulazione ricevuto
+		bool m_showOscilloscope;
+
+		int m_oscProbeType = 0;    // indice nel combo ProbeType
+		int m_oscIdA = 0;
+		int m_oscIdB = 0;
+		int m_oscCompId = 0;
 
 		SelecetedComponent m_selectedComponent; // Componente/terminale attualmente selezionato
 
@@ -97,6 +108,10 @@ namespace CircuitLab {
 		fnGetComponentTypeById m_onGetComponentTypeById;
 		fnGetWaveFormType m_onGetWaveFormType;
 		fnSetWaveFormType m_onSetWaveFormType;
+		fnGetOscilloscopeChannels m_onGetOscilloscopeChannels;
+		fnAddChannel m_onAddChannel;
+		fnSetChannelActive m_onSetChannelActive;
+		fnRemoveChannel m_onRemoveChannel;
 
 		// Determina quale componente o terminale è stato cliccato nella posizione pos.
 		// Aggiorna selComp con il risultato.
@@ -129,6 +144,8 @@ namespace CircuitLab {
 		void DrawNodes();
 
 		void DrawParticles(int linkId);
+
+		void DrawOscilloscope();
 
 		std::string_view ComponentValueToString(ComponentValue value);
 
@@ -168,6 +185,10 @@ namespace CircuitLab {
 		void SetOnGetComponentTypeById(const fnGetComponentTypeById &func) { m_onGetComponentTypeById = func; }
 		void SetOnGetWaveFormType(const fnGetWaveFormType &func) { m_onGetWaveFormType = func; }
 		void SetOnSetWaveFormType(const fnSetWaveFormType &func) { m_onSetWaveFormType = func; }
+		void SetOnGetOscilloscopeChannels(const fnGetOscilloscopeChannels &func) { m_onGetOscilloscopeChannels = func; }
+		void SetOnAddChannel(const fnAddChannel &fn) { m_onAddChannel = fn; }
+		void SetOnSetChannelActive(const fnSetChannelActive &func) { m_onSetChannelActive = func; }
+		void SetOnRemoveChannel(const fnRemoveChannel &func) { m_onRemoveChannel = func; }
 
 		// Aggiunge la vista grafica di un componente al canvas
 		void AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation);

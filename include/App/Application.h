@@ -6,6 +6,7 @@
 #include "Common/ComponentType.h"
 #include "Common/SimulationOutput.h"
 #include "IO/IOManager.h"
+#include "Common/OscilloscopeChannel.h"
 
 namespace CircuitLab {
 
@@ -31,7 +32,11 @@ namespace CircuitLab {
 		SimulationOutput m_buffers[2];
 		int m_backIndex = 0;
 		int m_frontIndex = 1;
-		std::mutex m_swapMutex;
+		std::mutex m_swapMutex, m_channelsMutex;
+
+		std::vector<OscilloscopeChannel> m_channels;
+		std::vector<Color> m_channelPalette;
+		int m_nextChannelColorIndex = 0;
 
 		// Factory method: crea il componente corretto in base al tipo richiesto dalla UI.
 		// Restituisce nullptr per tipi non riconosciuti.
@@ -53,6 +58,8 @@ namespace CircuitLab {
 		const Eigen::VectorXd &GetResult() const { return m_simulationResult; }
 
 		void SetSimulationStatus(SimulationStatus status);
+
+		void AddChannel(ProbeType type, int idA, int idB = -1, int compId = -1);
 
 		// Resetta il circuito e la UI allo stato iniziale (canvas vuoto)
 		void New();
