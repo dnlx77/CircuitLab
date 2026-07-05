@@ -25,7 +25,11 @@ namespace CircuitLab {
 		Eigen::VectorXd m_simulationResult;         // Ultimo vettore soluzione MNA
 		std::unique_ptr<IOManager> m_ioManager;		// Gestisce salvataggio e caricamento su file JSON
 		sf::Clock m_deltaClock;
-		double m_simulationTime;
+		std::atomic<double> m_simulationTime;
+		double m_hSim;
+		double m_windowTime;
+		int m_decimationFactor;
+		int m_sampleCounter;
 		std::atomic<SimulationStatus> m_simStatus;
 		std::atomic<bool> m_newOutputReady = false;
 		std::atomic<bool> m_isRunning = true;
@@ -38,14 +42,16 @@ namespace CircuitLab {
 		std::vector<Color> m_channelPalette;
 		int m_nextChannelColorIndex = 0;
 
+		static constexpr double BATCH_TARGET_TIME = 0.010; // 10ms virtuali per batch
+		static constexpr int MAX_STEPS_PER_BATCH = 5000;   // anti-spirale della morte
+
 		// Factory method: crea il componente corretto in base al tipo richiesto dalla UI.
 		// Restituisce nullptr per tipi non riconosciuti.
 		std::unique_ptr<Component> MakeComponent(ComponentType type);
 
-		static constexpr float SIMULATION_STEP = (1.0f / 60.0f);
-
 		void SimulationLoop();
 		void RenderLoop();
+
 	public:
 		Application();
 		~Application();
@@ -54,6 +60,12 @@ namespace CircuitLab {
 		// Chiamato dalla UI tramite callback m_onRunSimulation.
 		// Restituisce un SimulationOutput con il risultato e i valori calcolati.
 		void Simulate();
+
+		void UpdateDecimationFactor();
+
+		void AutoSync();
+
+		void SampleChannels(const SimulationOutput &output);
 
 		const Eigen::VectorXd &GetResult() const { return m_simulationResult; }
 

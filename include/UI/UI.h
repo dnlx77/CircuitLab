@@ -45,6 +45,13 @@ namespace CircuitLab {
 		using fnAddChannel = std::function<void(ProbeType, int, int, int)>;
 		using fnSetChannelActive = std::function<void(int, bool)>;
 		using fnRemoveChannel = std::function<void(int)>;
+		using fnGetHSim = std::function<double()>;
+		using fnSetHSim = std::function<void(int)>;
+		using fnSetWindowTime = std::function<void(double)>;
+		using fnAutoSync = std::function<void()>;
+		using fnGetSimulationTime = std::function<double()>;
+		using fnGetDecimationFactor = std::function<int()>;
+		using fnGetMaxFrequency = std::function<double()>;
 		
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
@@ -73,6 +80,9 @@ namespace CircuitLab {
 
 		SimulationOutput m_simulationOutput;  // Ultimo risultato di simulazione ricevuto
 		bool m_showOscilloscope;
+		double m_windowTime;
+
+		int m_hSimIndex;
 
 		int m_oscProbeType = 0;    // indice nel combo ProbeType
 		int m_oscIdA = 0;
@@ -112,6 +122,13 @@ namespace CircuitLab {
 		fnAddChannel m_onAddChannel;
 		fnSetChannelActive m_onSetChannelActive;
 		fnRemoveChannel m_onRemoveChannel;
+		fnGetHSim m_onGetHSim;
+		fnSetHSim m_onSetHSim;
+		fnSetWindowTime m_onSetWindowTime;
+		fnAutoSync m_onAutoSync;
+		fnGetSimulationTime m_onGetSimulationTime;
+		fnGetDecimationFactor m_onGetDecimationFactor;
+		fnGetMaxFrequency m_onGetMaxFrequency;
 
 		// Determina quale componente o terminale è stato cliccato nella posizione pos.
 		// Aggiorna selComp con il risultato.
@@ -189,6 +206,13 @@ namespace CircuitLab {
 		void SetOnAddChannel(const fnAddChannel &fn) { m_onAddChannel = fn; }
 		void SetOnSetChannelActive(const fnSetChannelActive &func) { m_onSetChannelActive = func; }
 		void SetOnRemoveChannel(const fnRemoveChannel &func) { m_onRemoveChannel = func; }
+		void SetOnGetHSim(const fnGetHSim &func) { m_onGetHSim = func; }
+		void SetOnSetHSim(const fnSetHSim &func) { m_onSetHSim = func; }
+		void SetOnSetWindowTime(const fnSetWindowTime &func) { m_onSetWindowTime = func; }
+		void SetOnAutoSync(const fnAutoSync &func) { m_onAutoSync = func; }
+		void SetOnGetSimulationTime(const fnGetSimulationTime &func) { m_onGetSimulationTime = func; }
+		void SetOnGetDecimationFactor(const fnGetDecimationFactor &func) { m_onGetDecimationFactor = func; }
+		void SetOnGetMaxFrequency(const fnGetMaxFrequency &func) { m_onGetMaxFrequency = func; }
 
 		// Aggiunge la vista grafica di un componente al canvas
 		void AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation);
@@ -224,5 +248,7 @@ namespace CircuitLab {
 		void CreateLinkParticlesList();
 
 		void CreateLinkViewCurrentList();
+
+		void SetWindowTime(double windowTIme) { m_windowTime = windowTIme; }
 	};
 }

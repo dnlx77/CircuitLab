@@ -10,6 +10,11 @@
 #include "UI/Ui.h"
 #include "Common/Logger.h"
 
+static constexpr double TIMESTEP_VALUES[] = {
+	1.0, 0.1, 0.01, 0.001,
+	0.0001, 0.00001, 0.000001, 0.0000001, 0.00000001, 0.000000001, 0.0000000001, 0.00000000001, 0.000000000001,
+};
+
 // Crea il componente appropriato in base al tipo richiesto.
 // Il valore ha significato diverso a seconda del tipo:
 //   - resistor:      valore in Ohm
@@ -27,13 +32,41 @@ std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(Co
 
 void CircuitLab::Application::SimulationLoop()
 {
-	while (m_ui->IsWindowOpen())
+	while (m_isRunning)
 	{
-		sf::Time elapsed = m_deltaClock.getElapsedTime();
-		if (elapsed >= sf::seconds(SIMULATION_STEP) && m_simStatus == SimulationStatus::running)
+		if (m_simStatus == SimulationStatus::running)
 		{
-			m_deltaClock.restart();
-			Simulate();
+			int requiredSteps = std::max(1,
+				static_cast<int>(BATCH_TARGET_TIME / m_hSim));
+			int actualSteps = std::min(requiredSteps, MAX_STEPS_PER_BATCH);
+
+			auto batchStart = std::chrono::steady_clock::now();
+
+			// Esegui il batch — Simulate() solo calcola, non swappa
+			for (int i = 0; i < actualSteps; i++)
+				Simulate();
+
+			// Swap e notifica UNA SOLA VOLTA alla fine del batch
+			{
+				std::lock_guard<std::mutex> lock(m_swapMutex);
+				std::swap(m_backIndex, m_frontIndex);
+			}
+			m_newOutputReady = true;
+
+			auto batchEnd = std::chrono::steady_clock::now();
+			double elapsed = std::chrono::duration<double>(
+				batchEnd - batchStart).count();
+
+			// Sleep basato sul tempo virtuale simulato
+			double virtualTimeSimulated = actualSteps * m_hSim;
+			double remaining = virtualTimeSimulated - elapsed;
+			if (remaining > 0.0)
+				std::this_thread::sleep_for(
+					std::chrono::duration<double>(remaining));
+		}
+		else
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		}
 	}
 }
@@ -49,15 +82,12 @@ void CircuitLab::Application::RenderLoop()
 				std::lock_guard<std::mutex> lock(m_swapMutex);
 				localOutput = m_buffers[m_frontIndex];
 			}
-
 			m_ui->UpdateSimulation(localOutput);
 			m_ui->CreateLinkViewCurrentList();
 			m_newOutputReady = false;
-
 		}
 
 		m_ui->HandleEvents();
-
 		m_ui->Render();
 	}
 	m_isRunning = false;
@@ -69,7 +99,7 @@ void CircuitLab::Application::RenderLoop()
 //   - onCreateLink:        la UI chiede ad Application di collegare due terminali
 //   - onGetCompTerminalId: la UI chiede i nodeId dei terminali di un componente
 //   - onDeleteComponent:   la UI chiede ad Application di rimuovere un componente
-CircuitLab::Application::Application() : m_simulationTime(0.0)
+CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 }, m_windowTime{ 1.0 }, m_decimationFactor{ 1 }, m_sampleCounter{ 0 }
 {
 	Logger::GetInstance().SetMinLogLevel(LogLevel::Debug);
 	Logger::GetInstance().SetLogToFile("circuitlab.log");
@@ -244,6 +274,43 @@ CircuitLab::Application::Application() : m_simulationTime(0.0)
 				m_channels.erase(m_channels.begin() + index);
 		});
 
+	m_ui->SetOnGetHSim([this]() -> double 
+		{
+			return m_hSim;
+		});
+
+	m_ui->SetOnSetHSim([this](int index) 
+		{
+			m_hSim = TIMESTEP_VALUES[index];
+			UpdateDecimationFactor();
+		});
+
+	m_ui->SetOnSetWindowTime([this](double windowTime) 
+		{
+			m_windowTime = windowTime;
+			UpdateDecimationFactor();
+		});
+
+	m_ui->SetOnAutoSync([this]() 
+		{
+			AutoSync();
+		});
+
+	m_ui->SetOnGetSimulationTime([this]() -> double 
+		{
+			return m_simulationTime;
+		});
+
+	m_ui->SetOnGetDecimationFactor([this]()->int 
+		{
+			return m_decimationFactor;
+		});
+
+	m_ui->SetOnGetMaxFrequency([this]()->double 
+		{
+			return m_circuit->GetMaxFrequency();
+		});
+
 	m_circuit->SetOnFactorize([this](const Eigen::MatrixXd &matrix) 
 		{
 			m_solver->Factorize(matrix);
@@ -286,7 +353,7 @@ void CircuitLab::Application::Simulate()
 
 	StampContext ctx;
 	ctx.t = m_simulationTime;
-	ctx.h = SIMULATION_STEP;
+	ctx.h = m_hSim;
 
 	// Risolve il sistema MNA; restituisce nullopt se la matrice è singolare
 	m_circuit->ComputeMatrix();
@@ -365,40 +432,13 @@ void CircuitLab::Application::Simulate()
 	output.currentBranch = branchCurrent;
 	output.nodeVoltages = nodeToVoltage;
 
-	m_simulationTime += SIMULATION_STEP;
+	m_simulationTime += m_hSim;
+
+	m_sampleCounter++;
+	if (m_sampleCounter >= m_decimationFactor)
 	{
-		std::lock_guard<std::mutex> lock(m_channelsMutex);
-		// Aggiorna i buffer dell'oscilloscopio
-		for (auto &channel : m_channels)
-		{
-			if (!channel.active) continue;
-
-			double value = 0.0;
-			switch (channel.type)
-			{
-			case ProbeType::nodeVoltage:
-				if (output.nodeVoltages.count(channel.idA))
-					value = output.nodeVoltages.at(channel.idA);
-				break;
-			case ProbeType::differentialVoltage:
-				if (output.nodeVoltages.count(channel.idA) && output.nodeVoltages.count(channel.idB))
-					value = output.nodeVoltages.at(channel.idA) - output.nodeVoltages.at(channel.idB);
-				break;
-			case ProbeType::componentCurrent:
-				if (output.currentComp.count(channel.idA))
-					value = output.currentComp.at(channel.idA);
-				break;
-			case ProbeType::branchCurrent:
-				auto key = std::make_tuple(channel.idA, channel.idB, channel.compId);
-				if (output.currentBranch.count(key))
-					value = output.currentBranch.at(key);
-				break;
-			}
-
-			channel.samples.push_back(value);
-			if ((int)channel.samples.size() > channel.maxSamples)
-				channel.samples.pop_front();
-		}
+		m_sampleCounter = 0;
+		SampleChannels(output);
 	}
 
 	{
@@ -406,6 +446,73 @@ void CircuitLab::Application::Simulate()
 		std::swap(m_backIndex, m_frontIndex);
 	}
 	m_newOutputReady = true;
+}
+
+void CircuitLab::Application::UpdateDecimationFactor()
+{
+	m_decimationFactor = std::max(1,
+		static_cast<int>(std::ceil(m_windowTime /
+			(OscilloscopeChannel::MAX_SAMPLES * m_hSim))));
+
+	m_sampleCounter = 0;
+
+	std::lock_guard<std::mutex> lock(m_channelsMutex);
+	for (auto &channel : m_channels)
+		channel.samples.clear();
+
+	LOG_DEBUG("windowTime=" << m_windowTime
+		<< " h_sim=" << m_hSim
+		<< " decimationFactor=" << m_decimationFactor);
+}
+
+void CircuitLab::Application::AutoSync()
+{
+	double fMax = m_circuit->GetMaxFrequency();
+	if (fMax <= 0.0)
+		return;  // nessun generatore AC — nulla da sincronizzare
+
+	m_windowTime = 4.0 / fMax;
+	m_ui->SetWindowTime(m_windowTime);  // aggiorna il widget in UI
+	UpdateDecimationFactor();
+}
+
+void CircuitLab::Application::SampleChannels(const SimulationOutput &output)
+{
+	std::lock_guard<std::mutex> lock(m_channelsMutex);
+	for (auto &channel : m_channels)
+	{
+		if (!channel.active) continue;
+
+		double value = 0.0;
+		switch (channel.type)
+		{
+		case ProbeType::nodeVoltage:
+			if (output.nodeVoltages.count(channel.idA))
+				value = output.nodeVoltages.at(channel.idA);
+			break;
+		case ProbeType::differentialVoltage:
+			if (output.nodeVoltages.count(channel.idA) &&
+				output.nodeVoltages.count(channel.idB))
+				value = output.nodeVoltages.at(channel.idA) -
+				output.nodeVoltages.at(channel.idB);
+			break;
+		case ProbeType::componentCurrent:
+			if (output.currentComp.count(channel.idA))
+				value = output.currentComp.at(channel.idA);
+			break;
+		case ProbeType::branchCurrent:
+		{
+			auto key = std::make_tuple(channel.idA, channel.idB, channel.compId);
+			if (output.currentBranch.count(key))
+				value = output.currentBranch.at(key);
+			break;
+		}
+		}
+
+		channel.samples.push_back(value);
+		if (static_cast<int>(channel.samples.size()) > OscilloscopeChannel::MAX_SAMPLES)
+			channel.samples.pop_front();
+	}
 }
 
 void CircuitLab::Application::SetSimulationStatus(SimulationStatus status)
@@ -436,6 +543,7 @@ void CircuitLab::Application::AddChannel(ProbeType type, int idA, int idB, int c
 	channel.channelColor = m_channelPalette[(m_nextChannelColorIndex) % m_channelPalette.size()];
 	m_nextChannelColorIndex++;
 
+	std::lock_guard<std::mutex> lock(m_channelsMutex);
 	m_channels.push_back(std::move(channel));
 }
 

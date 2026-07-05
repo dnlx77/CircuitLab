@@ -111,5 +111,9 @@ namespace CircuitLab {
 		std::vector<int> GetComponentsByNodeId(int nodeId) const;
 
 		ComponentType GetComponentType(int compId) const;
+
+		double GetMinFrequency() const;
+
+		double GetMaxFrequency() const;
 	};
 }

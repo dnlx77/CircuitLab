@@ -119,6 +119,42 @@ bool CircuitLab::Circuit::IsDuplicate(Link newLink) const
 	return duplicate;
 }
 
+double CircuitLab::Circuit::GetMinFrequency() const
+{
+	double minFrequency = 0.0;
+	for (auto const &comp : m_components)
+	{
+		if (comp->GetType() == ComponentType::voltageGenerator && comp->GetWaveFormType() != WaveFormType::none && comp->GetWaveFormType() != WaveFormType::dcWaveForm)
+		{
+			auto value = comp->GetValues();
+
+			double freq = value.at(ComponentValue::frequency);
+			if (freq > 0.0 && (minFrequency == 0.0 || freq < minFrequency))
+				minFrequency = freq;
+		}
+	}
+
+	return minFrequency;
+}
+
+double CircuitLab::Circuit::GetMaxFrequency() const
+{
+	double maxFrequency = 0.0;
+	for (auto const &comp : m_components)
+	{
+		if (comp->GetType() == ComponentType::voltageGenerator &&
+			comp->GetWaveFormType() != WaveFormType::none &&
+			comp->GetWaveFormType() != WaveFormType::dcWaveForm)
+		{
+			auto value = comp->GetValues();
+			double freq = value.at(ComponentValue::frequency);
+			if (freq > maxFrequency)
+				maxFrequency = freq;
+		}
+	}
+	return maxFrequency;
+}
+
 // Stampa a console lo stato di ogni componente e dei suoi terminali (debug)
 void CircuitLab::Circuit::PrintCircuit()
 {

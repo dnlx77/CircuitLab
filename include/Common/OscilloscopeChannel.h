@@ -18,12 +18,12 @@ namespace CircuitLab {
     struct OscilloscopeChannel {
         ProbeType type;
         int idA = -1;
-        int idB = -1;        // usato solo per differentialVoltage e branchCurrent
-        int compId = -1;     // usato solo per branchCurrent
+        int idB = -1;
+        int compId = -1;
         std::string label;
-        std::deque<double> samples;
+        std::deque<double> samples;  // sempre 512 campioni max
         bool active = true;
-        int maxSamples = 512;
+        static constexpr int MAX_SAMPLES = 4096;
         Color channelColor;
     };
 }

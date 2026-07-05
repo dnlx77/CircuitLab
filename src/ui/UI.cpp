@@ -800,6 +800,19 @@ void CircuitLab::UI::DrawImageGuiPanel()
 	if (ImGui::Button("Stop Simulation"))
 		m_onSetSimulationStatus(SimulationStatus::stopped);
 
+	ImGui::Separator();
+
+	const char *timestepNames[] = {
+		"1 s", "100 ms", "10 ms", "1 ms",
+		"100 us", "10 us", "1 us", "100 ns", "10 ns", "1 ns", "100 ps", "10 ps", "1 ps"
+	};
+	constexpr int timestepCount = static_cast<int>(std::size(timestepNames));
+
+	if (ImGui::Combo("Timestep", &m_hSimIndex, timestepNames, timestepCount))
+		m_onSetHSim(m_hSimIndex);
+
+	ImGui::Separator();
+
 	if (ImGui::Button("New"))
 		m_onNew();
 
@@ -1113,10 +1126,21 @@ void CircuitLab::UI::DrawOscilloscope()
 	for (auto &[id, v] : m_simulationOutput.currentComp)
 		compIds.push_back(id);
 
-	// Combo ProbeType
-	const char *probeTypeNames[] = { "Node Voltage", "Differential Voltage", "Component Current", "Branch Current" };
-	ImGui::Combo("Probe Type", &m_oscProbeType, probeTypeNames, std::size(probeTypeNames));
+	// Bug 4 fix — clamp indici per evitare out-of-bounds
+	if (!nodeIds.empty())
+	{
+		m_oscIdA = std::min(m_oscIdA, static_cast<int>(nodeIds.size()) - 1);
+		m_oscIdB = std::min(m_oscIdB, static_cast<int>(nodeIds.size()) - 1);
+	}
+	if (!compIds.empty())
+		m_oscCompId = std::min(m_oscCompId, static_cast<int>(compIds.size()) - 1);
 
+	// Combo ProbeType
+	const char *probeTypeNames[] = {
+		"Node Voltage", "Differential Voltage",
+		"Component Current", "Branch Current"
+	};
+	ImGui::Combo("Probe Type", &m_oscProbeType, probeTypeNames, std::size(probeTypeNames));
 	ProbeType selectedType = static_cast<ProbeType>(m_oscProbeType);
 
 	// Combo idA
@@ -1128,7 +1152,9 @@ void CircuitLab::UI::DrawOscilloscope()
 		for (int id : nodeIds) nodeLabels.push_back("Node " + std::to_string(id));
 		std::vector<const char *> nodeLabelPtrs;
 		for (auto &s : nodeLabels) nodeLabelPtrs.push_back(s.c_str());
-		ImGui::Combo("Node A", &m_oscIdA, nodeLabelPtrs.data(), static_cast<int>(nodeLabelPtrs.size()));
+		if (!nodeLabelPtrs.empty())
+			ImGui::Combo("Node A", &m_oscIdA, nodeLabelPtrs.data(),
+				static_cast<int>(nodeLabelPtrs.size()));
 	}
 	else
 	{
@@ -1136,7 +1162,9 @@ void CircuitLab::UI::DrawOscilloscope()
 		for (int id : compIds) compLabels.push_back("Comp " + std::to_string(id));
 		std::vector<const char *> compLabelPtrs;
 		for (auto &s : compLabels) compLabelPtrs.push_back(s.c_str());
-		ImGui::Combo("Component", &m_oscCompId, compLabelPtrs.data(), static_cast<int>(compLabelPtrs.size()));
+		if (!compLabelPtrs.empty())
+			ImGui::Combo("Component", &m_oscCompId, compLabelPtrs.data(),
+				static_cast<int>(compLabelPtrs.size()));
 	}
 
 	// Combo idB
@@ -1147,7 +1175,9 @@ void CircuitLab::UI::DrawOscilloscope()
 		for (int id : nodeIds) nodeLabels.push_back("Node " + std::to_string(id));
 		std::vector<const char *> nodeLabelPtrs;
 		for (auto &s : nodeLabels) nodeLabelPtrs.push_back(s.c_str());
-		ImGui::Combo("Node B", &m_oscIdB, nodeLabelPtrs.data(), static_cast<int>(nodeLabelPtrs.size()));
+		if (!nodeLabelPtrs.empty())
+			ImGui::Combo("Node B", &m_oscIdB, nodeLabelPtrs.data(),
+				static_cast<int>(nodeLabelPtrs.size()));
 	}
 
 	// Combo compId per branchCurrent
@@ -1157,8 +1187,22 @@ void CircuitLab::UI::DrawOscilloscope()
 		for (int id : compIds) compLabels.push_back("Comp " + std::to_string(id));
 		std::vector<const char *> compLabelPtrs;
 		for (auto &s : compLabels) compLabelPtrs.push_back(s.c_str());
-		ImGui::Combo("Branch Component", &m_oscCompId, compLabelPtrs.data(), static_cast<int>(compLabelPtrs.size()));
+		if (!compLabelPtrs.empty())
+			ImGui::Combo("Branch Component", &m_oscCompId, compLabelPtrs.data(),
+				static_cast<int>(compLabelPtrs.size()));
 	}
+
+	// Window time configurabile
+	if (ImGui::InputDouble("Window (s)", &m_windowTime, 0.0, 0.0, "%.6f"))
+	{
+		if (m_windowTime < 0.000001) m_windowTime = 0.000001;
+		m_onSetWindowTime(m_windowTime);
+	}
+
+	ImGui::SameLine();
+
+	if (ImGui::Button("Auto Sync"))
+		m_onAutoSync();
 
 	// Pulsante aggiungi
 	if (ImGui::Button("Add Channel"))
@@ -1206,27 +1250,59 @@ void CircuitLab::UI::DrawOscilloscope()
 		ImGui::SameLine();
 
 		ImGui::TextColored(
-			ImVec4(channel.channelColor.r, channel.channelColor.g, channel.channelColor.b, 1.0f),
+			ImVec4(channel.channelColor.r, channel.channelColor.g,
+				channel.channelColor.b, 1.0f),
 			channel.label.c_str());
 	}
 
+	if (ImGui::Button("Reset Zoom"))
+		ImPlot::SetNextAxesToFit();
+
+	ImGui::SameLine();
+	ImGui::TextDisabled("Scroll: zoom X | Ctrl+Scroll: zoom Y");
+
 	ImGui::Separator();
 
-	// Plot — solo se non abbiamo appena rimosso un canale
+	// Bug 1 fix — xscale corretto: distanza reale tra campioni
+	// Ogni campione dista h_sim * decimationFactor secondi simulati
+	double hSim = m_onGetHSim();
+	int decimationFactor = m_onGetDecimationFactor();
+	double xscale = hSim * static_cast<double>(decimationFactor);
+
+	// Bug 2 fix — asse X scorrevole aggiornato ogni frame
+	double tMax = m_onGetSimulationTime();
+	double fMax = m_onGetMaxFrequency();
+
+	// Trigger matematico — allinea tMin al multiplo del periodo
+	if (fMax > 0.0)
+	{
+		double T = 1.0 / fMax;
+		// Trova il multiplo intero di T più vicino a tMax - windowTime
+		double tMinRaw = tMax - m_windowTime;
+		double tMin = std::floor(tMinRaw / T) * T;
+		tMax = tMin + m_windowTime;
+	}
+	else
+	{
+		// Nessun segnale AC — finestra scorrevole normale
+		tMax = tMax;
+	}
+
+	double tMin = tMax - m_windowTime;
+
+	// Plot
 	if (!removedChannel && ImPlot::BeginPlot("##oscilloscope", ImVec2(-1, 300)))
 	{
-		ImPlot::SetupAxes("Samples", "Value");
+		ImPlot::SetupAxes("Time (s)", "Value");
+
+		// Bug 2 fix — ImPlotCond_Always per aggiornare ogni frame
+		ImPlot::SetupAxisLimits(ImAxis_X1, tMin, tMax, ImPlotCond_Always);
+		ImPlot::SetupAxisLimits(ImAxis_Y1, -15, 15, ImPlotCond_Once);
 
 		for (auto &channel : channels)
 		{
 			if (!channel.active || channel.samples.empty())
 				continue;
-
-			std::vector<float> samples;
-			samples.reserve(channel.samples.size());
-			std::transform(channel.samples.begin(), channel.samples.end(),
-				std::back_inserter(samples),
-				[](double d) { return static_cast<float>(d); });
 
 			ImPlotSpec spec;
 			spec.LineColor = ImVec4(
@@ -1235,11 +1311,21 @@ void CircuitLab::UI::DrawOscilloscope()
 				channel.channelColor.b,
 				1.0f);
 
+			// Bug 3 fix — passa direttamente il deque convertito in vector<double>
+			// senza conversione a float
+			std::vector<double> samples(
+				channel.samples.begin(),
+				channel.samples.end());
+
+			// xstart: il primo campione si trova a tMax - count*xscale
+			int count = static_cast<int>(samples.size());
+			double xstart = tMax - (count * xscale);
+
 			ImPlot::PlotLine(channel.label.c_str(),
 				samples.data(),
-				static_cast<int>(samples.size()),
-				1.0,
-				0.0,
+				count,
+				xscale,
+				xstart,
 				spec);
 		}
 
@@ -1378,11 +1464,13 @@ void CircuitLab::UI::UpdateLinksForNodeView(int nodeViewId, sf::Vector2f newPos)
 // Inizializza la finestra SFML e ImGui-SFML.
 // Lancia un'eccezione se ImGui o il font non riescono ad inizializzarsi.
 CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &title) :
-	m_width(width),
-	m_heigth(heigth),
-	m_title(title),
-	m_window(sf::VideoMode({ m_width, m_heigth }), m_title),
-	m_showOscilloscope(false)
+	m_width{ width },
+	m_heigth{ heigth },
+	m_title{ title },
+	m_window{ sf::VideoMode({ m_width, m_heigth }), m_title },
+	m_showOscilloscope{ false },
+	m_hSimIndex{ 3 },
+	m_windowTime { 1.0 }
 {
 	if (!ImGui::SFML::Init(m_window))
 		throw std::runtime_error("Impossibile inizializzare ImGui-SFML");
