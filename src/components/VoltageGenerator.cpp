@@ -8,14 +8,14 @@ CircuitLab::VoltageGenerator::VoltageGenerator(std::unique_ptr<WaveForm> waveFor
 // Metodo della variabile aggiuntiva (MNA): la corrente k che attraversa il generatore
 // è un'incognita extra. Riga/colonna k impongono V(n1) - V(n2) = tensione (vedi StampVector),
 // mentre le righe n1/n2 riflettono che quella corrente entra/esce dai nodi collegati.
-void CircuitLab::VoltageGenerator::StampMatrix(Eigen::MatrixXd &A, const std::map<int, int> &nodeMap, const std::map<int, int> &VoltageGeneratorMap)
+void CircuitLab::VoltageGenerator::StampMatrix(Eigen::MatrixXd &A, const std::map<int, int> &nodeMap, const std::map<int, int> &VoltageSourceMap)
 {
 	// Recupera gli indici nella matrice (-1 se il terminale è a ground)
 	int n1 = (GetTerminals()[0].GetNodeId() != 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
 	int n2 = (GetTerminals()[1].GetNodeId() != 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
 
 	// k è l'indice della riga extra per la corrente incognita
-	int k = VoltageGeneratorMap.at(GetId());
+	int k = VoltageSourceMap.at(GetId());
 
 	if (n1 >= 0) { A(n1, k) += 1; A(k, n1) += 1; }
 	if (n2 >= 0) { A(n2, k) -= 1; A(k, n2) -= 1; }

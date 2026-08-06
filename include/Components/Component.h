@@ -44,10 +44,10 @@ namespace CircuitLab {
 		static void Reset() { s_nextId = 1; }
 		const std::vector<Terminal> &GetTerminals() const { return m_terminals; }
 		Terminal &GetTerminal(int index) { return m_terminals[index]; }
-		// ATTENZIONE al nome: nonostante "TerminalId", restituisce il nodeId di OGNI terminale
-		// (non l'ID del terminale). Da non confondere con Circuit::GetTerminalId(compId, termIndex),
+		// Restituisce il nodeId di ogni terminale del componente (non l'ID del terminale).
+		// Da non confondere con Circuit::GetTerminalId(compId, termIndex),
 		// che invece restituisce l'ID del terminale stesso.
-		std::vector<int> GetTerminalId() const;
+		std::vector<int> GetTerminalNodeIds() const;
 		virtual bool IsGround() const { return false; }
 		ComponentType GetType() const { return m_componentType; }
 

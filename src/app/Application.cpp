@@ -413,7 +413,7 @@ void CircuitLab::Application::Simulate()
 	{
 		if (comp->GetType() == ComponentType::resistor)
 		{
-			std::vector<int> termList = comp->GetTerminalId();
+			std::vector<int> termList = comp->GetTerminalNodeIds();
 			if (termList[0] == 0)
 				v1 = 0.0;
 			else

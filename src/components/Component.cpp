@@ -2,8 +2,7 @@
 
 int CircuitLab::Component::s_nextId = 1;
 
-// Vedi nota nell'header: nonostante il nome, restituisce i nodeId dei terminali, non i loro ID.
-std::vector<int> CircuitLab::Component::GetTerminalId() const
+std::vector<int> CircuitLab::Component::GetTerminalNodeIds() const
 {
 	std::vector<int> vecTerminal;
 	for (auto const &terminal : m_terminals)

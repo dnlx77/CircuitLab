@@ -181,7 +181,7 @@ std::vector<int> CircuitLab::Circuit::GetNodesIdFromComponentId(int compId) cons
 {
 	for (const auto &comp : m_components)
 		if (comp->GetId() == compId)
-			return comp->GetTerminalId();
+			return comp->GetTerminalNodeIds();
 	return std::vector<int>();
 }
 
@@ -224,7 +224,7 @@ std::vector<int> CircuitLab::Circuit::GetComponentsByNodeId(int nodeId) const
 	std::vector<int> connectComp;
 	for (const auto &comp : m_components)
 	{
-		std::vector<int> terms = comp->GetTerminalId();
+		std::vector<int> terms = comp->GetTerminalNodeIds();
 		for (const auto term : terms)
 		{
 			if (term == nodeId)
@@ -237,11 +237,9 @@ std::vector<int> CircuitLab::Circuit::GetComponentsByNodeId(int nodeId) const
 	return connectComp;
 }
 
-// Restituisce ComponentType::node (valore riservato, mai assegnato a un componente reale)
-// se compId non corrisponde a nessun componente esistente.
 CircuitLab::ComponentType CircuitLab::Circuit::GetComponentType(int compId) const
 {
-	for (const auto &comp:m_components)
+	for (const auto &comp : m_components)
 		if (comp->GetId() == compId)
 			return comp->GetType();
 
@@ -277,12 +275,12 @@ bool CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 	}
 
 	if (!comp1 || !comp2) return false;
-	
+
 	// Evita di ricollegare terminali già sullo stesso nodo
 	if (comp1->GetTerminal(termComp1).GetId() == comp2->GetTerminal(termComp2).GetId()) return false;
 
 
-	if(addLink)
+	if (addLink)
 		if (!IsDuplicate(Link{ comp1Id, termComp1, comp2Id, termComp2 }))
 			m_links.emplace_back(Link{ comp1Id, termComp1, comp2Id, termComp2 });
 
@@ -320,7 +318,7 @@ bool CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 
 		// DEBUG
 		LOG_DEBUG("Collegamento di un terminale a ground");
-		LOG_DEBUG("Link tra comp" << comp1Id << " term" << termComp1 << " (" << comp1->GetTerminal(termComp1).GetNodeId() << 
+		LOG_DEBUG("Link tra comp" << comp1Id << " term" << termComp1 << " (" << comp1->GetTerminal(termComp1).GetNodeId() <<
 			") -> comp" << comp2Id << " term" << termComp2 << " (" << comp2->GetTerminal(termComp2).GetNodeId() << ")");
 		return true;
 	}
@@ -368,16 +366,13 @@ bool CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 CircuitLab::Circuit::Circuit() : m_isDirty(true), m_nextNodeId(1)
 {}
 
-// Lazy: ricalcola la matrice solo se il circuito è stato modificato (m_isDirty).
+// I getter usano lazy evaluation: delegano a ComputeCircuit() che agisce solo se dirty
 const Eigen::MatrixXd &CircuitLab::Circuit::GetCircuitMatrix()
 {
 	ComputeMatrix();
 	return m_circuitMatrix;
 }
 
-// NON lazy: restituisce l'ultimo vettore scritto da ComputeVector(ctx),
-// che il chiamante deve invocare esplicitamente prima (dipende da ctx.t,
-// quindi va ricalcolato ad ogni step, non solo quando il circuito cambia).
 const Eigen::VectorXd &CircuitLab::Circuit::GetCircuitVector()
 {
 	return m_circuitVector;
