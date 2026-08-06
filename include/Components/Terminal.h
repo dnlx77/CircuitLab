@@ -3,14 +3,15 @@
 namespace CircuitLab {
 
 	// Rappresenta un terminale fisico di un componente elettrico.
-	// Ogni terminale ha un ID univoco, un riferimento al terminale
-	// a cui è collegato (se presente) e il nodo MNA a cui appartiene.
+	// Ogni terminale ha un ID univoco e appartiene a un nodo MNA (m_nodeId),
+	// che è il vero meccanismo con cui i terminali risultano "collegati" tra loro
+	// (vedi Circuit::ConnectTerminals, che unifica i nodeId).
 	class Terminal
 	{
 	private:
 		static int s_nextId;    // Contatore globale per assegnare ID univoci
 		int m_id;               // ID univoco di questo terminale
-		Terminal *m_connected;  // Puntatore al terminale collegato (nullptr se libero)
+		Terminal *m_connected;  // Non utilizzato: residuo di una precedente logica di collegamento diretto tra terminali. Da rimuovere.
 		int m_nodeId;           // ID del nodo MNA (-1 = non assegnato, 0 = ground)
 
 	public:
@@ -18,9 +19,9 @@ namespace CircuitLab {
 
 		int GetId() const { return m_id; }
 		int GetNodeId() const { return m_nodeId; }
-		Terminal *GetTerminalConnected() const { return m_connected; }
+		Terminal *GetTerminalConnected() const { return m_connected; }  // Non utilizzato altrove nel codice
 
 		void SetNodeId(int id) { m_nodeId = id; }
-		void SetTerminalConnected(Terminal *terminal) { m_connected = terminal; }
+		void SetTerminalConnected(Terminal *terminal) { m_connected = terminal; }  // Non utilizzato altrove nel codice
 	};
 }

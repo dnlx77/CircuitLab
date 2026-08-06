@@ -94,16 +94,15 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 	// Resetta il circuito e la UI prima di ricaricare
 	m_onNew();
 
-	// Mappa savedId -> newId: gli ID nel file JSON sono quelli del momento
-	// in cui il circuito è stato salvato. Alla ricarica, i componenti ricevono
-	// nuovi ID progressivi. Questa mappa traduce i riferimenti nei link e nelle viste.
+	// Mappe savedId -> newId: gli ID nel file JSON sono quelli del momento
+	// in cui il circuito è stato salvato. Alla ricarica, gli oggetti ricevono
+	// nuovi ID progressivi. Queste mappe traducono i riferimenti salvati.
+	// Nota: nonostante il prefisso "m_", sono variabili locali, non membri della classe.
 	std::map<int, int> m_loadVsRealNodeMap;
-
 	std::map<int, int> m_loadVsRealNodeViewMap;
-
 	std::map<int, int> m_loadVsRealLinkViewMap;
 
-	// Prima passata: crea i componenti e registra la corrispondenza tra ID salvato e ID nuovo
+	// 1) Crea i componenti e registra la corrispondenza tra ID salvato e ID nuovo
 	for (auto const &compJson : j["components"])
 	{
 		int newId = m_onComponentLoad(compJson["type"].get<ComponentType>());
@@ -112,17 +111,20 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 			m_onComponentLoadData(newId, compJson);
 	}
 
-	// Seconda passata: crea le viste grafiche, traducendo l'ID salvato con quello reale
+	// 2) Crea le viste grafiche dei componenti, traducendo l'ID salvato con quello reale
 	for (auto const compViewJosn : j["componentsView"])
 	{
 		Vec2 vec(compViewJosn["position"][0], compViewJosn["position"][1]);
 		m_onComponentViewLoad(m_loadVsRealNodeMap.at(compViewJosn["componentLink"]), compViewJosn["name"].get<std::string>(), compViewJosn["type"].get<ComponentType>(), vec, compViewJosn["rotation"]);
 	}
 
-	// Terza passata: ricrea i link tra terminali nel circuito
+	// 3) Ricrea i link logici tra terminali nel circuito (Core, non UI)
 	for (auto const linkJson : j["links"])
 		m_onLinkLoad(m_loadVsRealNodeMap.at(linkJson["compId1"]), linkJson["termIndex1"], m_loadVsRealNodeMap.at(linkJson["compId2"]), linkJson["termIndex2"]);
 
+	// 4) Ricrea gli hub NodeView (posizione + nodeId), registrando la corrispondenza ID salvato -> ID nuovo.
+	// I linkViewIds salvati non vengono ancora tradotti qui: verranno aggiornati al passo 6,
+	// dopo che le LinkView (passo 5) avranno ricevuto i loro nuovi ID.
 	for (auto const nodeViewJson : j["nodeView"])
 	{
 		sf::Vector2f pos = { nodeViewJson["position"][0], nodeViewJson["position"][1] };
@@ -132,7 +134,8 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 		m_loadVsRealNodeViewMap[nodeViewJson["id"]] = m_onNodeViewLoad(nodeViewJson["nodeId"], pos);
 	}
 
-	// Quarta passata: ricrea le viste grafiche dei fili
+	// 5) Ricrea le viste grafiche dei fili (LinkView), traducendo sia l'ID del componente
+	// sia l'ID del NodeView di destinazione con i rispettivi ID reali
 	for (auto const linkViewJson : j["linksView"])
 	{
 		int newCompId = m_loadVsRealNodeMap.at(linkViewJson["compIdA"].get<int>());
@@ -141,6 +144,8 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 		m_loadVsRealLinkViewMap[linkViewJson["id"].get<int>()] = m_onLinkViewLoad(newCompId, termIndexA, newNodeViewId);
 	}
 
+	// 6) Ora che le LinkView hanno i loro ID reali, aggiorna ogni NodeView con la lista
+	// tradotta dei linkViewIds che gli appartengono (chiudendo il giro rimasto in sospeso al passo 4)
 	for (auto const nodeViewJson : j["nodeView"])
 	{
 		std::vector<int> remappedIds;

@@ -48,7 +48,10 @@ namespace CircuitLab {
 	public:
 		Circuit();
 
-		// Getter con lazy evaluation: ricalcolano il circuito se necessario
+		// Getter: GetCircuitMatrix() è lazy (ricalcola solo se m_isDirty).
+		// GetCircuitVector() NON è lazy: restituisce l'ultimo vettore calcolato da
+		// ComputeVector(ctx), che va chiamato esplicitamente ad ogni step di simulazione
+		// (il vettore dipende dal tempo, la matrice no).
 		const Eigen::MatrixXd &GetCircuitMatrix();
 		const Eigen::VectorXd &GetCircuitVector();
 
@@ -92,6 +95,7 @@ namespace CircuitLab {
 		// Dato un indice nella matrice, restituisce il nodeId corrispondente (-1 se non trovato)
 		int GetNodesFromIndex(int index) const;
 
+		// Inverso di GetNodesFromIndex: dato un nodeId, restituisce l'indice nella matrice
 		int GetIndexFromNodes(int nodeId) const;
 
 		// Dato un indice nella matrice, restituisce il componentId della sorgente di tensione (-1 se non trovato)
@@ -112,6 +116,9 @@ namespace CircuitLab {
 
 		ComponentType GetComponentType(int compId) const;
 
+		// Frequenza minima/massima tra le sorgenti di tensione non-DC del circuito.
+		// 0.0 se non ci sono sorgenti AC. Usate dalla UI per calibrare l'oscilloscopio
+		// (es. "Auto Sync": windowTime = 4 / f_max).
 		double GetMinFrequency() const;
 
 		double GetMaxFrequency() const;

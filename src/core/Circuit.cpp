@@ -237,6 +237,8 @@ std::vector<int> CircuitLab::Circuit::GetComponentsByNodeId(int nodeId) const
 	return connectComp;
 }
 
+// Restituisce ComponentType::node (valore riservato, mai assegnato a un componente reale)
+// se compId non corrisponde a nessun componente esistente.
 CircuitLab::ComponentType CircuitLab::Circuit::GetComponentType(int compId) const
 {
 	for (const auto &comp:m_components)
@@ -366,13 +368,16 @@ bool CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 CircuitLab::Circuit::Circuit() : m_isDirty(true), m_nextNodeId(1)
 {}
 
-// I getter usano lazy evaluation: delegano a ComputeCircuit() che agisce solo se dirty
+// Lazy: ricalcola la matrice solo se il circuito è stato modificato (m_isDirty).
 const Eigen::MatrixXd &CircuitLab::Circuit::GetCircuitMatrix()
 {
 	ComputeMatrix();
 	return m_circuitMatrix;
 }
 
+// NON lazy: restituisce l'ultimo vettore scritto da ComputeVector(ctx),
+// che il chiamante deve invocare esplicitamente prima (dipende da ctx.t,
+// quindi va ricalcolato ad ogni step, non solo quando il circuito cambia).
 const Eigen::VectorXd &CircuitLab::Circuit::GetCircuitVector()
 {
 	return m_circuitVector;

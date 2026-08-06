@@ -7,7 +7,7 @@ CircuitLab::DCWaveForm::DCWaveForm(double voltage) : m_voltage(voltage)
 
 double CircuitLab::DCWaveForm::Evaluate(double t)
 {
-	(void)t;
+	(void)t;  // t non usato: la forma d'onda DC è costante nel tempo
 	return m_voltage;
 }
 
@@ -23,7 +23,9 @@ void CircuitLab::DCWaveForm::SetValues(const std::map<ComponentValue, double> &v
 	m_voltage = values.at(ComponentValue::voltage);
 }
 
-void CircuitLab::DCWaveForm::SaveSpecificData(nlohmann::json & j) const
+// Scrive il valore sotto forma di array con un solo elemento (j["value"][0]),
+// per uniformità di formato con le altre WaveForm che hanno più parametri.
+void CircuitLab::DCWaveForm::SaveSpecificData(nlohmann::json &j) const
 {
 	j["value"] = nlohmann::json::array();
 	nlohmann::json dcWaveFormValueJson;

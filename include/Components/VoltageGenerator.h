@@ -10,7 +10,7 @@ namespace CircuitLab {
 	// Lo Stamp usa il metodo della variabile aggiuntiva (MNA standard).
 	class VoltageGenerator : public Component {
 	private:
-		std::unique_ptr<WaveForm> m_waveForm;  // Tensione in Volt
+		std::unique_ptr<WaveForm> m_waveForm;  // Forma d'onda che determina la tensione istantanea (DC, sinusoidale, quadra, ...)
 
 	public:
 		VoltageGenerator(std::unique_ptr<WaveForm> waveForm);
@@ -22,6 +22,8 @@ namespace CircuitLab {
 			const std::map<int, int> &nodeMap,
 			const std::map<int, int> &voltageSourceMap) override;
 
+		// A differenza del resistore, qui serve la parte dinamica: la tensione dipende
+		// dal tempo tramite m_waveForm->Evaluate(ctx.t), quindi B va aggiornato ad ogni step.
 		void StampVector(Eigen::VectorXd &B,
 			const std::map<int, int> &nodeMap,
 			const std::map<int, int> &voltageSourceMap,
@@ -34,6 +36,8 @@ namespace CircuitLab {
 		void SetWaveForm(std::unique_ptr<WaveForm> waveForm);
 
 
+		// Delega la serializzazione/deserializzazione a WaveForm::Save/Load,
+		// che scrive/legge sotto la sottochiave "waveform" (vedi WaveForm.h).
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;
 		std::map<ComponentValue, double> GetValues() const override;

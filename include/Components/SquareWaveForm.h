@@ -3,10 +3,11 @@
 #include "WaveForm.h"
 
 namespace CircuitLab {
+	// Forma d'onda quadra: alterna +amplitude/-amplitude al ritmo di frequency Hz.
 	class SquareWaveForm : public WaveForm {
 	private:
 		double m_amplitude;
-		double m_frequency;
+		double m_frequency;  // Hz
 	public:
 		SquareWaveForm(double amplitude, double frequency);
 		double Evaluate(double t) override;

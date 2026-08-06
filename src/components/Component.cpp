@@ -2,12 +2,13 @@
 
 int CircuitLab::Component::s_nextId = 1;
 
+// Vedi nota nell'header: nonostante il nome, restituisce i nodeId dei terminali, non i loro ID.
 std::vector<int> CircuitLab::Component::GetTerminalId() const
 {
 	std::vector<int> vecTerminal;
 	for (auto const &terminal : m_terminals)
 		vecTerminal.emplace_back(terminal.GetNodeId());
-	
+
 	return vecTerminal;
 }
 
@@ -19,6 +20,8 @@ void CircuitLab::Component::Save(nlohmann::json &j) const
 	SaveSpecificData(j);
 }
 
+// Non legge "id"/"type" da j: il remapping ID e la creazione dell'istanza
+// del tipo corretto avvengono a monte, in IOManager.
 void CircuitLab::Component::Load(const nlohmann::json &j)
 {
 	LoadSpecificData(j);

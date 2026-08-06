@@ -3,6 +3,7 @@
 #include "WaveForm.h"
 
 namespace CircuitLab {
+	// Forma d'onda costante: Evaluate(t) restituisce sempre m_voltage.
 	class DCWaveForm : public WaveForm {
 	private:
 		double m_voltage;

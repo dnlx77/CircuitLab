@@ -267,7 +267,7 @@ void CircuitLab::UI::HandleEvents()
 		{
 			auto pos = mouseEvent->position;
 
-			if (mouseEvent->button == sf::Mouse::Button::Left && (m_selectedComponent.state != SelectionState::draggingComponent || m_selectedComponent.state != SelectionState::draggingNodeView))
+			if (mouseEvent->button == sf::Mouse::Button::Left && (m_selectedComponent.state != SelectionState::draggingComponent && m_selectedComponent.state != SelectionState::draggingNodeView))
 			{
 				// Aggiunta componenti con tasto modificatore + click
 				if (pos.x < static_cast<int>(m_width - PANEL_WIDTH))
@@ -448,11 +448,11 @@ void CircuitLab::UI::HandleEvents()
 								isDuplicated = true;
 								break;
 							}
-						}	
+						}
 						if (!isDuplicated)
 						{
 							LinkView newLink;
-							
+
 							newLink.id = ++m_linkViewIdCount;
 							newLink.startPos = GetTerminalPositionbyCompId(m_selectedComponent.compId)[m_selectedComponent.terminalIndex];
 							newLink.compIdA = m_selectedComponent.compId;
@@ -466,7 +466,7 @@ void CircuitLab::UI::HandleEvents()
 
 							m_linkViewList.emplace_back(newLink);
 
-							for (auto &nv:m_nodeViewList)
+							for (auto &nv : m_nodeViewList)
 								if (nv.id == newLink.nodeViewId)
 								{
 									nv.linkViewIds.emplace_back(newLink.id);
@@ -535,7 +535,7 @@ void CircuitLab::UI::HandleEvents()
 								m_onCreateLink(m_selectedComponent.compId, m_selectedComponent.terminalIndex, existingCompId, existingTermIndex);
 							}
 						}
-							
+
 						// Reset selezione
 						m_selectedComponent.state = SelectionState::none;
 						m_selectedComponent.compId = -1;
@@ -548,7 +548,7 @@ void CircuitLab::UI::HandleEvents()
 					// Ho cliccato su un terminale dopo aver cliccato su un link devo creare il nodeview
 					SelecetedComponent temp;
 					if (!ImGui::GetIO().WantCaptureMouse) CheckClick(pos, temp);
-		
+
 					if (temp.state == SelectionState::terminalSelected)
 					{
 						bool isDuplicated = false;
@@ -561,7 +561,7 @@ void CircuitLab::UI::HandleEvents()
 								break;
 							}
 						}
-						
+
 						if (!isDuplicated)
 						{
 							LinkView newLink;
@@ -659,7 +659,7 @@ void CircuitLab::UI::HandleEvents()
 			else if (mouseEvent->button == sf::Mouse::Button::Right)
 			{
 				if (!ImGui::GetIO().WantCaptureMouse) CheckClick(pos, m_selectedComponent);
-				if (m_selectedComponent.state == SelectionState::componentSelected || 
+				if (m_selectedComponent.state == SelectionState::componentSelected ||
 					m_selectedComponent.state == SelectionState::terminalSelected)
 				{
 					for (auto const &comp : m_componentViewList)
@@ -673,7 +673,7 @@ void CircuitLab::UI::HandleEvents()
 				else if (m_selectedComponent.state == SelectionState::nodeViewSelected)
 				{
 					for (auto const &nv : m_nodeViewList)
-						if (nv.id == m_selectedComponent.compId) 
+						if (nv.id == m_selectedComponent.nodeViewId)
 						{
 							m_compClickOffset.x = pos.x - nv.position.x;
 							m_compClickOffset.y = pos.y - nv.position.y;
@@ -708,17 +708,17 @@ void CircuitLab::UI::HandleEvents()
 						nv.position.x = newPos.x;
 						nv.position.y = newPos.y;
 
-						UpdateLinksForNodeView(m_selectedComponent.compId, sf::Vector2f(newPos.x, newPos.y));
+						UpdateLinksForNodeView(m_selectedComponent.nodeViewId, sf::Vector2f(newPos.x, newPos.y));
 						break;
 					}
 			}
 		}
-		else if (const auto *mouseReleasedEvent = event->getIf<sf::Event::MouseButtonReleased>()) 
+		else if (const auto *mouseReleasedEvent = event->getIf<sf::Event::MouseButtonReleased>())
 		{
 			if (mouseReleasedEvent->button == sf::Mouse::Button::Right)
 				m_selectedComponent.state = SelectionState::none;
 		}
-		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete) && (m_selectedComponent.state != SelectionState::draggingComponent || m_selectedComponent.state != SelectionState::draggingNodeView))
+		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete) && (m_selectedComponent.state != SelectionState::draggingComponent && m_selectedComponent.state != SelectionState::draggingNodeView))
 		{
 			// Eliminazione del componente selezionato con tasto Delete:
 			// rimuove la vista, i fili collegati e notifica il circuito
@@ -917,7 +917,7 @@ void CircuitLab::UI::DrawImageGuiPanel()
 			if (ImGui::Combo("Waveform", &currentIndex, waveFormNames, waveFormCount))
 				m_onSetWaveFormType(m_selectedComponent.compId, waveFormValues[currentIndex]);
 		}
-		
+
 	}
 
 	ImGui::End();
@@ -950,7 +950,7 @@ void CircuitLab::UI::DrawComponents()
 
 		// Outline giallo se il componente è selezionato (corpo, non terminale)
 		if (comp.GetComponentLink() == m_selectedComponent.compId &&
-			m_selectedComponent.terminalIndex == -1 && 
+			m_selectedComponent.terminalIndex == -1 &&
 			m_selectedComponent.state == SelectionState::componentSelected)
 		{
 			rect.setOutlineColor(sf::Color::Yellow);
@@ -981,7 +981,7 @@ void CircuitLab::UI::DrawComponents()
 			// Outline giallo se questo terminale è selezionato
 			if (comp.GetComponentLink() == m_selectedComponent.compId &&
 				m_selectedComponent.terminalIndex == i &&
-				m_selectedComponent.state==SelectionState::terminalSelected)
+				m_selectedComponent.state == SelectionState::terminalSelected)
 			{
 				term.setOutlineColor(sf::Color::Yellow);
 				term.setOutlineThickness(OUTLINE_THICKNESS);
@@ -1028,7 +1028,7 @@ void CircuitLab::UI::DrawComponents()
 
 		sf::FloatRect bound = label.getLocalBounds();
 		float originX, originY;
-	
+
 		if (x1 < 0)       originX = bound.size.x;
 		else if (x1 == 0) originX = bound.size.x / 2;
 		else              originX = 0;
@@ -1036,7 +1036,7 @@ void CircuitLab::UI::DrawComponents()
 		if (y1 < 0)       originY = bound.size.y;
 		else if (y1 == 0) originY = bound.size.y / 2;
 		else              originY = 0;
-		
+
 		label.setOrigin({ originX, originY });
 		label.setPosition({ comp.GetPosition().x + x1 * TEXT_COMPONENT_OFFSET, comp.GetPosition().y + y1 * TEXT_COMPONENT_OFFSET });
 		m_window.draw(label);
@@ -1053,7 +1053,7 @@ void CircuitLab::UI::DrawWires()
 			sf::Vertex{GetNodeviewPositionByNodeViewId(wire.nodeViewId), (m_selectedComponent.state == SelectionState::linkSelected && wire.id == m_selectedComponent.linkId) ? sf::Color::Red : sf::Color::White}
 		};
 		m_window.draw(line, 2, sf::PrimitiveType::Lines);
-		
+
 		DrawParticles(wire.id);
 	}
 }
@@ -1069,7 +1069,7 @@ void CircuitLab::UI::DrawNodes()
 		node.setPosition(nv.position);
 
 		// Outline giallo se questo nodo è selezionato
-		if (nv.id == m_selectedComponent.compId && m_selectedComponent.state==SelectionState::nodeViewSelected)
+		if (nv.id == m_selectedComponent.nodeViewId && m_selectedComponent.state == SelectionState::nodeViewSelected)
 		{
 			node.setOutlineColor(sf::Color::Yellow);
 			node.setOutlineThickness(OUTLINE_THICKNESS);
@@ -1354,7 +1354,7 @@ float CircuitLab::UI::PointToStraightDistance(const sf::Vector2f &A, const sf::V
 	Vec2 AP(A.x - P.x, A.y - P.y);
 	float dot = AB.x * AP.y - AP.x * AB.y;
 	float distAB = std::sqrt((A.x - B.x) * (A.x - B.x) + (A.y - B.y) * (A.y - B.y));
-	return std::abs(dot)/distAB;
+	return std::abs(dot) / distAB;
 }
 
 int CircuitLab::UI::RemoveLinkFromNodeView(int nodeViewId, int linkViewId)
@@ -1403,7 +1403,7 @@ void CircuitLab::UI::CreateLinkParticlesList()
 	{
 		sf::Vector2f nodeViewPos = GetNodeviewPositionByNodeViewId(lv.nodeViewId);
 		LinkPararticles newLinkParticles;
-		float linkLenght = std::sqrt(((nodeViewPos.x - lv.startPos.x)* (nodeViewPos.x - lv.startPos.x)) + ((nodeViewPos.y - lv.startPos.y) * (nodeViewPos.y - lv.startPos.y)));
+		float linkLenght = std::sqrt(((nodeViewPos.x - lv.startPos.x) * (nodeViewPos.x - lv.startPos.x)) + ((nodeViewPos.y - lv.startPos.y) * (nodeViewPos.y - lv.startPos.y)));
 		newLinkParticles.linkViewId = lv.id;
 		newLinkParticles.offset = 0.0f;
 		newLinkParticles.count = static_cast<int>(linkLenght / (PARTICLE_SIZE * PARTICLE_SPACING_FACTOR));
@@ -1435,7 +1435,7 @@ sf::Vector2f CircuitLab::UI::GetNodeviewPositionByNodeViewId(int nodeViewId)
 	for (const auto &nv : m_nodeViewList)
 		if (nv.id == nodeViewId)
 			return nv.position;
-	
+
 	throw std::runtime_error("NodeView not found for id: " + std::to_string(nodeViewId));
 }
 
@@ -1470,7 +1470,7 @@ CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &t
 	m_window{ sf::VideoMode({ m_width, m_heigth }), m_title },
 	m_showOscilloscope{ false },
 	m_hSimIndex{ 3 },
-	m_windowTime { 1.0 }
+	m_windowTime{ 1.0 }
 {
 	if (!ImGui::SFML::Init(m_window))
 		throw std::runtime_error("Impossibile inizializzare ImGui-SFML");
@@ -1525,6 +1525,7 @@ void CircuitLab::UI::Clear()
 	m_selectedComponent.compId = -1;
 	m_selectedComponent.terminalIndex = -1;
 	m_selectedComponent.linkId = -1;
+	m_selectedComponent.nodeViewId = -1;
 	m_selectedComponent.state = SelectionState::none;
 	m_selectedComponent.clickPos = sf::Vector2f(0.0f, 0.0f);
 	m_linkViewIdCount = 0;

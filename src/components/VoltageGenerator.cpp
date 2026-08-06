@@ -5,6 +5,9 @@ CircuitLab::VoltageGenerator::VoltageGenerator(std::unique_ptr<WaveForm> waveFor
 	m_waveForm = std::move(waveForm);
 }
 
+// Metodo della variabile aggiuntiva (MNA): la corrente k che attraversa il generatore
+// è un'incognita extra. Riga/colonna k impongono V(n1) - V(n2) = tensione (vedi StampVector),
+// mentre le righe n1/n2 riflettono che quella corrente entra/esce dai nodi collegati.
 void CircuitLab::VoltageGenerator::StampMatrix(Eigen::MatrixXd &A, const std::map<int, int> &nodeMap, const std::map<int, int> &VoltageGeneratorMap)
 {
 	// Recupera gli indici nella matrice (-1 se il terminale è a ground)
@@ -18,6 +21,8 @@ void CircuitLab::VoltageGenerator::StampMatrix(Eigen::MatrixXd &A, const std::ma
 	if (n2 >= 0) { A(n2, k) -= 1; A(k, n2) -= 1; }
 }
 
+// Valuta la waveform al tempo corrente e la scrive nella riga extra k:
+// impone V(n1) - V(n2) = m_waveForm->Evaluate(t).
 void CircuitLab::VoltageGenerator::StampVector(Eigen::VectorXd &B, const std::map<int, int> &nodeMap, const std::map<int, int> &VoltageGeneratorMap, const StampContext &ctx)
 {
 	(void)nodeMap;
@@ -32,6 +37,9 @@ CircuitLab::WaveFormType CircuitLab::VoltageGenerator::GetWaveFormType() const
 	return m_waveForm->GetType();
 }
 
+// Cambia tipo di waveform mantenendo i valori di default della nuova (Create()).
+// Usato quando l'utente seleziona un tipo diverso dalla UI: i parametri specifici
+// (ampiezza, frequenza, ...) verranno poi impostati separatamente via SetValues.
 void CircuitLab::VoltageGenerator::SetWaveFormType(WaveFormType type)
 {
 	SetWaveForm(WaveForm::Create(type));

@@ -14,12 +14,10 @@ namespace CircuitLab {
 	// Classe principale dell'interfaccia grafica.
 	// Gestisce la finestra SFML, il loop degli eventi, il rendering dei componenti
 	// e dei collegamenti, e il pannello ImGui.
-	// Comunica con Application tramite cinque callback:
-	//   - m_onRunSimulation:      avvia la simulazione e restituisce i risultati
-	//   - m_onCircuitChange:      aggiunge un componente al circuito, restituisce il suo ID
-	//   - m_onCreateLink:         collega due terminali nel circuito
-	//   - m_onGetCompTerminalId:  richiede i nodeId dei terminali di un componente
-	//   - m_onDeleteComponent:    rimuove un componente dal circuito
+	// Comunica con Application tramite un ampio set di callback (pattern Observer via
+	// std::function), raggruppabili per area: gestione circuito (aggiungi/rimuovi
+	// componente, collega terminali), simulazione (avvio, stato, oscilloscopio),
+	// persistenza (save/load/new) e query sui valori/tipi dei componenti.
 	class UI {
 	public:
 		// Callback per aggiungere un componente: riceve tipo e valore, restituisce l'ID assegnato
@@ -148,38 +146,56 @@ namespace CircuitLab {
 
 		std::vector<sf::Vector2f> GetTerminalPositionbyCompId(int compId) const;
 
+		// Cerca l'ID del NodeView collegato a un dato LinkView (-1 se non trovato)
 		int GetNodeViewIdByLinkId(int linkId) const;
 
+		// Restituisce il NodeView con l'ID dato (lancia eccezione se non trovato)
 		NodeView GetNodeViewById(int nodeViewId) const;
 
+		// Disegna il pannello laterale ImGui (proprietà componente selezionato, oscilloscopio, save/load)
 		void DrawImageGuiPanel();
 
+		// Disegna tutti i componenti (corpo + terminali + etichette) nel canvas
 		void DrawComponents();
 
+		// Disegna tutti i fili (LinkView) tra terminali e NodeView
 		void DrawWires();
 
+		// Disegna i NodeView visibili (giunzioni con più di 2 link)
 		void DrawNodes();
 
+		// Disegna le particelle di corrente (stile Falstad) lungo il filo linkId
 		void DrawParticles(int linkId);
 
+		// Disegna la finestra ImPlot dell'oscilloscopio con i canali attivi
 		void DrawOscilloscope();
 
+		// Converte un ComponentValue (enum) nella label testuale mostrata nella UI
 		std::string_view ComponentValueToString(ComponentValue value);
 
+		// Distanza perpendicolare del punto P dal segmento (o retta) A-B, usata per il click sui fili
 		float PointToStraightDistance(const sf::Vector2f &A, const sf::Vector2f &B, const sf::Vector2f &P);
 
 		//void ConnectTerminalToLink(int compId, int termIndex, int linkViewId, sf::Vector2f clickPos);
 
+		// Rimuove linkViewId dalla lista dei link del NodeView nodeViewId;
+		// restituisce il numero di link rimanenti sul NodeView dopo la rimozione
 		int RemoveLinkFromNodeView(int nodeViewId, int linkViewId);
 
+		// Avanza la posizione (offset) di ogni particella attiva di dt secondi,
+		// facendo ripartire le particelle che escono dal filo
 		void UpdateParticles(float dt);
 
+		// Restituisce il NodeView all'altro capo del filo linkViewId
 		NodeView GetNodeViewFromLInkId(int linkViewId);
 
+		// Posizione nel canvas del NodeView con l'ID dato
 		sf::Vector2f GetNodeviewPositionByNodeViewId(int nodeViewId);
 
+		// Cerca l'ID del NodeView collegato al terminale (compId, termIndex), -1 se il terminale è libero
 		int GetNodeViewIdByTerminal(int compId, int termIndex) const;
 
+		// Aggiorna la posizione del NodeView e delle LinkView che vi convergono dopo un trascinamento
 		void UpdateLinksForNodeView(int nodeViewId, sf::Vector2f newPos);
 
 	public:
@@ -222,15 +238,19 @@ namespace CircuitLab {
 
 		//int AddViewLinkToNode(int comp1, int term1, int nodeViewId);
 
+		// Aggiunge un NodeView (hub) al canvas; restituisce l'ID assegnato
 		int AddNodeView(int nodeId, sf::Vector2f position);
 
+		// Sostituisce la lista dei linkViewIds appartenenti al NodeView nodeViewId (usato da IOManager al caricamento)
 		void UpdateNodeViewLinkIds(int nodeViewId, std::vector<int> linkViewIds);
 
 		// Rimuove tutte le viste grafiche (componenti e fili) dal canvas
 		void Clear();
 
+		// Processa tutti gli eventi SFML/ImGui del frame corrente (click, drag, tasti, chiusura finestra)
 		void HandleEvents();
 
+		// Disegna un frame completo: canvas, componenti, fili, particelle, pannello ImGui
 		void Render();
 
 		// Restituisce la lista delle viste grafiche dei componenti (usata da IOManager per la serializzazione)
@@ -245,8 +265,10 @@ namespace CircuitLab {
 
 		void UpdateSimulation(SimulationOutput output) { m_simulationOutput = output; }
 
+		// Ricostruisce m_linkParticlesList in base al numero di particelle da mostrare per ogni filo
 		void CreateLinkParticlesList();
 
+		// Ricostruisce m_linkViewCurrentList leggendo le correnti di ramo dall'ultimo SimulationOutput
 		void CreateLinkViewCurrentList();
 
 		void SetWindowTime(double windowTIme) { m_windowTime = windowTIme; }

@@ -6,6 +6,8 @@ CircuitLab::SquareWaveForm::SquareWaveForm(double amplitude, double frequency) :
 	m_waveFormType = WaveFormType::squareWaveForm;
 }
 
+// Usa il segno di una sinusoide alla stessa frequenza per decidere +amplitude o -amplitude,
+// invece di calcolare esplicitamente il periodo/fase: risultato equivalente, meno codice.
 double CircuitLab::SquareWaveForm::Evaluate(double t)
 {
 	return m_amplitude * (std::sin(2 * std::numbers::pi * m_frequency * t) >= 0 ? 1.0 : -1.0);

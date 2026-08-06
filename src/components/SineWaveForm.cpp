@@ -7,6 +7,7 @@ CircuitLab::SineWaveForm::SineWaveForm(double amplitude, double frequency, doubl
 	m_waveFormType = WaveFormType::sineWaveForm;
 }
 
+// v(t) = amplitude * sin(2*pi*frequency*t + phase)
 double CircuitLab::SineWaveForm::Evaluate(double t)
 {
 	return m_amplitude * std::sin(2 * std::numbers::pi * m_frequency * t + m_phase);

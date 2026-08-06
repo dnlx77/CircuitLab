@@ -3,7 +3,7 @@
 namespace CircuitLab {
 
 	// Vettore 2D a componenti float.
-	// Usato per le posizioni nel canvas (pixel, coordinate continue).
+	// Usato per le posizioni nel canvas (pixel, coordinate continue) e per i click mouse convertiti in float.
 	struct Vec2 {
 		float x, y;
 		Vec2() : x(0.0f), y(0.0f) {}
@@ -11,8 +11,7 @@ namespace CircuitLab {
 	};
 
 	// Vettore 2D a componenti interi.
-	// Usato per gli offset dei terminali nei ComponentDesign
-	// e per le posizioni dei click mouse (coordinate discrete).
+	// Usato per gli offset dei terminali nei ComponentDesign (coordinate discrete relative al centro del componente).
 	struct Vec2i {
 		int x, y;
 		Vec2i() : x(0), y(0) {}

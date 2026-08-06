@@ -3,24 +3,29 @@
 
 namespace CircuitLab {
 
+	// "Hub" visivo che rappresenta un nodo elettrico (nodeId) sul canvas.
+	// Più LinkView possono puntare allo stesso NodeView (stesso nodeViewId):
+	// è così che più terminali risultano collegati allo stesso nodo elettrico.
+	// Comportamento attuale: "fantasma" (invisibile, <=2 link) o "giunzione"
+	// (pallino verde visibile, >2 link) — vedi TODO: renderla trascinabile.
 	struct NodeView {
 		int id;
-		int nodeId;
+		int nodeId;                     // nodeId del circuito (Core) rappresentato da questo hub
 		sf::Vector2f position;
-		std::vector<int> linkViewIds;
+		std::vector<int> linkViewIds;   // LinkView che puntano a questo hub
 	};
 
-	// Rappresentazione visiva di un collegamento tra due terminali:
-	// semplicemente i due punti estremi del filo nel canvas,
-	// con i riferimenti ai componenti collegati (usati per rimuovere il filo
-	// quando un componente viene eliminato).
+	// Rappresentazione visiva di UN SOLO capo di un collegamento: un filo dal
+	// terminale (compIdA, termIndexA) fino all'hub NodeView (nodeViewId).
+	// Il "vero" collegamento tra due terminali è quindi indiretto: entrambi
+	// hanno una propria LinkView che punta allo stesso nodeViewId.
 	struct LinkView {
 		int id;
 		sf::Vector2f startPos;
 		sf::Vector2f targetPos;
-		int compIdA;   // ID del componente sul primo estremo del filo
+		int compIdA;    // ID del componente da cui parte il filo
 		int termIndexA; // Indice del terminale del componente A
-		int nodeViewId;
+		int nodeViewId; // Hub (NodeView) a cui arriva il filo
 	};
 
 	// Stato della selezione corrente nel canvas:
@@ -46,6 +51,8 @@ namespace CircuitLab {
 		sf::Vector2f clickPos;
 	};
 
+	// Usata per l'animazione delle particelle di corrente (stile Falstad) lungo un filo:
+	// offset = posizione della particella lungo il filo, count = numero di particelle attive.
 	struct LinkPararticles {
 		int linkViewId;
 		float offset;

@@ -46,6 +46,8 @@ void CircuitLab::Resistor::StampMatrix(Eigen::MatrixXd &A,
 	}
 }
 
+// Il resistore è puramente resistivo: non ha comportamento dipendente dal tempo,
+// quindi non contribuisce al vettore B (nessun termine da aggiornare ad ogni step).
 void CircuitLab::Resistor::StampVector(Eigen::VectorXd &B, const std::map<int, int> &nodeMap, const std::map<int, int> &voltageSourceMap, const StampContext &ctx)
 {
 	(void)B;

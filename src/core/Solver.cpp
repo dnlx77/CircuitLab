@@ -1,5 +1,7 @@
 #include "Core/Solver.h"
 
+// Fattorizza A con QR a pivot di colonna e verifica se è invertibile;
+// il risultato resta cachato in m_matrix finché non si richiama Factorize di nuovo.
 void CircuitLab::Solver::Factorize(const Eigen::MatrixXd &A)
 {
 	m_matrix = A.colPivHouseholderQr();
