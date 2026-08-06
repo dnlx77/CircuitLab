@@ -42,7 +42,9 @@ void CircuitLab::Application::SimulationLoop()
 
 			auto batchStart = std::chrono::steady_clock::now();
 
-			// Esegui il batch — Simulate() solo calcola, non swappa
+			// Esegui il batch — Simulate() solo calcola e scrive nel back buffer,
+			// non swappa né notifica (lo fa questo metodo una sola volta, sotto,
+			// a fine batch)
 			for (int i = 0; i < actualSteps; i++)
 				Simulate();
 
@@ -187,7 +189,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			return m_ui->AddViewLink(comp1, term1, NodeViewId);
 		});
 
-	m_ioManager->SetOnNodeViewLoad([this](int nodeId, sf::Vector2f position) -> int 
+	m_ioManager->SetOnNodeViewLoad([this](int nodeId, sf::Vector2f position) -> int
 		{
 			return m_ui->AddNodeView(nodeId, position);
 		});
@@ -207,11 +209,11 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			m_ioManager->LoadFromFile(path);
 		});
 
-	m_ui->SetOnNew([this]() 
+	m_ui->SetOnNew([this]()
 		{
 			New();
 		});
-	
+
 	// Resetta circuito e UI prima di caricare un nuovo file
 	m_ioManager->SetOnNew([this]()
 		{
@@ -223,12 +225,12 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			return m_circuit->GetComponentValues(compId);
 		});
 
-	m_ui->SetOnSetComponentValues([this](int compId, const std::map<ComponentValue, double> &values) 
+	m_ui->SetOnSetComponentValues([this](int compId, const std::map<ComponentValue, double> &values)
 		{
 			m_circuit->SetComponentValues(compId, values);
 		});
 
-	m_ui->SetOnGetComponentTypeById([this](int compId)->ComponentType 
+	m_ui->SetOnGetComponentTypeById([this](int compId)->ComponentType
 		{
 			return m_circuit->GetComponentType(compId);
 		});
@@ -249,7 +251,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			m_circuit->GetComponentById(compId)->SetWaveFormType(type);
 		});
 
-	m_ui->SetOnGetOscilloscopeChannels([this]() -> std::vector<OscilloscopeChannel> 
+	m_ui->SetOnGetOscilloscopeChannels([this]() -> std::vector<OscilloscopeChannel>
 		{
 			std::lock_guard<std::mutex> lock(m_channelsMutex);
 			return m_channels;
@@ -274,44 +276,44 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 				m_channels.erase(m_channels.begin() + index);
 		});
 
-	m_ui->SetOnGetHSim([this]() -> double 
+	m_ui->SetOnGetHSim([this]() -> double
 		{
 			return m_hSim;
 		});
 
-	m_ui->SetOnSetHSim([this](int index) 
+	m_ui->SetOnSetHSim([this](int index)
 		{
 			m_hSim = TIMESTEP_VALUES[index];
 			UpdateDecimationFactor();
 		});
 
-	m_ui->SetOnSetWindowTime([this](double windowTime) 
+	m_ui->SetOnSetWindowTime([this](double windowTime)
 		{
 			m_windowTime = windowTime;
 			UpdateDecimationFactor();
 		});
 
-	m_ui->SetOnAutoSync([this]() 
+	m_ui->SetOnAutoSync([this]()
 		{
 			AutoSync();
 		});
 
-	m_ui->SetOnGetSimulationTime([this]() -> double 
+	m_ui->SetOnGetSimulationTime([this]() -> double
 		{
 			return m_simulationTime;
 		});
 
-	m_ui->SetOnGetDecimationFactor([this]()->int 
+	m_ui->SetOnGetDecimationFactor([this]()->int
 		{
 			return m_decimationFactor;
 		});
 
-	m_ui->SetOnGetMaxFrequency([this]()->double 
+	m_ui->SetOnGetMaxFrequency([this]()->double
 		{
 			return m_circuit->GetMaxFrequency();
 		});
 
-	m_circuit->SetOnFactorize([this](const Eigen::MatrixXd &matrix) 
+	m_circuit->SetOnFactorize([this](const Eigen::MatrixXd &matrix)
 		{
 			m_solver->Factorize(matrix);
 		});
@@ -404,7 +406,7 @@ void CircuitLab::Application::Simulate()
 			branchCurrent[{terminalsId[0], terminalsId[1], iNode}] = m_simulationResult[i];
 		}
 	}
-		
+
 	const std::vector<std::unique_ptr<Component>> &compList = m_circuit->GetComponentsVector();
 	double v1, v2;
 	for (auto &comp : compList)
@@ -414,7 +416,7 @@ void CircuitLab::Application::Simulate()
 			std::vector<int> termList = comp->GetTerminalId();
 			if (termList[0] == 0)
 				v1 = 0.0;
-			else 
+			else
 				v1 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[0])];
 			if (termList[1] == 0)
 				v2 = 0.0;
@@ -441,11 +443,10 @@ void CircuitLab::Application::Simulate()
 		SampleChannels(output);
 	}
 
-	{
-		std::lock_guard<std::mutex> lock(m_swapMutex);
-		std::swap(m_backIndex, m_frontIndex);
-	}
-	m_newOutputReady = true;
+	// Nessuno swap qui: Simulate() scrive solo nel back buffer (m_buffers[m_backIndex]).
+	// Ad ogni chiamata successiva nello stesso batch, sovrascrive lo stesso back buffer
+	// (m_backIndex non cambia), finché SimulationLoop() non fa lo swap una sola volta
+	// a fine batch, pubblicando così solo l'ultimo stato calcolato al thread di rendering.
 }
 
 void CircuitLab::Application::UpdateDecimationFactor()

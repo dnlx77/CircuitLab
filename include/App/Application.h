@@ -45,8 +45,9 @@ namespace CircuitLab {
 		static constexpr double BATCH_TARGET_TIME = 0.010; // 10ms virtuali per batch
 		static constexpr int MAX_STEPS_PER_BATCH = 5000;   // anti-spirale della morte
 
-		// Factory method: crea il componente corretto in base al tipo richiesto dalla UI.
-		// Restituisce nullptr per tipi non riconosciuti.
+		// Factory method: crea il componente corretto in base al tipo richiesto dalla UI,
+		// con valori di default (es. resistenza 1kΩ, generatore DC 0V) — non prende un
+		// valore esplicito: l'utente lo imposta dopo dalla UI.
 		std::unique_ptr<Component> MakeComponent(ComponentType type);
 
 		void SimulationLoop();
@@ -76,7 +77,9 @@ namespace CircuitLab {
 		// Resetta il circuito e la UI allo stato iniziale (canvas vuoto)
 		void New();
 
-		// Avvia il loop principale delegando alla UI
+		// Avvia il loop principale dell'applicazione: lancia il thread di simulazione
+		// e gestisce il thread di rendering, che a sua volta delega a UI la gestione
+		// eventi e il disegno di ogni frame.
 		void Run();
 	};
 }
