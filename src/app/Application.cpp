@@ -6,6 +6,7 @@
 #include "Components/Resistor.h"
 #include "Components/VoltageGenerator.h"
 #include "Components/Ground.h"
+#include "Components/Capacitor.h"
 #include "Common/SimulationOutput.h"
 #include "UI/Ui.h"
 #include "Common/Logger.h"
@@ -20,12 +21,14 @@ static constexpr double TIMESTEP_VALUES[] = {
 //   - resistor:      valore in Ohm
 //   - voltageSource: valore in Volt
 //   - ground:        valore ignorato
+//   - capacitor:     valore in Farad
 std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type)
 {
 	switch (type) {
 	case ComponentType::resistor:			return std::make_unique<Resistor>(1000.0);
 	case ComponentType::voltageGenerator:	return std::make_unique<VoltageGenerator>(WaveForm::Create(WaveFormType::dcWaveForm));
 	case ComponentType::ground:				return std::make_unique<Ground>();
+	case ComponentType::capacitor:			return std::make_unique<Capacitor>(0.000001);
 	default:								return nullptr;
 	}
 }
@@ -44,8 +47,10 @@ void CircuitLab::Application::SimulationLoop()
 
 			// Esegui il batch — Simulate() solo calcola e scrive nel back buffer,
 			// non swappa né notifica (lo fa questo metodo una sola volta, sotto,
-			// a fine batch)
-			for (int i = 0; i < actualSteps; i++)
+			// a fine batch). Esce subito se Simulate() ferma la simulazione
+			// (es. circuito non valido), invece di continuare a ricontrollare
+			// per il resto del batch.
+			for (int i = 0; i < actualSteps && m_simStatus == SimulationStatus::running; i++)
 				Simulate();
 
 			// Swap e notifica UNA SOLA VOLTA alla fine del batch
@@ -110,6 +115,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 	m_circuit = std::make_unique<Circuit>();
 	m_ioManager = std::make_unique<IOManager>();
 	m_solver = std::make_unique<Solver>();
+	m_circuit->SetTimestep(m_hSim);
 
 	m_channelPalette = {
 			{1.0f, 0.4f, 0.4f},  // rosso
@@ -129,12 +135,14 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 
 	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type) -> int
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			m_circuit->InvalidateCircuit();
 			return m_circuit->AddComponent(MakeComponent(type));
 		});
 
 	m_ui->SetOnCreateLink([this](int compId1, int termIndex1, int compId2, int termIndex2) -> bool
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			m_circuit->InvalidateCircuit();
 			// Propaga il risultato al chiamante: false indica un collegamento non valido o duplicato
 			return m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
@@ -144,12 +152,14 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 		{
 			// Chiede al circuito i nodeId dei terminali del componente,
 			// usati dalla UI per costruire le etichette da visualizzare sul canvas
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			return m_circuit->GetNodesIdFromComponentId(compId);
 		});
 
 	m_ui->SetOnDeleteComponent([this](int compId)
 		{
 			// Rimuove il componente dal circuito e ricostruisce le connessioni rimaste
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			m_circuit->RemoveComponent(compId);
 		});
 
@@ -160,18 +170,21 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 	// Crea un componente nel circuito durante il caricamento da file
 	m_ioManager->SetOnComponentLoad([this](CircuitLab::ComponentType type) -> int
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			m_circuit->InvalidateCircuit();
 			return m_circuit->AddComponent(MakeComponent(type));
 		});
 
 	m_ioManager->SetOnComponentLoadData([this](int compId, const nlohmann::json &j)
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			m_circuit->GetComponentById(compId)->Load(j);
 		});
 
 	// Collega due terminali nel circuito durante il caricamento da file
 	m_ioManager->SetOnLoadLink([this](int compId1, int termIndex1, int compId2, int termIndex2) -> bool
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			m_circuit->InvalidateCircuit();
 			// Propaga il risultato al chiamante: false indica un collegamento non valido o duplicato
 			return m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
@@ -201,6 +214,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 
 	m_ui->SetOnSave([this](const std::string &path)
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			m_ioManager->SaveToFile(path, *m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList(), m_ui->GetNodeViewList());
 		});
 
@@ -222,31 +236,37 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 
 	m_ui->SetOnGetComponentValues([this](int compId) -> std::map<ComponentValue, double>
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			return m_circuit->GetComponentValues(compId);
 		});
 
 	m_ui->SetOnSetComponentValues([this](int compId, const std::map<ComponentValue, double> &values)
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			m_circuit->SetComponentValues(compId, values);
 		});
 
 	m_ui->SetOnGetComponentTypeById([this](int compId)->ComponentType
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			return m_circuit->GetComponentType(compId);
 		});
 
 	m_ui->SetOnGetComponentsByNodeId([this](int nodeId)->std::vector<int>
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			return m_circuit->GetComponentsByNodeId(nodeId);
 		});
 
 	m_ui->SetOnGetWaveFormType([this](int compId) -> WaveFormType
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			return m_circuit->GetComponentById(compId)->GetWaveFormType();
 		});
 
 	m_ui->SetOnSetWaveFormType([this](int compId, WaveFormType type)
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			m_circuit->InvalidateCircuit();
 			m_circuit->GetComponentById(compId)->SetWaveFormType(type);
 		});
@@ -284,6 +304,10 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 	m_ui->SetOnSetHSim([this](int index)
 		{
 			m_hSim = TIMESTEP_VALUES[index];
+			{
+				std::lock_guard<std::mutex> lock(m_circuitMutex);
+				m_circuit->SetTimestep(m_hSim);
+			}
 			UpdateDecimationFactor();
 		});
 
@@ -310,6 +334,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 
 	m_ui->SetOnGetMaxFrequency([this]()->double
 		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			return m_circuit->GetMaxFrequency();
 		});
 
@@ -333,6 +358,10 @@ void CircuitLab::Application::Simulate()
 	SimulationOutput &output = m_buffers[m_backIndex];
 	output = SimulationOutput{};
 
+	// Protegge l'intero step contro modifiche concorrenti al circuito dal thread
+	// di rendering (aggiunta/rimozione componenti, collegamenti, cambio valori...).
+	std::lock_guard<std::mutex> lock(m_circuitMutex);
+
 	// Questi controlli sono difensivi: m_circuit non dovrebbe mai essere nullptr
 	// dato che viene creato nel costruttore, ma è buona pratica verificarlo
 	if (m_circuit == nullptr)
@@ -350,6 +379,17 @@ void CircuitLab::Application::Simulate()
 	if (m_circuit->CircuitHasOnlyGround())
 	{
 		output.simRes = SimulationResult::only_ground_circuit;
+		return;
+	}
+
+	if (m_circuit->HasFloatingTerminal())
+	{
+		// Circuito non valido (es. un componente è rimasto scollegato dopo
+		// un edit): interrompe la simulazione invece di continuare a calcolare
+		// risultati privi di senso. Il prossimo "Start" rifarà lo stesso controllo
+		// e si fermerà di nuovo finché il circuito non viene ricollegato.
+		output.simRes = SimulationResult::disconnected_terminal;
+		m_simStatus = SimulationStatus::stopped;
 		return;
 	}
 
@@ -414,17 +454,43 @@ void CircuitLab::Application::Simulate()
 		if (comp->GetType() == ComponentType::resistor)
 		{
 			std::vector<int> termList = comp->GetTerminalNodeIds();
-			if (termList[0] == 0)
+			// <= 0 copre sia il ground (0) sia un terminale mai collegato (-1):
+			// in entrambi i casi non ha una riga nella matrice, quindi niente
+			// GetIndexFromNodes (che altrimenti lancerebbe std::out_of_range).
+			if (termList[0] <= 0)
 				v1 = 0.0;
 			else
 				v1 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[0])];
-			if (termList[1] == 0)
+			if (termList[1] <= 0)
 				v2 = 0.0;
 			else
 				v2 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[1])];
 			double current = (v1 - v2) / comp->GetValues().at(ComponentValue::resistance);
 			componentCurrent[comp->GetId()] = current;
 			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
+		}
+		else if (comp->GetType() == ComponentType::capacitor)
+		{
+			std::vector<int> termList = comp->GetTerminalNodeIds();
+			// Vedi commento nel ramo resistor: <= 0 copre ground (0) e terminale
+			// mai collegato (-1), entrambi assenti da m_nodesMap.
+			if (termList[0] <= 0)
+				v1 = 0.0;
+			else
+				v1 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[0])];
+			if (termList[1] <= 0)
+				v2 = 0.0;
+			else
+				v2 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[1])];
+
+			// i = C * dv/dt = Geq * ((v1-v2) - v(t-h)), con v(t-h) letto PRIMA
+			// di aggiornare lo stato del condensatore per il prossimo step.
+			auto *cap = static_cast<Capacitor *>(comp.get());
+			double current = comp->GetValues().at(ComponentValue::capacitance) / m_hSim * ((v1 - v2) - cap->GetPreviousVoltage());
+			componentCurrent[comp->GetId()] = current;
+			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
+
+			cap->UpdateState(v1, v2);
 		}
 	}
 
@@ -468,7 +534,11 @@ void CircuitLab::Application::UpdateDecimationFactor()
 
 void CircuitLab::Application::AutoSync()
 {
-	double fMax = m_circuit->GetMaxFrequency();
+	double fMax;
+	{
+		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		fMax = m_circuit->GetMaxFrequency();
+	}
 	if (fMax <= 0.0)
 		return;  // nessun generatore AC — nulla da sincronizzare
 
@@ -532,7 +602,12 @@ void CircuitLab::Application::AddChannel(ProbeType type, int idA, int idB, int c
 	{
 	case ProbeType::nodeVoltage:          label = "V(" + std::to_string(idA) + ")"; break;
 	case ProbeType::differentialVoltage:  label = "V(" + std::to_string(idA) + "," + std::to_string(idB) + ")"; break;
-	case ProbeType::componentCurrent:     label = "I(" + Component::ComponentTypeName(m_circuit->GetComponentType(compId)) + std::to_string(compId) + ")"; break;
+	case ProbeType::componentCurrent:
+	{
+		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		label = "I(" + Component::ComponentTypeName(m_circuit->GetComponentType(compId)) + std::to_string(compId) + ")";
+		break;
+	}
 	case ProbeType::branchCurrent:        label = "I(" + std::to_string(idA) + "," + std::to_string(idB) + ")"; break;
 	}
 
@@ -550,7 +625,10 @@ void CircuitLab::Application::AddChannel(ProbeType type, int idA, int idB, int c
 
 void CircuitLab::Application::New()
 {
-	m_circuit->Clear();
+	{
+		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		m_circuit->Clear();
+	}
 	m_ui->Clear();
 }
 

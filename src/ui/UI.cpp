@@ -287,6 +287,11 @@ void CircuitLab::UI::HandleEvents()
 						int id = m_onCircuitChange(ComponentType::ground);
 						AddViewComponent(id, "Ground", ComponentType::ground, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
 					}
+					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::C))
+					{
+						int id = m_onCircuitChange(ComponentType::capacitor);
+						AddViewComponent(id, "Capacitor", ComponentType::capacitor, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+					}
 				}
 
 				// Gestione selezione e collegamento terminali:
@@ -839,6 +844,8 @@ void CircuitLab::UI::DrawImageGuiPanel()
 		ImGui::Text("Errore interno, puntatore a circuito nullo!");
 	else if (m_simulationOutput.simRes == SimulationResult::only_ground_circuit)
 		ImGui::Text("Il circuito contiene solo componenti ground!");
+	else if (m_simulationOutput.simRes == SimulationResult::disconnected_terminal)
+		ImGui::Text("Circuito non valido: c'e' un terminale scollegato o un ramo aperto. Simulazione interrotta.");
 	else
 	{
 		ImGui::Text("Risultato: [");
@@ -947,6 +954,8 @@ void CircuitLab::UI::DrawComponents()
 			rect.setFillColor(sf::Color::Red);
 		else if (comp.GetComponentType() == ComponentType::ground)
 			rect.setFillColor(sf::Color::White);
+		else if (comp.GetComponentType() == ComponentType::capacitor)
+			rect.setFillColor(sf::Color::Cyan);
 
 		// Outline giallo se il componente è selezionato (corpo, non terminale)
 		if (comp.GetComponentLink() == m_selectedComponent.compId &&
@@ -1010,6 +1019,8 @@ void CircuitLab::UI::DrawComponents()
 			compString += "V";
 		else if (comp.GetComponentType() == ComponentType::ground)
 			compString += "G";
+		else if (comp.GetComponentType() == ComponentType::capacitor)
+			compString += "C";
 
 		compString += std::to_string(comp.GetComponentLink());
 
@@ -1114,6 +1125,13 @@ void CircuitLab::UI::DrawParticles(int linkId)
 void CircuitLab::UI::DrawOscilloscope()
 {
 	ImGui::Begin("Oscilloscope", &m_showOscilloscope);
+
+	// Snapshot dei canali: aggiornato ogni frame finché non si è congelati, poi
+	// resta fermo sull'ultimo dato ricevuto (vedi commento su m_frozenChannels in UI.h).
+	// Usato SOLO per il plot: la lista di gestione canali (checkbox/rimozione) sotto
+	// continua a leggere i dati live, così restano utilizzabili anche da congelato.
+	if (!m_oscFrozen)
+		m_frozenChannels = m_onGetOscilloscopeChannels();
 
 	// Raccogli nodi disponibili
 	std::vector<int> nodeIds;
@@ -1255,11 +1273,14 @@ void CircuitLab::UI::DrawOscilloscope()
 			channel.label.c_str());
 	}
 
+	ImGui::Checkbox("Freeze", &m_oscFrozen);
+
+	ImGui::SameLine();
 	if (ImGui::Button("Reset Zoom"))
 		ImPlot::SetNextAxesToFit();
 
 	ImGui::SameLine();
-	ImGui::TextDisabled("Scroll: zoom X | Ctrl+Scroll: zoom Y");
+	ImGui::TextDisabled("Trascina per pan, scroll per zoom (per asse X serve Freeze attivo)");
 
 	ImGui::Separator();
 
@@ -1269,23 +1290,30 @@ void CircuitLab::UI::DrawOscilloscope()
 	int decimationFactor = m_onGetDecimationFactor();
 	double xscale = hSim * static_cast<double>(decimationFactor);
 
-	// Bug 2 fix — asse X scorrevole aggiornato ogni frame
-	double tMax = m_onGetSimulationTime();
-	double fMax = m_onGetMaxFrequency();
-
-	// Trigger matematico — allinea tMin al multiplo del periodo
-	if (fMax > 0.0)
+	double tMax;
+	if (m_oscFrozen)
 	{
-		double T = 1.0 / fMax;
-		// Trova il multiplo intero di T più vicino a tMax - windowTime
-		double tMinRaw = tMax - m_windowTime;
-		double tMin = std::floor(tMinRaw / T) * T;
-		tMax = tMin + m_windowTime;
+		// Finestra congelata: riusa l'ultimo tMax calcolato prima del freeze,
+		// così sia i limiti dell'asse sia il posizionamento dei campioni restano fermi.
+		tMax = m_frozenTMax;
 	}
 	else
 	{
-		// Nessun segnale AC — finestra scorrevole normale
-		tMax = tMax;
+		// Bug 2 fix — asse X scorrevole aggiornato ogni frame
+		tMax = m_onGetSimulationTime();
+		double fMax = m_onGetMaxFrequency();
+
+		// Trigger matematico — allinea tMin al multiplo del periodo
+		if (fMax > 0.0)
+		{
+			double T = 1.0 / fMax;
+			// Trova il multiplo intero di T più vicino a tMax - windowTime
+			double tMinRaw = tMax - m_windowTime;
+			double tMin = std::floor(tMinRaw / T) * T;
+			tMax = tMin + m_windowTime;
+		}
+
+		m_frozenTMax = tMax;
 	}
 
 	double tMin = tMax - m_windowTime;
@@ -1295,13 +1323,22 @@ void CircuitLab::UI::DrawOscilloscope()
 	{
 		ImPlot::SetupAxes("Time (s)", "Value");
 
-		// Bug 2 fix — ImPlotCond_Always per aggiornare ogni frame
-		ImPlot::SetupAxisLimits(ImAxis_X1, tMin, tMax, ImPlotCond_Always);
+		// Bug 2 fix — ImPlotCond_Always per aggiornare ogni frame.
+		// Quando l'oscilloscopio è congelato (m_oscFrozen), NON forziamo più i limiti
+		// dell'asse X ad ogni frame: così ImPlot mantiene l'ultimo stato (compreso
+		// pan/zoom manuale dell'utente), esattamente come già fa per l'asse Y sotto.
+		if (!m_oscFrozen)
+			ImPlot::SetupAxisLimits(ImAxis_X1, tMin, tMax, ImPlotCond_Always);
 		ImPlot::SetupAxisLimits(ImAxis_Y1, -15, 15, ImPlotCond_Once);
 
-		for (auto &channel : channels)
+		for (int i = 0; i < static_cast<int>(m_frozenChannels.size()); i++)
 		{
-			if (!channel.active || channel.samples.empty())
+			const auto &channel = m_frozenChannels[i];
+
+			// L'active flag va letto dalla lista live (channels), non dallo snapshot:
+			// così accendere/spegnere un canale ha effetto immediato anche da congelato.
+			bool active = (i < static_cast<int>(channels.size())) ? channels[i].active : channel.active;
+			if (!active || channel.samples.empty())
 				continue;
 
 			ImPlotSpec spec;
@@ -1344,6 +1381,7 @@ std::string_view CircuitLab::UI::ComponentValueToString(CircuitLab::ComponentVal
 	case ComponentValue::amplitude:  return "Amplitude";
 	case ComponentValue::frequency:  return "Frequency";
 	case ComponentValue::phase:      return "Phase";
+	case ComponentValue::capacitance: return "Capacitance";
 	default:                         return "Unknown";
 	}
 }

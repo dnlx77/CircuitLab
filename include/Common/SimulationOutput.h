@@ -12,7 +12,8 @@ namespace CircuitLab {
 		empty_circuit,        // Il circuito non contiene componenti
 		only_ground_circuit,  // Il circuito contiene solo componenti ground (nessun nodo attivo)
 		no_circuit,           // Il puntatore al circuito è nullo (errore interno)
-		solve_error           // La matrice MNA è singolare, sistema non risolvibile
+		solve_error,          // La matrice MNA è singolare, sistema non risolvibile
+		disconnected_terminal // Un componente ha un terminale non collegato a nulla
 	};
 
 	// Struttura di output restituita da Application::RunSimulation() alla UI.

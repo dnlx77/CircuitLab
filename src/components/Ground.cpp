@@ -7,11 +7,12 @@ CircuitLab::Ground::Ground() : Component(1, ComponentType::ground)
 	m_terminals[0].SetNodeId(0);
 }
 
-void CircuitLab::Ground::StampMatrix(Eigen::MatrixXd &A, const std::map<int, int> &nodeMap, const std::map<int, int> &voltageSourceMap)
+void CircuitLab::Ground::StampMatrix(Eigen::MatrixXd &A, const std::map<int, int> &nodeMap, const std::map<int, int> &voltageSourceMap, double h)
 {
 	(void)A;
 	(void)nodeMap;
 	(void)voltageSourceMap;
+	(void)h;
 }
 
 void CircuitLab::Ground::StampVector(Eigen::VectorXd & B, const std::map<int, int>&nodeMap, const std::map<int, int>&voltageSourceMap, const StampContext & ctx)

@@ -60,11 +60,14 @@ namespace CircuitLab {
 		// Stampa il contributo del componente nella matrice MNA (A) e nel vettore (b).
 		// nodeMap mappa nodeId -> indice di riga/colonna nella matrice.
 		// voltageSourceMap mappa componentId -> indice della riga extra per le sorgenti di tensione.
-		// StampMatrix: parte statica (dipendente solo dalla topologia), chiamata una sola volta,
-		// quando la matrice viene (ri)fattorizzata.
+		// StampMatrix: parte statica (dipendente da topologia e passo di simulazione h),
+		// chiamata una sola volta, quando la matrice viene (ri)fattorizzata.
+		// h è necessario ai componenti con modello companion (es. condensatori/induttori),
+		// la cui conduttanza equivalente dipende dal passo di integrazione.
 		virtual void StampMatrix(Eigen::MatrixXd &A,
 			const std::map<int, int> &nodeMap,
-			const std::map<int, int> &voltageSourceMap) = 0;
+			const std::map<int, int> &voltageSourceMap,
+			double h) = 0;
 
 		// StampVector: parte dinamica, richiamata ad ogni step di simulazione
 		// (dipende da ctx.t, quindi va aggiornata ad ogni istante).
@@ -77,6 +80,12 @@ namespace CircuitLab {
 		// Di default 0; le sorgenti di tensione lo sovrascrivono con 1
 		// (la corrente incognita che scorre nel generatore).
 		virtual int GetExtraVariables() const { return 0; }
+
+		// Aggiorna lo stato interno del componente con le tensioni ai suoi terminali
+		// risolte allo step corrente (v1, v2 = tensioni del terminale 0 e 1 rispetto a ground).
+		// Usato dai componenti con memoria di stato (es. condensatori: serve la tensione
+		// del passo precedente per il modello companion). Default: no-op.
+		virtual void UpdateState(double v1, double v2) { (void)v1; (void)v2; }
 
 		// Solo i componenti con forma d'onda (es. VoltageGenerator) sovrascrivono questi;
 		// gli altri restituiscono WaveFormType::none / non fanno nulla.

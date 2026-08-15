@@ -87,6 +87,20 @@ namespace CircuitLab {
 		int m_oscIdB = 0;
 		int m_oscCompId = 0;
 
+		// Congela la finestra temporale dell'oscilloscopio: mentre è true, l'asse X
+		// smette di scorrere (niente più ImPlotCond_Always) e mantiene l'ultimo
+		// tMax noto, così l'utente può zoomare/scorrere liberamente sull'asse X
+		// esattamente come già può fare sull'asse Y (che usa ImPlotCond_Once).
+		// Non basta congelare l'asse: la simulazione in background continua a
+		// riempire/svuotare il deque dei campioni, quindi va congelato anche
+		// il DATO plottato, non solo la sua posizione sull'asse X.
+		// m_frozenChannels viene aggiornato ad ogni frame in cui NON si è congelati
+		// (stesso trucco di m_frozenTMax): appena si attiva Freeze, resta fermo
+		// sull'ultimo snapshot live.
+		bool m_oscFrozen = false;
+		double m_frozenTMax = 0.0;
+		std::vector<OscilloscopeChannel> m_frozenChannels;
+
 		SelecetedComponent m_selectedComponent; // Componente/terminale attualmente selezionato
 
 		std::vector<ComponentView> m_componentViewList; // Lista delle viste grafiche dei componenti

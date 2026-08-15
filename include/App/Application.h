@@ -37,6 +37,14 @@ namespace CircuitLab {
 		int m_backIndex = 0;
 		int m_frontIndex = 1;
 		std::mutex m_swapMutex, m_channelsMutex;
+		// Protegge m_circuit: è letto/modificato sia dal thread di simulazione
+		// (SimulationLoop -> Simulate) sia dal thread di rendering (callback della UI
+		// che aggiungono/rimuovono componenti, collegano terminali, cambiano valori...).
+		// Senza questo mutex, un'edit del circuito durante una simulazione in corso
+		// può correre in parallelo con ComputeMatrix/ComputeVector sullo stesso Circuit,
+		// causando iteratori invalidati o un m_isDirty "perso" (la modifica sembra
+		// non essere mai stata rilevata).
+		std::mutex m_circuitMutex;
 
 		std::vector<OscilloscopeChannel> m_channels;
 		std::vector<Color> m_channelPalette;

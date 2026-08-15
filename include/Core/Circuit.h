@@ -30,6 +30,8 @@ namespace CircuitLab {
 		std::vector<Link> m_links;             // Lista dei collegamenti tra terminali
 		int m_nextNodeId;  // Prossimo ID disponibile per i nodi
 		bool m_isDirty;    // true se il circuito è stato modificato e va ricalcolato
+		double m_h;        // Passo di simulazione corrente, passato a StampMatrix
+		                   // (i componenti con modello companion, es. condensatori, ne dipendono)
 
 		fnOnFactorize m_onFactorize;
 
@@ -68,11 +70,24 @@ namespace CircuitLab {
 		// Segnala che il circuito è stato modificato e va ricalcolato
 		void InvalidateCircuit() { m_isDirty = true; }
 
+		// Imposta il passo di simulazione usato dallo Stamp statico (StampMatrix).
+		// Invalida il circuito se il valore cambia, perché la conduttanza equivalente
+		// dei componenti companion (es. condensatori) dipende da h.
+		void SetTimestep(double h) { if (h != m_h) { m_h = h; InvalidateCircuit(); } }
+
 		bool IsCircuitEmpty() const { return m_components.empty(); }
 
 		// Restituisce true se il circuito contiene solo componenti ground
 		// (caso degenere: nessun nodo attivo nella matrice MNA)
 		bool CircuitHasOnlyGround() const;
+
+		// Restituisce true se il circuito ha un ramo aperto: un terminale mai
+		// collegato a nulla (nodeId == -1), oppure un nodo "reale" a cui è
+		// attaccato un solo terminale (es. rimasto orfano dopo aver cancellato
+		// l'unica altra cosa che vi era collegata). In entrambi i casi non c'è
+		// un percorso di ritorno per la corrente e i valori calcolati per quel
+		// ramo non avrebbero senso elettrico.
+		bool HasFloatingTerminal() const;
 
 		// Collega due terminali di due componenti, propagando il nodeId a tutti
 		// i terminali già connessi allo stesso nodo.

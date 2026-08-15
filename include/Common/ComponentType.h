@@ -11,12 +11,14 @@ namespace CircuitLab {
 		ground,        // Nodo di riferimento (massa)
 		resistor,      // Resistenza ideale
 		voltageGenerator, // Sorgente di tensione ideale
+		capacitor,     // Condensatore ideale
 	};
 
 	NLOHMANN_JSON_SERIALIZE_ENUM(ComponentType, {
 		{ ComponentType::resistor, "Resistor" },
 		{ ComponentType::voltageGenerator, "VoltageGenerator" },
 		{ ComponentType::ground, "Ground" },
+		{ ComponentType::capacitor, "Capacitor" },
 	})
 
 	enum class WaveFormType {

@@ -33,6 +33,7 @@ std::string CircuitLab::Component::ComponentTypeName(ComponentType type)
 	case ComponentType::resistor:			return "R";
 	case ComponentType::voltageGenerator:	return "V";
 	case ComponentType::ground:				return "G";
+	case ComponentType::capacitor:			return "C";
 	default:								return "?";
 
 	}

@@ -29,13 +29,15 @@ void CircuitLab::Resistor::SetResistance(double res)
 // e non vengono scritti nella matrice.
 void CircuitLab::Resistor::StampMatrix(Eigen::MatrixXd &A,
 	const std::map<int, int> &nodeMap,
-	const std::map<int, int> &voltageSourceMap)
+	const std::map<int, int> &voltageSourceMap,
+	double h)
 {
 	(void)voltageSourceMap;
+	(void)h;
 
 	// Recupera gli indici nella matrice (-1 se il terminale è a ground)
-	int n1 = (GetTerminals()[0].GetNodeId() != 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
-	int n2 = (GetTerminals()[1].GetNodeId() != 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
+	int n1 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
+	int n2 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
 
 	if (n1 >= 0) A(n1, n1) += m_conductance;
 	if (n2 >= 0) A(n2, n2) += m_conductance;

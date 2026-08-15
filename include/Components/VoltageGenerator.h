@@ -20,7 +20,8 @@ namespace CircuitLab {
 		// e imposta b[k] = tensione.
 		void StampMatrix(Eigen::MatrixXd &A,
 			const std::map<int, int> &nodeMap,
-			const std::map<int, int> &voltageSourceMap) override;
+			const std::map<int, int> &voltageSourceMap,
+			double h) override;
 
 		// A differenza del resistore, qui serve la parte dinamica: la tensione dipende
 		// dal tempo tramite m_waveForm->Evaluate(ctx.t), quindi B va aggiornato ad ogni step.

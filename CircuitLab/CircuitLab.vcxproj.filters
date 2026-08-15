@@ -92,6 +92,9 @@
     <ClCompile Include="..\src\components\Resistor.cpp">
       <Filter>src\Components</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\components\Capacitor.cpp">
+      <Filter>src\Components</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\core\Circuit.cpp">
       <Filter>src\Core</Filter>
     </ClCompile>
@@ -152,6 +155,9 @@
       <Filter>Include\Core</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Components\Resistor.h">
+      <Filter>Include\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Components\Capacitor.h">
       <Filter>Include\Components</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Core\Circuit.h">

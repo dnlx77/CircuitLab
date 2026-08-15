@@ -167,6 +167,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClCompile Include="..\external\implot\implot_items.cpp" />
     <ClCompile Include="..\src\app\Application.cpp" />
     <ClCompile Include="..\src\Common\Logger.cpp" />
+    <ClCompile Include="..\src\components\Capacitor.cpp" />
     <ClCompile Include="..\src\components\Component.cpp" />
     <ClCompile Include="..\src\components\DCWaveForm.cpp" />
     <ClCompile Include="..\src\components\Ground.cpp" />
@@ -191,6 +192,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClInclude Include="..\include\Common\OscilloscopeChannel.h" />
     <ClInclude Include="..\include\Common\SimulationOutput.h" />
     <ClInclude Include="..\include\Common\UICommon.h" />
+    <ClInclude Include="..\include\Components\Capacitor.h" />
     <ClInclude Include="..\include\Components\Component.h" />
     <ClInclude Include="..\include\Components\DCWaveForm.h" />
     <ClInclude Include="..\include\Components\Ground.h" />

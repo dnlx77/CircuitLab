@@ -14,7 +14,8 @@ namespace CircuitLab {
 		// Non contribuisce alla matrice MNA
 		void StampMatrix(Eigen::MatrixXd &A,
 			const std::map<int, int> &nodeMap,
-			const std::map<int, int> &voltageSourceMap) override;
+			const std::map<int, int> &voltageSourceMap,
+			double h) override;
 
 		void StampVector(Eigen::VectorXd &B,
 			const std::map<int, int> &nodeMap,

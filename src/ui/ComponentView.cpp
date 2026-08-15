@@ -8,6 +8,7 @@ const std::map<CircuitLab::ComponentType, CircuitLab::ComponentDesign> CircuitLa
 	{ CircuitLab::ComponentType::resistor,      { 20, 40, 4, { {0, -20}, {0, 20} }, -1 } },
 	{ CircuitLab::ComponentType::voltageGenerator,  { 20, 40, 4, { {0, -20}, {0, 20} }, 0 } },
 	{ CircuitLab::ComponentType::ground,         { 20, 20, 4, { {0, -20} }, -1 } },
+	{ CircuitLab::ComponentType::capacitor,      { 20, 40, 4, { {0, -20}, {0, 20} }, -1 } },
 };
 
 CircuitLab::ComponentView::ComponentView(int componentLink, const Vec2 &position,

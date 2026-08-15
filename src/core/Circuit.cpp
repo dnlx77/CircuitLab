@@ -5,8 +5,9 @@
 #include "Common/Logger.h"
 
 // Scandisce tutti i terminali di tutti i componenti per raccogliere i nodi attivi
-// (esclude il nodo ground, nodeId == 0), costruisce la mappa nodeId -> indice matrice,
-// e assegna le righe extra per le sorgenti di tensione.
+// (esclude il nodo ground, nodeId == 0, e i terminali mai collegati, nodeId == -1),
+// costruisce la mappa nodeId -> indice matrice, e assegna le righe extra per le
+// sorgenti di tensione.
 // Restituisce la dimensione totale della matrice MNA.
 int CircuitLab::Circuit::ComputeNodes()
 {
@@ -14,8 +15,12 @@ int CircuitLab::Circuit::ComputeNodes()
 	for (const auto &comp : m_components) {
 		const std::vector<Terminal> &terminals = comp->GetTerminals();
 		for (const auto &terminal : terminals) {
-			// Il nodo 0 è il ground: non occupa una riga nella matrice MNA
-			if (terminal.GetNodeId() != 0)
+			// Il nodo 0 è il ground e -1 è "mai collegato": nessuno dei due
+			// occupa una riga nella matrice MNA. Con "!= 0" invece di "> 0",
+			// tutti i terminali scollegati (nodeId == -1, il valore di default)
+			// venivano trattati come se fossero un unico nodo reale condiviso,
+			// corrompendo la soluzione.
+			if (terminal.GetNodeId() > 0)
 				nodes.insert(terminal.GetNodeId());
 		}
 	}
@@ -57,7 +62,7 @@ void CircuitLab::Circuit::ComputeMatrix()
 	m_circuitVector = Eigen::VectorXd::Zero(num_nodes);
 
 	for (const auto &comp : m_components)
-		comp->StampMatrix(m_circuitMatrix, m_nodesMap, m_voltageSourceMap);
+		comp->StampMatrix(m_circuitMatrix, m_nodesMap, m_voltageSourceMap, m_h);
 
 	if (m_onFactorize)
 		m_onFactorize(m_circuitMatrix);
@@ -255,6 +260,37 @@ bool CircuitLab::Circuit::CircuitHasOnlyGround() const
 	return true;
 }
 
+bool CircuitLab::Circuit::HasFloatingTerminal() const
+{
+	// Conta quanti terminali condividono ciascun nodeId "reale" (>= 0).
+	std::map<int, int> nodeTerminalCount;
+
+	for (auto const &comp : m_components)
+	{
+		for (auto const &terminal : comp->GetTerminals())
+		{
+			int nodeId = terminal.GetNodeId();
+			// -1 è il valore condiviso da OGNI terminale mai collegato: non indica
+			// un nodo reale, quindi va controllato a parte (non nella mappa sopra,
+			// altrimenti terminali scollegati e non correlati sembrerebbero "collegati
+			// tra loro" solo perché condividono lo stesso segnaposto).
+			if (nodeId == -1)
+				return true;
+			nodeTerminalCount[nodeId]++;
+		}
+	}
+
+	// Un nodo con un solo terminale è un ramo aperto: elettricamente equivale
+	// a un terminale mai collegato (nessun percorso di ritorno per la corrente),
+	// anche se qui ha un nodeId "vero" invece di -1 (es. l'altro capo di un
+	// componente rimasto orfano dopo aver cancellato ciò a cui era collegato).
+	for (auto const &[nodeId, count] : nodeTerminalCount)
+		if (count < 2)
+			return true;
+
+	return false;
+}
+
 // Collega due terminali tra loro, unificando i nodeId.
 // Gestisce tre casi:
 //   1. Entrambi i terminali sono liberi (-1): assegna un nuovo nodeId
@@ -363,7 +399,7 @@ bool CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 	return false;
 }
 
-CircuitLab::Circuit::Circuit() : m_isDirty(true), m_nextNodeId(1)
+CircuitLab::Circuit::Circuit() : m_isDirty(true), m_nextNodeId(1), m_h(0.001)
 {}
 
 // I getter usano lazy evaluation: delegano a ComputeCircuit() che agisce solo se dirty
@@ -386,9 +422,15 @@ int CircuitLab::Circuit::AddComponent(std::unique_ptr<Component> comp)
 }
 
 // Rimuove un componente dal circuito insieme a tutti i link che lo coinvolgono.
-// Dopo la rimozione, azzera i nodeId di tutti i terminali rimasti e
-// ricostruisce le connessioni rieseguendo i link sopravvissuti,
-// in modo da mantenere la topologia del circuito consistente.
+// I nodeId dei terminali rimasti NON vengono toccati: nessun componente di questo
+// simulatore può collegare i propri due terminali tra loro (ConnectTerminals lo
+// impedisce), quindi cancellare un componente non può mai richiedere di "separare"
+// un nodo che due terminali di ALTRI componenti condividono — quella condivisione
+// esiste indipendentemente da lui. Ricostruire tutto da zero rieseguendo solo i
+// link sopravvissuti era sbagliato: se un nodo era formato da più link in serie che
+// passavano per il terminale del componente eliminato (es. una giunzione a 3 fili),
+// si perdeva anche il collegamento tra gli altri due, anche se elettricamente
+// restavano sullo stesso nodo.
 void CircuitLab::Circuit::RemoveComponent(int compId)
 {
 	if (!GetComponentById(compId)) return;
@@ -410,18 +452,6 @@ void CircuitLab::Circuit::RemoveComponent(int compId)
 			}),
 		m_links.end()
 	);
-
-	// Azzera i nodeId di tutti i terminali non-ground per ripartire da zero
-	for (auto const &comp : m_components)
-	{
-		if (comp->IsGround()) continue;
-		for (int i = 0; i < comp->GetTerminals().size(); i++)
-			comp->GetTerminal(i).SetNodeId(-1);
-	}
-
-	// Ricostruisce le connessioni rieseguendo i link rimasti
-	for (auto const &link : m_links)
-		ConnectTerminals(link.compId1, link.termIndex1, link.compId2, link.termIndex2, false);
 
 	InvalidateCircuit();
 }
