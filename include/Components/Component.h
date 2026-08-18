@@ -87,6 +87,14 @@ namespace CircuitLab {
 		// del passo precedente per il modello companion). Default: no-op.
 		virtual void UpdateState(double v1, double v2) { (void)v1; (void)v2; }
 
+		// Inverte lo stato aperto/chiuso. Solo lo Switch lo sovrascrive;
+		// per tutti gli altri componenti è un no-op (non ha senso "aprirli").
+		virtual void ToggleSwitch() {}
+
+		// Stato aperto/chiuso, usato dalla UI per scegliere il simbolo da disegnare.
+		// Solo lo Switch lo sovrascrive; il default true è irrilevante per gli altri tipi.
+		virtual bool IsSwitchClosed() const { return true; }
+
 		// Solo i componenti con forma d'onda (es. VoltageGenerator) sovrascrivono questi;
 		// gli altri restituiscono WaveFormType::none / non fanno nulla.
 		virtual WaveFormType GetWaveFormType() const { return WaveFormType::none; }

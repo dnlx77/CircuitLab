@@ -125,6 +125,11 @@ namespace CircuitLab {
 		std::map<ComponentValue, double> GetComponentValues(int compId) const;
 		void SetComponentValues(int compId, const std::map<ComponentValue, double> &values);
 
+		// Inverte lo stato aperto/chiuso di uno Switch (no-op sugli altri tipi,
+		// vedi Component::ToggleSwitch). Invalida il circuito perché la
+		// conduttanza cambia e la matrice va ristampata.
+		void ToggleSwitch(int compId);
+
 		void SetOnFactorize(const fnOnFactorize &func) { m_onFactorize = func; }
 
 		std::vector<int> GetComponentsByNodeId(int nodeId) const;

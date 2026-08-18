@@ -34,7 +34,10 @@ namespace CircuitLab {
 		using fnOnNew = std::function<void()>;                             // Callback per resettare il canvas
 		using fnGetComponentValues = std::function<std::map<ComponentValue, double>(int compId)>;
 		using fnSetComponentValues = std::function<void(int compId, const std::map<ComponentValue, double> &values)>;
+		using fnToggleSwitch = std::function<void(int compId)>;
+		using fnIsSwitchClosed = std::function<bool(int compId)>;
 		using fnSetSimulationStatus = std::function<void(const SimulationStatus status)>;
+		using fnGetSimulationStatus = std::function<SimulationStatus()>;
 		using fnGetComponentsByNodeId = std::function<std::vector<int>(int nodeId)>;
 		using fnGetComponentTypeById = std::function<ComponentType(int compId)>;
 		using fnGetWaveFormType = std::function<WaveFormType(int)>;
@@ -74,6 +77,13 @@ namespace CircuitLab {
 		static constexpr int PARTICLE_SIZE = 5;
 		static constexpr int PARTICLE_SPACING_FACTOR = 3;
 		static constexpr float PARTICLE_SPEED_SCALE = 0.1f;
+		// Sotto questa soglia (in Ampere) la corrente è considerata nulla ai fini
+		// del colore dei pallini, per evitare sfarfallii tra i due colori per
+		// rumore numerico attorno allo zero.
+		static constexpr double PARTICLE_CURRENT_SIGN_EPSILON = 1e-9;
+		inline static const sf::Color PARTICLE_COLOR_POSITIVE = sf::Color(255, 140, 0);  // Arancio: corrente nel verso positivo del filo
+		inline static const sf::Color PARTICLE_COLOR_NEGATIVE = sf::Color(0, 200, 255);  // Ciano: corrente nel verso opposto
+		inline static const sf::Color PARTICLE_COLOR_NEUTRAL = sf::Color::Yellow;        // Corrente ~0
 		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30); // Colore sfondo canvas
 
 		SimulationOutput m_simulationOutput;  // Ultimo risultato di simulazione ricevuto
@@ -125,7 +135,10 @@ namespace CircuitLab {
 		fnOnNew m_onNew;
 		fnGetComponentValues m_onGetComponentValues;
 		fnSetComponentValues m_onSetComponentValues;
+		fnToggleSwitch m_onToggleSwitch;
+		fnIsSwitchClosed m_onIsSwitchClosed;
 		fnSetSimulationStatus m_onSetSimulationStatus;
+		fnGetSimulationStatus m_onGetSimulationStatus;
 		fnGetComponentsByNodeId m_onGetComponentsByNodeId;
 		fnGetComponentTypeById m_onGetComponentTypeById;
 		fnGetWaveFormType m_onGetWaveFormType;
@@ -227,7 +240,10 @@ namespace CircuitLab {
 		void SetOnNew(const fnOnNew &func) { m_onNew = func; }
 		void SetOnGetComponentValues(const fnGetComponentValues &func) { m_onGetComponentValues = func; }
 		void SetOnSetComponentValues(const fnSetComponentValues &func) { m_onSetComponentValues = func; }
+		void SetOnToggleSwitch(const fnToggleSwitch &func) { m_onToggleSwitch = func; }
+		void SetOnIsSwitchClosed(const fnIsSwitchClosed &func) { m_onIsSwitchClosed = func; }
 		void SetOnSetSimulationStatus(const fnSetSimulationStatus &func) { m_onSetSimulationStatus = func; }
+		void SetOnGetSimulationStatus(const fnGetSimulationStatus &func) { m_onGetSimulationStatus = func; }
 		void SetOnGetComponentsByNodeId(const fnGetComponentsByNodeId &func) { m_onGetComponentsByNodeId = func; }
 		void SetOnGetComponentTypeById(const fnGetComponentTypeById &func) { m_onGetComponentTypeById = func; }
 		void SetOnGetWaveFormType(const fnGetWaveFormType &func) { m_onGetWaveFormType = func; }

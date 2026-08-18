@@ -7,14 +7,18 @@
 #include "Components/VoltageGenerator.h"
 #include "Components/Ground.h"
 #include "Components/Capacitor.h"
+#include "Components/Inductor.h"
+#include "Components/Switch.h"
 #include "Common/SimulationOutput.h"
 #include "UI/Ui.h"
 #include "Common/Logger.h"
 
-static constexpr double TIMESTEP_VALUES[] = {
-	1.0, 0.1, 0.01, 0.001,
-	0.0001, 0.00001, 0.000001, 0.0000001, 0.00000001, 0.000000001, 0.0000000001, 0.00000000001, 0.000000000001,
-};
+namespace {
+	constexpr double TIMESTEP_VALUES[] = {
+		1.0, 0.1, 0.01, 0.001,
+		0.0001, 0.00001, 0.000001, 0.0000001, 0.00000001, 0.000000001, 0.0000000001, 0.00000000001, 0.000000000001,
+	};
+}
 
 // Crea il componente appropriato in base al tipo richiesto.
 // Il valore ha significato diverso a seconda del tipo:
@@ -22,6 +26,8 @@ static constexpr double TIMESTEP_VALUES[] = {
 //   - voltageSource: valore in Volt
 //   - ground:        valore ignorato
 //   - capacitor:     valore in Farad
+//   - inductor:      valore in Henry
+//   - switch:        chiuso di default
 std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type)
 {
 	switch (type) {
@@ -29,6 +35,8 @@ std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(Co
 	case ComponentType::voltageGenerator:	return std::make_unique<VoltageGenerator>(WaveForm::Create(WaveFormType::dcWaveForm));
 	case ComponentType::ground:				return std::make_unique<Ground>();
 	case ComponentType::capacitor:			return std::make_unique<Capacitor>(0.000001);
+	case ComponentType::inductor:			return std::make_unique<Inductor>(0.001);
+	case ComponentType::switchComponent:	return std::make_unique<Switch>(true);
 	default:								return nullptr;
 	}
 }
@@ -131,6 +139,11 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 	m_ui->SetOnSetSimulationStatus([this](SimulationStatus status)
 		{
 			return SetSimulationStatus(status);
+		});
+
+	m_ui->SetOnGetSimulationStatus([this]() -> SimulationStatus
+		{
+			return m_simStatus;
 		});
 
 	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type) -> int
@@ -244,6 +257,18 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 		{
 			std::lock_guard<std::mutex> lock(m_circuitMutex);
 			m_circuit->SetComponentValues(compId, values);
+		});
+
+	m_ui->SetOnToggleSwitch([this](int compId)
+		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			m_circuit->ToggleSwitch(compId);
+		});
+
+	m_ui->SetOnIsSwitchClosed([this](int compId) -> bool
+		{
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			return m_circuit->GetComponentById(compId)->IsSwitchClosed();
 		});
 
 	m_ui->SetOnGetComponentTypeById([this](int compId)->ComponentType
@@ -469,6 +494,28 @@ void CircuitLab::Application::Simulate()
 			componentCurrent[comp->GetId()] = current;
 			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
 		}
+		else if (comp->GetType() == ComponentType::switchComponent)
+		{
+			// Stesso schema del resistore: nessuna dipendenza dal tempo, la
+			// corrente è semplicemente Geq*(v1-v2) (Geq alta se chiuso, quasi
+			// zero se aperto). Senza questo blocco, output.currentComp/currentBranch
+			// non avevano mai una voce per lo switch: i fili "ancorati" a lui
+			// restavano sempre a corrente 0 (pallini fermi e gialli).
+			std::vector<int> termList = comp->GetTerminalNodeIds();
+			if (termList[0] <= 0)
+				v1 = 0.0;
+			else
+				v1 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[0])];
+			if (termList[1] <= 0)
+				v2 = 0.0;
+			else
+				v2 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[1])];
+
+			auto *sw = static_cast<Switch *>(comp.get());
+			double current = sw->GetConductance() * (v1 - v2);
+			componentCurrent[comp->GetId()] = current;
+			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
+		}
 		else if (comp->GetType() == ComponentType::capacitor)
 		{
 			std::vector<int> termList = comp->GetTerminalNodeIds();
@@ -491,6 +538,29 @@ void CircuitLab::Application::Simulate()
 			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
 
 			cap->UpdateState(v1, v2);
+		}
+		else if (comp->GetType() == ComponentType::inductor)
+		{
+			std::vector<int> termList = comp->GetTerminalNodeIds();
+			// Vedi commento nel ramo resistor: <= 0 copre ground (0) e terminale
+			// mai collegato (-1), entrambi assenti da m_nodesMap.
+			if (termList[0] <= 0)
+				v1 = 0.0;
+			else
+				v1 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[0])];
+			if (termList[1] <= 0)
+				v2 = 0.0;
+			else
+				v2 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[1])];
+
+			// i(t) = Geq*(v1-v2) + i(t-h), con i(t-h) letta PRIMA di aggiornare
+			// lo stato dell'induttore per il prossimo step.
+			auto *ind = static_cast<Inductor *>(comp.get());
+			double current = ind->GetConductance() * (v1 - v2) + ind->GetPreviousCurrent();
+			componentCurrent[comp->GetId()] = current;
+			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
+
+			ind->UpdateState(v1, v2);
 		}
 	}
 
@@ -568,8 +638,11 @@ void CircuitLab::Application::SampleChannels(const SimulationOutput &output)
 				output.nodeVoltages.at(channel.idB);
 			break;
 		case ProbeType::componentCurrent:
-			if (output.currentComp.count(channel.idA))
-				value = output.currentComp.at(channel.idA);
+			// Per questo probe l'id del componente è in channel.compId, non in
+			// channel.idA (che AddChannel non valorizza mai per componentCurrent —
+			// vedi UI::DrawOscilloscope, dove per questo tipo viene passato solo compId).
+			if (output.currentComp.count(channel.compId))
+				value = output.currentComp.at(channel.compId);
 			break;
 		case ProbeType::branchCurrent:
 		{

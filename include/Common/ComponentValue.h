@@ -7,6 +7,7 @@ namespace CircuitLab {
 		amplitude,
 		frequency,
 		phase,
-		capacitance
+		capacitance,
+		inductance
 	};
 }

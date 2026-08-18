@@ -224,6 +224,12 @@ void CircuitLab::Circuit::SetComponentValues(int compId, const std::map<CircuitL
 	InvalidateCircuit();
 }
 
+void CircuitLab::Circuit::ToggleSwitch(int compId)
+{
+	GetComponentById(compId)->ToggleSwitch();
+	InvalidateCircuit();
+}
+
 std::vector<int> CircuitLab::Circuit::GetComponentsByNodeId(int nodeId) const
 {
 	std::vector<int> connectComp;

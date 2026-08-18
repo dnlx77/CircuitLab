@@ -12,6 +12,8 @@ namespace CircuitLab {
 		resistor,      // Resistenza ideale
 		voltageGenerator, // Sorgente di tensione ideale
 		capacitor,     // Condensatore ideale
+		inductor,      // Induttore ideale
+		switchComponent, // Interruttore ideale (aperto/chiuso, non ha un valore continuo)
 	};
 
 	NLOHMANN_JSON_SERIALIZE_ENUM(ComponentType, {
@@ -19,6 +21,8 @@ namespace CircuitLab {
 		{ ComponentType::voltageGenerator, "VoltageGenerator" },
 		{ ComponentType::ground, "Ground" },
 		{ ComponentType::capacitor, "Capacitor" },
+		{ ComponentType::inductor, "Inductor" },
+		{ ComponentType::switchComponent, "Switch" },
 	})
 
 	enum class WaveFormType {

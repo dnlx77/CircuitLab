@@ -292,6 +292,16 @@ void CircuitLab::UI::HandleEvents()
 						int id = m_onCircuitChange(ComponentType::capacitor);
 						AddViewComponent(id, "Capacitor", ComponentType::capacitor, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
 					}
+					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::L))
+					{
+						int id = m_onCircuitChange(ComponentType::inductor);
+						AddViewComponent(id, "Inductor", ComponentType::inductor, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+					}
+					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S))
+					{
+						int id = m_onCircuitChange(ComponentType::switchComponent);
+						AddViewComponent(id, "Switch", ComponentType::switchComponent, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+					}
 				}
 
 				// Gestione selezione e collegamento terminali:
@@ -300,6 +310,16 @@ void CircuitLab::UI::HandleEvents()
 				if (m_selectedComponent.state != SelectionState::terminalSelected && m_selectedComponent.state != SelectionState::linkSelected && !ImGui::GetIO().WantCaptureMouse)
 				{
 					CheckClick(pos, m_selectedComponent);
+
+					// Un interruttore si apre/chiude cliccandoci sopra (il tasto sinistro
+					// qui seleziona soltanto — il drag usa il tasto destro, vedi sotto —
+					// quindi il click non fa altro che "selezionare", e possiamo far
+					// scattare il toggle sulla stessa azione senza conflitti).
+					if (m_selectedComponent.state == SelectionState::componentSelected &&
+						m_onGetComponentTypeById(m_selectedComponent.compId) == ComponentType::switchComponent)
+					{
+						m_onToggleSwitch(m_selectedComponent.compId);
+					}
 				}
 				else if (m_selectedComponent.state == SelectionState::terminalSelected)
 				{
@@ -787,6 +807,15 @@ void CircuitLab::UI::HandleEvents()
 
 				UpdateLinksForComponent(m_selectedComponent.compId);
 			}
+
+			// Alternativa da tastiera al click per aprire/chiudere un interruttore
+			// selezionato, comoda per toggle ripetuti senza dover ricliccare ogni volta.
+			if (m_selectedComponent.state == SelectionState::componentSelected &&
+				keyboardEvent->code == sf::Keyboard::Key::Space &&
+				m_onGetComponentTypeById(m_selectedComponent.compId) == ComponentType::switchComponent)
+			{
+				m_onToggleSwitch(m_selectedComponent.compId);
+			}
 		}
 	}
 }
@@ -936,37 +965,26 @@ void CircuitLab::UI::DrawImageGuiPanel()
 
 void CircuitLab::UI::DrawComponents()
 {
-	// Disegna ogni componente: rettangolo colorato per tipo + cerchi per i terminali + etichetta
+	// Disegna ogni componente: simbolo schematico per tipo + cerchi per i terminali + etichetta
 	for (const auto &comp : m_componentViewList)
 	{
 		ComponentDesign des = comp.GetComponetDesign();
 
-		sf::RectangleShape rect;
-		rect.setSize({ static_cast<float>(des.compWidth), static_cast<float>(des.compHeight) });
-		rect.setOrigin({ static_cast<float>(des.compWidth / 2), static_cast<float>(des.compHeight / 2) });
-		rect.setPosition({ comp.GetPosition().x, comp.GetPosition().y });
-		rect.setRotation(sf::degrees(comp.GetRotation()));
-
-		// Colore del corpo in base al tipo
-		if (comp.GetComponentType() == ComponentType::resistor)
-			rect.setFillColor(sf::Color::Green);
-		else if (comp.GetComponentType() == ComponentType::voltageGenerator)
-			rect.setFillColor(sf::Color::Red);
-		else if (comp.GetComponentType() == ComponentType::ground)
-			rect.setFillColor(sf::Color::White);
-		else if (comp.GetComponentType() == ComponentType::capacitor)
-			rect.setFillColor(sf::Color::Cyan);
-
-		// Outline giallo se il componente è selezionato (corpo, non terminale)
-		if (comp.GetComponentLink() == m_selectedComponent.compId &&
+		// Selezionato = corpo (non terminale) del componente corrente
+		bool isSelected = comp.GetComponentLink() == m_selectedComponent.compId &&
 			m_selectedComponent.terminalIndex == -1 &&
-			m_selectedComponent.state == SelectionState::componentSelected)
-		{
-			rect.setOutlineColor(sf::Color::Yellow);
-			rect.setOutlineThickness(OUTLINE_THICKNESS);
-		}
+			m_selectedComponent.state == SelectionState::componentSelected;
+		sf::Color symbolColor = isSelected ? sf::Color::Yellow : sf::Color::White;
 
-		m_window.draw(rect);
+		WaveFormType waveForm = (comp.GetComponentType() == ComponentType::voltageGenerator && m_onGetWaveFormType)
+			? m_onGetWaveFormType(comp.GetComponentLink())
+			: WaveFormType::none;
+
+		bool switchClosed = (comp.GetComponentType() == ComponentType::switchComponent && m_onIsSwitchClosed)
+			? m_onIsSwitchClosed(comp.GetComponentLink())
+			: true;
+
+		comp.DrawSymbol(m_window, symbolColor, waveForm, switchClosed);
 
 		// Disegna i terminali come cerchi blu
 		sf::CircleShape term(static_cast<float>(des.terminalRadius));
@@ -1021,6 +1039,10 @@ void CircuitLab::UI::DrawComponents()
 			compString += "G";
 		else if (comp.GetComponentType() == ComponentType::capacitor)
 			compString += "C";
+		else if (comp.GetComponentType() == ComponentType::inductor)
+			compString += "L";
+		else if (comp.GetComponentType() == ComponentType::switchComponent)
+			compString += "S";
 
 		compString += std::to_string(comp.GetComponentLink());
 
@@ -1100,6 +1122,15 @@ void CircuitLab::UI::DrawParticles(int linkId)
 		if (lv.id == linkId)
 		{
 			sf::Vector2f nodeViewPos = GetNodeviewPositionByNodeViewId(lv.nodeViewId);
+
+			// Colore in base al segno della corrente su questo filo: distingue a
+			// colpo d'occhio il verso, oltre alla direzione di movimento dei pallini
+			// (che da sola può essere poco evidente, specialmente con correnti piccole).
+			double current = m_linkViewCurrentList.count(linkId) ? m_linkViewCurrentList.at(linkId) : 0.0;
+			sf::Color particleColor = (current > PARTICLE_CURRENT_SIGN_EPSILON) ? PARTICLE_COLOR_POSITIVE
+				: (current < -PARTICLE_CURRENT_SIGN_EPSILON) ? PARTICLE_COLOR_NEGATIVE
+				: PARTICLE_COLOR_NEUTRAL;
+
 			for (const auto &lp : m_linkParticlesList)
 			{
 				if (lp.linkViewId == linkId)
@@ -1111,7 +1142,7 @@ void CircuitLab::UI::DrawParticles(int linkId)
 						pPos.x = lv.startPos.x + (nodeViewPos.x - lv.startPos.x) * t_i;
 						pPos.y = lv.startPos.y + (nodeViewPos.y - lv.startPos.y) * t_i;
 						sf::CircleShape particle(NODE_RADIUS);
-						particle.setFillColor(sf::Color::Yellow);
+						particle.setFillColor(particleColor);
 						particle.setOrigin({ NODE_RADIUS, NODE_RADIUS });
 						particle.setPosition({ pPos.x,pPos.y });
 						m_window.draw(particle);
@@ -1382,6 +1413,7 @@ std::string_view CircuitLab::UI::ComponentValueToString(CircuitLab::ComponentVal
 	case ComponentValue::frequency:  return "Frequency";
 	case ComponentValue::phase:      return "Phase";
 	case ComponentValue::capacitance: return "Capacitance";
+	case ComponentValue::inductance: return "Inductance";
 	default:                         return "Unknown";
 	}
 }
@@ -1588,7 +1620,11 @@ void CircuitLab::UI::Render()
 
 	DrawNodes();
 
-	UpdateParticles(dt.asSeconds());
+	// I pallini avanzano solo mentre la simulazione è effettivamente in esecuzione:
+	// altrimenti continuavano a muoversi anche a simulazione in pausa/stop, dando
+	// l'impressione (falsa) che il circuito stesse ancora facendo qualcosa.
+	if (m_onGetSimulationStatus && m_onGetSimulationStatus() == SimulationStatus::running)
+		UpdateParticles(dt.asSeconds());
 
 	DrawWires();
 

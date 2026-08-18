@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <SFML/Graphics.hpp>
 #include "Core/Vector2.h"
 #include "Common/ComponentType.h"
 
@@ -46,6 +47,16 @@ namespace CircuitLab {
 
 		// Restituisce il design grafico del tipo di questo componente
 		const ComponentDesign &GetComponetDesign() const { return s_design.at(m_type); }
+
+		// Disegna il simbolo schematico del componente (resistenza, condensatore,
+		// massa, generatore, induttore, interruttore) in coordinate locali (origine
+		// al centro, come gli offset dei terminali sopra), trasformato secondo
+		// posizione e rotazione correnti. color distingue selezionato/non selezionato;
+		// waveForm sceglie l'icona interna del generatore di tensione (+/-, sinusoide,
+		// onda quadra); switchClosed sceglie se disegnare la lama dell'interruttore
+		// chiusa o aperta. Entrambi i parametri sono ignorati dai tipi a cui non si
+		// applicano.
+		void DrawSymbol(sf::RenderWindow &window, sf::Color color, WaveFormType waveForm, bool switchClosed) const;
 
 		void SetPosition(const Vec2 &position) { m_position = position; }
 		void SetRotation(float rotation) { m_rotation = rotation; }
