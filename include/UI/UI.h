@@ -179,6 +179,13 @@ namespace CircuitLab {
 		// Restituisce il NodeView con l'ID dato (lancia eccezione se non trovato)
 		NodeView GetNodeViewById(int nodeViewId) const;
 
+		// True se il NodeView partecipa a un tratto di bus (come sorgente o come
+		// destinazione), non solo a tap di componenti. Usato per distinguere una
+		// vera giunzione interattiva (selezionabile/trascinabile, non "fantasma"
+		// che segue il terminale) da un semplice punto medio invisibile tra due
+		// componenti — vedi CheckClick e UpdateLinksForComponent.
+		bool NodeViewHasBusEdge(int nodeViewId) const;
+
 		// Disegna il pannello laterale ImGui (proprietà componente selezionato, oscilloscopio, save/load)
 		void DrawImageGuiPanel();
 
@@ -265,6 +272,54 @@ namespace CircuitLab {
 
 		// Aggiunge la vista grafica di un filo al canvas
 		int AddViewLink(int comp1, int term1, int nodeViewId);
+
+		// Aggiunge un tratto di bus (filo tra due NodeView, nessun componente
+		// coinvolto) al canvas; restituisce l'ID assegnato alla nuova LinkView.
+		// Usato dal caricamento da file (vedi IOManager) e da SplitLinkIntoNewNodeView.
+		int AddBusLinkView(int sourceNodeViewId, int targetNodeViewId);
+
+		// Stacca il link dato dal suo NodeView attuale (il "genitore") in un
+		// nuovo NodeView (stesso nodeId, stessa posizione iniziale del genitore),
+		// collegato ad esso con un nuovo tratto di bus. Nessuna chiamata al
+		// Circuit: è puramente una riorganizzazione visiva, la topologia
+		// elettrica non cambia. Restituisce l'ID del nuovo NodeView (-1 se
+		// linkId non esiste). Usato da Ctrl+drag destro su un filo (split).
+		int SplitLinkIntoNewNodeView(int linkId);
+
+		// Rimuove un tratto di bus (inverso di SplitLinkIntoNewNodeView) e
+		// pulisce entrambi i suoi estremi tramite CollapseIfDangling: un
+		// estremo rimasto senza alcun link viene eliminato, uno rimasto con un
+		// solo tap viene riattaccato direttamente all'altro estremo. Non fa
+		// nulla se linkId non è un tratto di bus.
+		void RemoveBusEdge(int linkId);
+
+		// Se il NodeView nvId è rimasto senza alcun link lo elimina; se gli è
+		// rimasto un solo link e quel link è un tap, lo riattacca direttamente
+		// a otherNvId (se esiste) eliminando nvId; se quel link è invece un
+		// tratto di bus (nessun tap proprio rimasto: un "moncone"), lo rimuove
+		// a cascata tramite RemoveBusEdge. Non fa nulla se ha 2+ link (giunzione
+		// normale) o se nvId non esiste (già rimosso da una collapse precedente).
+		void CollapseIfDangling(int nvId, int otherNvId);
+
+		// Collega direttamente due NodeView già esistenti (es. due nodi
+		// piazzati a mano con "N", o una giunzione e un nodo vuoto) con un
+		// tratto di bus. Se ENTRAMBI i gruppi hanno già almeno un tap reale
+		// (un componente collegato da qualche parte al loro interno), notifica
+		// anche il Circuit per unificare davvero i due nodi elettrici — altrimenti
+		// resterebbero visivamente collegati ma elettricamente distinti. Se uno
+		// o entrambi i gruppi sono ancora vuoti, il collegamento resta puramente
+		// visivo, come il primo filo su un nodo vuoto (vedi HandleEvents).
+		void JoinTwoNodeViews(int nvIdA, int nvIdB);
+
+		// Percorre, seguendo solo i tratti di bus (mai un tratto di bus stesso,
+		// che ha compIdA/termIndexA a -1 e andrebbe scambiato per un componente
+		// vero), il gruppo di NodeView a cui appartiene startNodeViewId, e
+		// restituisce {compId, termIndex} del primo tap reale trovato, escluso
+		// (se specificato) quello indicato da excludeCompId/excludeTermIndex —
+		// utile per trovare "un ALTRO tap" quando si sta unendo un gruppo che
+		// contiene già il terminale corrente. Restituisce {-1,-1} se il gruppo
+		// non ha nessun tap reale (utilizzabile, che non sia quello escluso).
+		std::pair<int, int> FindRealTapInGroup(int startNodeViewId, int excludeCompId = -1, int excludeTermIndex = -1) const;
 
 		//int AddViewLinkToNode(int comp1, int term1, int nodeViewId);
 

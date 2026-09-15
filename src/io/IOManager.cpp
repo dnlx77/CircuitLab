@@ -42,7 +42,10 @@ void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circui
 
 	j["linksView"] = nlohmann::json::array();
 
-	// Serializza le viste grafiche dei fili (estremi e riferimenti ai componenti)
+	// Serializza le viste grafiche dei fili (estremi e riferimenti ai componenti).
+	// sourceNodeViewId è -1 per un tap normale (terminale->NodeView); se != -1
+	// è un tratto di bus (NodeView->NodeView, nessun componente coinvolto) —
+	// vedi il commento su LinkView in UICommon.h.
 	for (auto const &lw : linksView)
 	{
 		nlohmann::json linkViewJson;
@@ -50,6 +53,7 @@ void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circui
 		linkViewJson["compIdA"] = lw.compIdA;
 		linkViewJson["termIndexA"] = lw.termIndexA;
 		linkViewJson["nodeViewId"] = lw.nodeViewId;
+		linkViewJson["sourceNodeViewId"] = lw.sourceNodeViewId;
 		j["linksView"].push_back(linkViewJson);
 	}
 
@@ -134,14 +138,26 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 		loadVsRealNodeViewMap[nodeViewJson["id"]] = m_onNodeViewLoad(nodeViewJson["nodeId"], pos);
 	}
 
-	// 5) Ricrea le viste grafiche dei fili (LinkView), traducendo sia l'ID del componente
-	// sia l'ID del NodeView di destinazione con i rispettivi ID reali
+	// 5) Ricrea le viste grafiche dei fili (LinkView). sourceNodeViewId assente
+	// (file salvati da versioni precedenti) o -1 indica un tap normale, tradotto
+	// come prima; se presente e != -1 è un tratto di bus tra due NodeView, senza
+	// alcun componente coinvolto — entrambi gli hub sono già stati creati al passo 4.
 	for (auto const linkViewJson : j["linksView"])
 	{
-		int newCompId = loadVsRealNodeMap.at(linkViewJson["compIdA"].get<int>());
-		int termIndexA = linkViewJson["termIndexA"].get<int>();
+		int sourceNodeViewId = linkViewJson.value("sourceNodeViewId", -1);
 		int newNodeViewId = loadVsRealNodeViewMap.at(linkViewJson["nodeViewId"].get<int>());
-		loadVsRealLinkViewMap[linkViewJson["id"].get<int>()] = m_onLinkViewLoad(newCompId, termIndexA, newNodeViewId);
+
+		if (sourceNodeViewId != -1)
+		{
+			int newSourceNodeViewId = loadVsRealNodeViewMap.at(sourceNodeViewId);
+			loadVsRealLinkViewMap[linkViewJson["id"].get<int>()] = m_onBusLinkViewLoad(newSourceNodeViewId, newNodeViewId);
+		}
+		else
+		{
+			int newCompId = loadVsRealNodeMap.at(linkViewJson["compIdA"].get<int>());
+			int termIndexA = linkViewJson["termIndexA"].get<int>();
+			loadVsRealLinkViewMap[linkViewJson["id"].get<int>()] = m_onLinkViewLoad(newCompId, termIndexA, newNodeViewId);
+		}
 	}
 
 	// 6) Ora che le LinkView hanno i loro ID reali, aggiorna ogni NodeView con la lista

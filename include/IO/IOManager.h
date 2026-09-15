@@ -25,6 +25,10 @@ namespace CircuitLab {
 	// Restituisce l'ID assegnato alla nuova LinkView.
 	using fnLinkViewLoad = std::function<int(int compIdA, int terminalIndexA, int NodeViewId)>;
 
+	// Aggiunge un tratto di bus (un filo tra due NodeView, nessun componente
+	// coinvolto) alla UI. Restituisce l'ID assegnato alla nuova LinkView.
+	using fnBusLinkViewLoad = std::function<int(int sourceNodeViewId, int targetNodeViewId)>;
+
 	// Aggiunge un NodeView (hub) alla UI nella posizione data; restituisce l'ID assegnato.
 	using fnNodeViewLoad = std::function<int(int nodeId, sf::Vector2f position)>;
 
@@ -42,6 +46,7 @@ namespace CircuitLab {
 		fnLinkLoad m_onLinkLoad;
 		fnComponentViewLoad m_onComponentViewLoad;
 		fnLinkViewLoad m_onLinkViewLoad;
+		fnBusLinkViewLoad m_onBusLinkViewLoad;
 		fnNodeViewLoad m_onNodeViewLoad;
 		fnOnNew m_onNew;
 		fnUpdateNodeViewLinkIds m_onUpdateNodeViewLinkIds;
@@ -63,6 +68,7 @@ namespace CircuitLab {
 		void SetOnLoadLink(const fnLinkLoad &fn) { m_onLinkLoad = fn; }
 		void SetOnComponentViewLoad(const fnComponentViewLoad &fn) { m_onComponentViewLoad = fn; }
 		void SetOnLinkViewLoad(const fnLinkViewLoad &fn) { m_onLinkViewLoad = fn; }
+		void SetOnBusLinkViewLoad(const fnBusLinkViewLoad &fn) { m_onBusLinkViewLoad = fn; }
 		void SetOnNodeViewLoad(const fnNodeViewLoad &fn) { m_onNodeViewLoad = fn; }
 		void SetOnNew(const fnOnNew &fn) { m_onNew = fn; }
 		void SetOnUpdateNodeViewLinkIds(const fnUpdateNodeViewLinkIds &fn) { m_onUpdateNodeViewLinkIds = fn; }
