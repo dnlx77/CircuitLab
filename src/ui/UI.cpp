@@ -4,9 +4,165 @@
 #include <numbers>
 #include <set>
 
+#include <algorithm>
+#include <cfloat>
+#include <cmath>
+#include <string>
+#include <vector>
+
 #include "UI/Ui.h"
 #include "Core/Vector2.h"
 #include "Common/Logger.h"
+
+namespace {
+	// Prefisso di una lettera per il tipo di componente ("R", "V", "G", ...),
+	// usato nelle etichette sul canvas e nei nomi dei canali dell'oscilloscopio.
+	const char *ComponentPrefix(CircuitLab::ComponentType type)
+	{
+		switch (type)
+		{
+		case CircuitLab::ComponentType::resistor:         return "R";
+		case CircuitLab::ComponentType::voltageGenerator: return "V";
+		case CircuitLab::ComponentType::ground:           return "G";
+		case CircuitLab::ComponentType::capacitor:        return "C";
+		case CircuitLab::ComponentType::inductor:         return "L";
+		case CircuitLab::ComponentType::switchComponent:  return "S";
+		case CircuitLab::ComponentType::diode:            return "D";
+		default:                                          return "";
+		}
+	}
+
+	// Unità di misura di una proprietà di componente ("" se adimensionale o non
+	// univoca, es. la fase, per cui non si mostra alcuna forma con prefisso SI).
+	const char *ComponentValueUnit(CircuitLab::ComponentValue value)
+	{
+		switch (value)
+		{
+		case CircuitLab::ComponentValue::resistance:        return "Ohm";
+		case CircuitLab::ComponentValue::voltage:           return "V";
+		case CircuitLab::ComponentValue::amplitude:         return "V";
+		case CircuitLab::ComponentValue::frequency:         return "Hz";
+		case CircuitLab::ComponentValue::capacitance:       return "F";
+		case CircuitLab::ComponentValue::inductance:        return "H";
+		case CircuitLab::ComponentValue::saturationCurrent: return "A";
+		default:                                            return "";
+		}
+	}
+
+	// Formatta un valore con prefisso SI ("8.05 V", "250 uV", "4.3 mA"). Il micro
+	// è scritto "u": il font predefinito di ImGui non ha il glifo "µ", e il resto
+	// dell'interfaccia (es. il combo del timestep) usa già "us".
+	std::string FormatEngineering(double value, const char *unit)
+	{
+		struct Prefix { double scale; const char *name; };
+		static const Prefix prefixes[] = {
+			{ 1e9, "G" }, { 1e6, "M" }, { 1e3, "k" }, { 1.0, "" },
+			{ 1e-3, "m" }, { 1e-6, "u" }, { 1e-9, "n" }, { 1e-12, "p" },
+		};
+
+		const double magnitude = std::abs(value);
+		// Sotto 0.1 pV/pA è solo rumore di arrotondamento (es. la media di una
+		// sinusoide simmetrica): meglio "0" che "0.08 pV".
+		if (magnitude < 1e-13)
+			return std::string("0 ") + unit;
+
+		const Prefix *chosen = &prefixes[std::size(prefixes) - 1];
+		for (const Prefix &p : prefixes)
+			if (magnitude >= p.scale)
+			{
+				chosen = &p;
+				break;
+			}
+
+		char buffer[48];
+		std::snprintf(buffer, sizeof(buffer), "%.4g %s%s", value / chosen->scale, chosen->name, unit);
+		return buffer;
+	}
+
+	// Notazione scientifica con mantissa in [1,10) e senza zeri inutili: "2.5e-3",
+	// "1e1", "0". L'esponente c'è sempre (anche "5e0") per restare uniforme lungo un asse.
+	std::string FormatScientific(double value)
+	{
+		if (std::abs(value) < 1e-300)
+			return "0";
+
+		int exponent = static_cast<int>(std::floor(std::log10(std::abs(value))));
+		double mantissa = value / std::pow(10.0, exponent);
+
+		char buffer[32];
+		std::snprintf(buffer, sizeof(buffer), "%.4g", mantissa);
+		// L'arrotondamento a 4 cifre può dare 10 (es. 9.99996): rinormalizza
+		if (std::abs(std::atof(buffer)) >= 10.0)
+		{
+			exponent++;
+			std::snprintf(buffer, sizeof(buffer), "%.4g", mantissa / 10.0);
+		}
+
+		return std::string(buffer) + "e" + std::to_string(exponent);
+	}
+
+	// Contesto per il formattatore degli assi di ImPlot: quale notazione e, per la
+	// notazione SI, quale unità ("s" per il tempo, "V"/"A" per l'asse Y, "" se mista).
+	struct AxisNotation {
+		int notation; // OSC_NOTATION_* di UI (1 = scientifica, 2 = SI)
+		const char *unit;
+	};
+
+	int FormatAxisTick(double value, char *buffer, int size, void *userData)
+	{
+		const AxisNotation *axis = static_cast<const AxisNotation *>(userData);
+
+		std::string text = (axis->notation == 1) ? FormatScientific(value) : FormatEngineering(value, axis->unit);
+		while (!text.empty() && text.back() == ' ')
+			text.pop_back();
+
+		return std::snprintf(buffer, size, "%s", text.c_str());
+	}
+
+	// Misure di un canale sulla porzione di campioni visibile nel grafico.
+	struct ChannelMeasure {
+		std::string label;
+		ImVec4 color;
+		const char *unit = "V";
+		double peakToPeak = 0.0;
+		double mean = 0.0;
+		double rms = 0.0;
+		double frequency = 0.0; // 0 = non stimabile (segnale costante o meno di 2 periodi)
+	};
+
+	// Stima la frequenza contando i fronti di salita attraverso il valor medio,
+	// con un'isteresi del 5% dell'ampiezza picco-picco per non contare il rumore.
+	// L'istante di ogni fronte è interpolato linearmente tra due campioni, così
+	// la stima non è limitata dalla risoluzione di un campione.
+	double EstimateFrequency(const std::vector<double> &samples, int first, int last, double dt, double mean, double peakToPeak)
+	{
+		if (peakToPeak < 1e-12 || last - first < 2)
+			return 0.0;
+
+		const double hysteresis = 0.05 * peakToPeak;
+		const double upper = mean + hysteresis;
+		const double lower = mean - hysteresis;
+
+		bool high = samples[first] > mean;
+		std::vector<double> risingTimes;
+		for (int i = first + 1; i <= last; i++)
+		{
+			if (!high && samples[i] > upper)
+			{
+				high = true;
+				const double fraction = (upper - samples[i - 1]) / (samples[i] - samples[i - 1]);
+				risingTimes.push_back((i - 1 + fraction) * dt);
+			}
+			else if (high && samples[i] < lower)
+				high = false;
+		}
+
+		if (risingTimes.size() < 2)
+			return 0.0;
+
+		return static_cast<double>(risingTimes.size() - 1) / (risingTimes.back() - risingTimes.front());
+	}
+}
 
 // Determina quale componente o terminale si trova sotto il punto cliccato.
 // Controlla prima i terminali (area più piccola, priorità alta),
@@ -1093,19 +1249,30 @@ void CircuitLab::UI::DrawImageGuiPanel()
 		ImGui::Text("La simulazione non converge (componente non lineare).");
 	else
 	{
+		// Valori con prefisso SI ("18.16 V", "184.2 mA", "4.3 uA"): std::to_string
+		// ne stampava sempre 6 decimali, e ogni valore sotto 1e-6 (o qualche uA)
+		// perdeva le cifre significative, mostrando "0.000000".
 		ImGui::Text("Risultato: [");
 		for (const auto &r : m_simulationOutput.res)
 		{
-			std::string res = r.first + " " + std::to_string(r.second) + " ";
-			ImGui::Text(res.c_str());
+			// "V<n>" = tensione del nodo n, "I(...)" = corrente in una sorgente di tensione
+			const char *unit = (!r.first.empty() && r.first[0] == 'I') ? "A" : "V";
+			ImGui::Text("%s  %s", r.first.c_str(), FormatEngineering(r.second, unit).c_str());
 		}
 		ImGui::Text("]");
 
+		// Ordinate per id: currentComp è una unordered_map, il cui ordine di
+		// iterazione non ha alcun significato e può cambiare da un output all'altro.
+		std::vector<std::pair<int, double>> currents(m_simulationOutput.currentComp.begin(), m_simulationOutput.currentComp.end());
+		std::sort(currents.begin(), currents.end());
+
 		ImGui::Text("Correnti: [");
-		for (const auto &i : m_simulationOutput.currentComp)
+		for (const auto &[compId, current] : currents)
 		{
-			std::string cur = "comp" + std::to_string(i.first) + " " + std::to_string(i.second) + " ";
-			ImGui::Text(cur.c_str());
+			// Stesso nome del canvas ("R2", "C10"); "comp<id>" solo per un id senza tipo noto
+			const std::string prefix = ComponentPrefix(m_onGetComponentTypeById(compId));
+			const std::string name = (prefix.empty() ? std::string("comp") : prefix) + std::to_string(compId);
+			ImGui::Text("%s  %s", name.c_str(), FormatEngineering(current, "A").c_str());
 		}
 		ImGui::Text("]");
 	}
@@ -1140,15 +1307,22 @@ void CircuitLab::UI::DrawImageGuiPanel()
 		for (auto &[key, value] : values)
 		{
 			std::string label(ComponentValueToString(key));
-			// Il formato di default (%.6f) mostrerebbe Is ~ 1e-14 come 0.000000:
-			// per lui serve la notazione scientifica.
-			const char *format = (key == ComponentValue::saturationCurrent) ? "%.3e" : "%.6f";
-			ImGui::InputDouble(label.c_str(), &value, 0.0, 0.0, format);
+			// %.6g e non %.6f: con 6 decimali fissi qualunque valore sotto 1e-6
+			// (un condensatore da 470 nF, Is = 1e-14 del diodo) si vedeva come
+			// "0.000000" pur essendo salvato correttamente nel circuito, e sembrava
+			// azzerato. %g passa da solo alla notazione scientifica ("4.7e-07").
+			ImGui::InputDouble(label.c_str(), &value, 0.0, 0.0, "%.6g");
 			if (ImGui::IsItemDeactivatedAfterEdit())
 			{
 				values.at(key) = value;
 				m_onSetComponentValues(m_selectedComponent.compId, values);
 			}
+
+			// Per valori piccoli o grandi la notazione scientifica è scomoda da
+			// leggere: si affianca la forma con prefisso SI ("= 470 nF", "= 1 kOhm").
+			const char *unit = ComponentValueUnit(key);
+			if (unit[0] != '\0' && value != 0.0 && (std::abs(value) < 1e-3 || std::abs(value) >= 1e3))
+				ImGui::TextDisabled("= %s", FormatEngineering(value, unit).c_str());
 		}
 
 		// Combo box waveform — visibile solo per VoltageGenerator
@@ -1249,21 +1423,7 @@ void CircuitLab::UI::DrawComponents()
 
 		// Costruisce l'etichetta del componente nel formato "R3" / "V2" / "G1"
 		// usando il prefisso del tipo seguito dall'ID del componente
-		std::string compString;
-		if (comp.GetComponentType() == ComponentType::resistor)
-			compString += "R";
-		else if (comp.GetComponentType() == ComponentType::voltageGenerator)
-			compString += "V";
-		else if (comp.GetComponentType() == ComponentType::ground)
-			compString += "G";
-		else if (comp.GetComponentType() == ComponentType::capacitor)
-			compString += "C";
-		else if (comp.GetComponentType() == ComponentType::inductor)
-			compString += "L";
-		else if (comp.GetComponentType() == ComponentType::switchComponent)
-			compString += "S";
-		else if (comp.GetComponentType() == ComponentType::diode)
-			compString += "D";
+		std::string compString = ComponentPrefix(comp.GetComponentType());
 
 		compString += std::to_string(comp.GetComponentLink());
 
@@ -1376,7 +1536,18 @@ void CircuitLab::UI::DrawParticles(int linkId)
 
 void CircuitLab::UI::DrawOscilloscope()
 {
-	ImGui::Begin("Oscilloscope", &m_showOscilloscope);
+	// Finestra compatta e ridimensionabile: il grafico riempie lo spazio che resta
+	// invece di avere un'altezza fissa. Posizione/dimensione iniziali valgono solo
+	// la prima volta (poi le ricorda imgui.ini); l'ID "##scope2" è nuovo apposta,
+	// così non si eredita la vecchia dimensione, molto più grande, già salvata lì.
+	ImGui::SetNextWindowSize(ImVec2(440.0f, 300.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(ImVec2(12.0f, static_cast<float>(m_heigth) - 312.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSizeConstraints(ImVec2(400.0f, 180.0f), ImVec2(FLT_MAX, FLT_MAX));
+	if (!ImGui::Begin("Oscilloscope##scope2", &m_showOscilloscope))
+	{
+		ImGui::End();
+		return;
+	}
 
 	// Snapshot dei canali: aggiornato ogni frame finché non si è congelati, poi
 	// resta fermo sull'ultimo dato ricevuto (vedi commento su m_frozenChannels in UI.h).
@@ -1385,18 +1556,18 @@ void CircuitLab::UI::DrawOscilloscope()
 	if (!m_oscFrozen)
 		m_frozenChannels = m_onGetOscilloscopeChannels();
 
-	// Raccogli nodi disponibili
+	// Nodi e componenti disponibili come sorgente di un canale
 	std::vector<int> nodeIds;
 	for (auto &[id, v] : m_simulationOutput.nodeVoltages)
 		nodeIds.push_back(id);
 	std::sort(nodeIds.begin(), nodeIds.end());
 
-	// Raccogli componenti disponibili
 	std::vector<int> compIds;
 	for (auto &[id, v] : m_simulationOutput.currentComp)
 		compIds.push_back(id);
+	std::sort(compIds.begin(), compIds.end());
 
-	// Bug 4 fix — clamp indici per evitare out-of-bounds
+	// Clamp degli indici, che restano validi anche se il circuito cambia
 	if (!nodeIds.empty())
 	{
 		m_oscIdA = std::min(m_oscIdA, static_cast<int>(nodeIds.size()) - 1);
@@ -1405,142 +1576,220 @@ void CircuitLab::UI::DrawOscilloscope()
 	if (!compIds.empty())
 		m_oscCompId = std::min(m_oscCompId, static_cast<int>(compIds.size()) - 1);
 
-	// Combo ProbeType
-	const char *probeTypeNames[] = {
-		"Node Voltage", "Differential Voltage",
-		"Component Current", "Branch Current"
-	};
-	ImGui::Combo("Probe Type", &m_oscProbeType, probeTypeNames, std::size(probeTypeNames));
-	ProbeType selectedType = static_cast<ProbeType>(m_oscProbeType);
+	// --- Barra 1: nuovo canale, finestra temporale, sincronizzazione ---
+	if (ImGui::Button("+ Canale"))
+		ImGui::OpenPopup("##addChannel");
 
-	// Combo idA
-	if (selectedType == ProbeType::nodeVoltage ||
-		selectedType == ProbeType::differentialVoltage ||
-		selectedType == ProbeType::branchCurrent)
+	if (ImGui::BeginPopup("##addChannel"))
 	{
 		std::vector<std::string> nodeLabels;
-		for (int id : nodeIds) nodeLabels.push_back("Node " + std::to_string(id));
-		std::vector<const char *> nodeLabelPtrs;
-		for (auto &s : nodeLabels) nodeLabelPtrs.push_back(s.c_str());
-		if (!nodeLabelPtrs.empty())
-			ImGui::Combo("Node A", &m_oscIdA, nodeLabelPtrs.data(),
-				static_cast<int>(nodeLabelPtrs.size()));
-	}
-	else
-	{
+		for (int id : nodeIds)
+			nodeLabels.push_back("Node " + std::to_string(id));
+
+		// I componenti si mostrano col nome che hanno sul canvas ("R6", "C10", ...)
 		std::vector<std::string> compLabels;
-		for (int id : compIds) compLabels.push_back("Comp " + std::to_string(id));
-		std::vector<const char *> compLabelPtrs;
-		for (auto &s : compLabels) compLabelPtrs.push_back(s.c_str());
-		if (!compLabelPtrs.empty())
-			ImGui::Combo("Component", &m_oscCompId, compLabelPtrs.data(),
-				static_cast<int>(compLabelPtrs.size()));
+		for (int id : compIds)
+			compLabels.push_back(std::string(ComponentPrefix(m_onGetComponentTypeById(id))) + std::to_string(id));
+
+		auto labelCombo = [](const char *label, int &index, const std::vector<std::string> &labels)
+		{
+			if (labels.empty())
+				return;
+			if (ImGui::BeginCombo(label, labels[index].c_str()))
+			{
+				for (int i = 0; i < static_cast<int>(labels.size()); i++)
+				{
+					const bool selected = (i == index);
+					if (ImGui::Selectable(labels[i].c_str(), selected))
+						index = i;
+					if (selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+		};
+
+		ImGui::TextUnformatted("Nuovo canale");
+		ImGui::Separator();
+		ImGui::SetNextItemWidth(170.0f);
+
+		const char *probeTypeNames[] = {
+			"Tensione di nodo", "Tensione differenziale",
+			"Corrente di componente", "Corrente di ramo"
+		};
+		ImGui::Combo("Sonda", &m_oscProbeType, probeTypeNames, static_cast<int>(std::size(probeTypeNames)));
+		const ProbeType selectedType = static_cast<ProbeType>(m_oscProbeType);
+
+		ImGui::SetNextItemWidth(170.0f);
+		if (selectedType == ProbeType::componentCurrent)
+			labelCombo("Componente", m_oscCompId, compLabels);
+		else
+			labelCombo(selectedType == ProbeType::nodeVoltage ? "Nodo" : "Nodo A", m_oscIdA, nodeLabels);
+
+		if (selectedType == ProbeType::differentialVoltage || selectedType == ProbeType::branchCurrent)
+		{
+			ImGui::SetNextItemWidth(170.0f);
+			labelCombo("Nodo B", m_oscIdB, nodeLabels);
+		}
+
+		if (selectedType == ProbeType::branchCurrent)
+		{
+			ImGui::SetNextItemWidth(170.0f);
+			labelCombo("Componente", m_oscCompId, compLabels);
+		}
+
+		if (ImGui::Button("Aggiungi"))
+		{
+			int idA = -1, idB = -1, compId = -1;
+
+			if (selectedType == ProbeType::componentCurrent)
+				compId = compIds.empty() ? -1 : compIds[m_oscCompId];
+			else
+				idA = nodeIds.empty() ? -1 : nodeIds[m_oscIdA];
+
+			if (selectedType == ProbeType::differentialVoltage ||
+				selectedType == ProbeType::branchCurrent)
+				idB = nodeIds.empty() ? -1 : nodeIds[m_oscIdB];
+
+			if (selectedType == ProbeType::branchCurrent)
+				compId = compIds.empty() ? -1 : compIds[m_oscCompId];
+
+			if (idA != -1 || compId != -1)
+				m_onAddChannel(selectedType, idA, idB, compId);
+
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
 	}
 
-	// Combo idB
-	if (selectedType == ProbeType::differentialVoltage ||
-		selectedType == ProbeType::branchCurrent)
-	{
-		std::vector<std::string> nodeLabels;
-		for (int id : nodeIds) nodeLabels.push_back("Node " + std::to_string(id));
-		std::vector<const char *> nodeLabelPtrs;
-		for (auto &s : nodeLabels) nodeLabelPtrs.push_back(s.c_str());
-		if (!nodeLabelPtrs.empty())
-			ImGui::Combo("Node B", &m_oscIdB, nodeLabelPtrs.data(),
-				static_cast<int>(nodeLabelPtrs.size()));
-	}
-
-	// Combo compId per branchCurrent
-	if (selectedType == ProbeType::branchCurrent)
-	{
-		std::vector<std::string> compLabels;
-		for (int id : compIds) compLabels.push_back("Comp " + std::to_string(id));
-		std::vector<const char *> compLabelPtrs;
-		for (auto &s : compLabels) compLabelPtrs.push_back(s.c_str());
-		if (!compLabelPtrs.empty())
-			ImGui::Combo("Branch Component", &m_oscCompId, compLabelPtrs.data(),
-				static_cast<int>(compLabelPtrs.size()));
-	}
-
-	// Window time configurabile
-	if (ImGui::InputDouble("Window (s)", &m_windowTime, 0.0, 0.0, "%.6f"))
+	ImGui::SameLine();
+	ImGui::AlignTextToFramePadding();
+	ImGui::TextUnformatted("Finestra");
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(80.0f);
+	if (ImGui::InputDouble("##window", &m_windowTime, 0.0, 0.0, "%.4g"))
 	{
 		if (m_windowTime < 0.000001) m_windowTime = 0.000001;
 		m_onSetWindowTime(m_windowTime);
 	}
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Larghezza della finestra temporale visibile, in secondi");
+	ImGui::SameLine();
+	ImGui::TextUnformatted("s");
 
 	ImGui::SameLine();
-
 	if (ImGui::Button("Auto Sync"))
 		m_onAutoSync();
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Imposta la finestra a 4 periodi della frequenza piu' alta del circuito");
 
-	// Pulsante aggiungi
-	if (ImGui::Button("Add Channel"))
+	// --- Barra 2: opzioni di visualizzazione ---
+	// I controlli vanno a capo da soli quando la finestra è stretta: dopo un elemento
+	// si resta sulla stessa riga solo se il successivo ci sta ancora. (Non si può
+	// guardare GetContentRegionAvail dopo l'elemento: il cursore è già sulla riga
+	// dopo e riporta sempre la larghezza intera.)
+	const ImGuiStyle &style = ImGui::GetStyle();
+	const float rowRight = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+	auto sameLineIfFits = [&](float width)
 	{
-		int idA = -1, idB = -1, compId = -1;
+		if (ImGui::GetItemRectMax().x + style.ItemSpacing.x + width <= rowRight)
+			ImGui::SameLine();
+	};
+	auto checkboxWidth = [&](const char *label)
+	{
+		return ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(label).x;
+	};
+	auto buttonWidth = [&](const char *label)
+	{
+		return ImGui::CalcTextSize(label).x + style.FramePadding.x * 2.0f;
+	};
 
-		if (selectedType == ProbeType::componentCurrent)
-			compId = compIds.empty() ? -1 : compIds[m_oscCompId];
-		else
-			idA = nodeIds.empty() ? -1 : nodeIds[m_oscIdA];
+	const char *modeNames[] = { "Scorrimento", "Sweep" };
+	ImGui::SetNextItemWidth(105.0f);
+	ImGui::Combo("##mode", &m_oscMode, modeNames, static_cast<int>(std::size(modeNames)));
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Scorrimento: la traccia cammina nel tempo.\n"
+			"Sweep: finestra fissa, la traccia riparte da sinistra e si ridisegna sopra la precedente.");
 
-		if (selectedType == ProbeType::differentialVoltage ||
-			selectedType == ProbeType::branchCurrent)
-			idB = nodeIds.empty() ? -1 : nodeIds[m_oscIdB];
+	sameLineIfFits(checkboxWidth("Freeze"));
+	ImGui::Checkbox("Freeze", &m_oscFrozen);
 
-		if (selectedType == ProbeType::branchCurrent)
-			compId = compIds.empty() ? -1 : compIds[m_oscCompId];
+	sameLineIfFits(checkboxWidth("Auto Y"));
+	ImGui::Checkbox("Auto Y", &m_oscAutoY);
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Adatta l'asse Y ai dati visibili");
 
-		if (idA != -1 || compId != -1)
-			m_onAddChannel(selectedType, idA, idB, compId);
-	}
+	sameLineIfFits(buttonWidth("Fit"));
+	if (ImGui::Button("Fit"))
+		ImPlot::SetNextAxesToFit();
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Adatta una volta gli assi ai dati");
 
-	ImGui::Separator();
+	sameLineIfFits(checkboxWidth("Misure"));
+	ImGui::Checkbox("Misure", &m_oscShowMeasures);
 
-	// Lista canali — FUORI dal blocco ImPlot
+	const char *notationNames[] = { "Assi: Auto", "Assi: Scientifica", "Assi: SI" };
+	sameLineIfFits(125.0f);
+	ImGui::SetNextItemWidth(125.0f);
+	ImGui::Combo("##notation", &m_oscNotation, notationNames, static_cast<int>(std::size(notationNames)));
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Formato dei numeri sugli assi:\n"
+			"Auto: quello predefinito di ImPlot.\n"
+			"Scientifica: 2.5e-3\n"
+			"SI: 2.5 m (con unita': 2.5 ms, 2.5 mV)");
+
+	sameLineIfFits(ImGui::CalcTextSize("(?)").x);
+	ImGui::TextDisabled("(?)");
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Trascina per spostare, rotellina per zoom.\nL'asse X si puo' spostare/zoomare solo con Freeze attivo.");
+
+	// --- Legenda dei canali: una "pillola" per canale (attiva, nome, rimuovi) ---
+	// Le pillole vanno a capo da sole quando non c'è più spazio in riga.
 	auto channels = m_onGetOscilloscopeChannels();
 	bool removedChannel = false;
+	int activeCount = 0;
 	for (int i = 0; i < static_cast<int>(channels.size()); i++)
 	{
-		auto &channel = channels[i];
+		const auto &channel = channels[i];
+		if (channel.active)
+			activeCount++;
 
+		const float chipWidth = ImGui::GetFrameHeight() + style.ItemInnerSpacing.x +
+			ImGui::CalcTextSize(channel.label.c_str()).x + style.ItemInnerSpacing.x +
+			ImGui::CalcTextSize("x").x + style.FramePadding.x * 2.0f;
+		if (i > 0)
+			sameLineIfFits(chipWidth);
+
+		const ImVec4 color(channel.channelColor.r, channel.channelColor.g, channel.channelColor.b, 1.0f);
+
+		ImGui::PushID(i);
+		ImGui::PushStyleColor(ImGuiCol_CheckMark, color);
 		bool active = channel.active;
-		if (ImGui::Checkbox(("##active" + channel.label).c_str(), &active))
+		if (ImGui::Checkbox("##active", &active))
 			m_onSetChannelActive(i, active);
+		ImGui::PopStyleColor();
 
-		ImGui::SameLine();
+		ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+		ImGui::TextColored(channel.active ? color : ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s", channel.label.c_str());
 
-		if (ImGui::Button(("X##" + channel.label).c_str()))
+		ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+		if (ImGui::SmallButton("x"))
 		{
 			m_onRemoveChannel(i);
 			removedChannel = true;
-			break;
 		}
+		ImGui::PopID();
 
-		ImGui::SameLine();
-
-		ImGui::TextColored(
-			ImVec4(channel.channelColor.r, channel.channelColor.g,
-				channel.channelColor.b, 1.0f),
-			channel.label.c_str());
+		if (removedChannel)
+			break;
 	}
 
-	ImGui::Checkbox("Freeze", &m_oscFrozen);
-
-	ImGui::SameLine();
-	if (ImGui::Button("Reset Zoom"))
-		ImPlot::SetNextAxesToFit();
-
-	ImGui::SameLine();
-	ImGui::TextDisabled("Trascina per pan, scroll per zoom (per asse X serve Freeze attivo)");
-
-	ImGui::Separator();
-
+	// Ricava l'asse X (scorrevole o congelato)
 	// Bug 1 fix — xscale corretto: distanza reale tra campioni
 	// Ogni campione dista h_sim * decimationFactor secondi simulati
-	double hSim = m_onGetHSim();
-	int decimationFactor = m_onGetDecimationFactor();
-	double xscale = hSim * static_cast<double>(decimationFactor);
+	const double hSim = m_onGetHSim();
+	const int decimationFactor = m_onGetDecimationFactor();
+	const double xscale = hSim * static_cast<double>(decimationFactor);
 
 	double tMax;
 	if (m_oscFrozen)
@@ -1568,21 +1817,85 @@ void CircuitLab::UI::DrawOscilloscope()
 		m_frozenTMax = tMax;
 	}
 
-	double tMin = tMax - m_windowTime;
+	const double tMin = tMax - m_windowTime;
 
-	// Plot
-	if (!removedChannel && ImPlot::BeginPlot("##oscilloscope", ImVec2(-1, 300)))
+	// Altezza riservata alla tabella delle misure (se attiva): il grafico prende
+	// tutto il resto della finestra, con un minimo per restare leggibile.
+	float measuresHeight = 0.0f;
+	if (m_oscShowMeasures)
 	{
-		ImPlot::SetupAxes("Time (s)", "Value");
+		const int rows = std::max(1, activeCount) + 1; // + riga di intestazione
+		measuresHeight = rows * (ImGui::GetTextLineHeight() + style.CellPadding.y * 2.0f) + style.ItemSpacing.y;
+	}
+	const float plotHeight = std::max(80.0f, ImGui::GetContentRegionAvail().y - measuresHeight);
+
+	std::vector<ChannelMeasure> measures;
+
+	// Sweep: la passata dura sweepLength >= finestra, sempre multiplo del periodo
+	// della frequenza massima del circuito (senza sorgenti AC, semplicemente la
+	// finestra). Ogni passata parte a un multiplo di sweepLength: così un segnale
+	// periodico riparte sempre alla stessa fase, come con un trigger, e i tratti
+	// tra "finestra" e "sweepLength" restano vuoti (il tempo di ritorno del raggio).
+	const bool sweepMode = (m_oscMode == OSC_MODE_SWEEP);
+	double sweepLength = m_windowTime;
+	if (sweepMode)
+	{
+		const double fMaxSweep = m_onGetMaxFrequency();
+		if (fMaxSweep > 0.0)
+		{
+			const double period = 1.0 / fMaxSweep;
+			sweepLength = std::max(period, std::ceil(m_windowTime / period - 1e-9) * period);
+		}
+	}
+
+	// Legenda già mostrata sopra: quella interna di ImPlot sarebbe un doppione.
+	if (!removedChannel && ImPlot::BeginPlot("##oscilloscope", ImVec2(-1, plotHeight), ImPlotFlags_NoLegend))
+	{
+		// Auto Y: l'asse segue i dati visibili (RangeFit = solo quelli nella finestra X)
+		const ImPlotAxisFlags yFlags = m_oscAutoY ? (ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit) : ImPlotAxisFlags_None;
+		ImPlot::SetupAxes("t (s)", nullptr, ImPlotAxisFlags_None, yFlags);
+
+		// Formato dei numeri sugli assi. Il formattatore vale anche per le etichette
+		// che compaiono passando il mouse sul grafico. AxisNotation vive fino a
+		// EndPlot, che è quando ImPlot lo usa. Con "Auto" non si imposta nulla:
+		// ImPlot riparte dal proprio formato ad ogni frame.
+		AxisNotation xNotation{ 0, "s" }, yNotation{ 0, "" };
+		if (m_oscNotation != OSC_NOTATION_AUTO)
+		{
+			// L'unità dell'asse Y è nota solo se tutti i canali attivi sono dello
+			// stesso tipo (tensioni o correnti); altrimenti si mostra il solo prefisso.
+			bool anyVoltage = false, anyCurrent = false;
+			for (const auto &ch : channels)
+			{
+				if (!ch.active)
+					continue;
+				if (ch.type == ProbeType::nodeVoltage || ch.type == ProbeType::differentialVoltage)
+					anyVoltage = true;
+				else
+					anyCurrent = true;
+			}
+			yNotation.unit = (anyVoltage && !anyCurrent) ? "V" : (anyCurrent && !anyVoltage) ? "A" : "";
+
+			xNotation.notation = yNotation.notation = (m_oscNotation == OSC_NOTATION_SCIENTIFIC) ? 1 : 2;
+			ImPlot::SetupAxisFormat(ImAxis_X1, FormatAxisTick, &xNotation);
+			ImPlot::SetupAxisFormat(ImAxis_Y1, FormatAxisTick, &yNotation);
+		}
 
 		// Bug 2 fix — ImPlotCond_Always per aggiornare ogni frame.
 		// Quando l'oscilloscopio è congelato (m_oscFrozen), NON forziamo più i limiti
 		// dell'asse X ad ogni frame: così ImPlot mantiene l'ultimo stato (compreso
 		// pan/zoom manuale dell'utente), esattamente come già fa per l'asse Y sotto.
+		// In sweep l'asse X è fisso: sempre [0, finestra], la traccia si sposta dentro.
 		if (!m_oscFrozen)
-			ImPlot::SetupAxisLimits(ImAxis_X1, tMin, tMax, ImPlotCond_Always);
+		{
+			if (sweepMode)
+				ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, m_windowTime, ImPlotCond_Always);
+			else
+				ImPlot::SetupAxisLimits(ImAxis_X1, tMin, tMax, ImPlotCond_Always);
+		}
 		ImPlot::SetupAxisLimits(ImAxis_Y1, -15, 15, ImPlotCond_Once);
 
+		std::vector<std::pair<int, std::vector<double>>> plotted; // (indice canale, campioni) per le misure
 		for (int i = 0; i < static_cast<int>(m_frozenChannels.size()); i++)
 		{
 			const auto &channel = m_frozenChannels[i];
@@ -1606,19 +1919,164 @@ void CircuitLab::UI::DrawOscilloscope()
 				channel.samples.begin(),
 				channel.samples.end());
 
-			// xstart: il primo campione si trova a tMax - count*xscale
 			int count = static_cast<int>(samples.size());
-			double xstart = tMax - (count * xscale);
 
-			ImPlot::PlotLine(channel.label.c_str(),
-				samples.data(),
-				count,
-				xscale,
-				xstart,
-				spec);
+			// L'indice nell'ID tiene distinti due canali con lo stesso nome
+			const std::string plotLabel = channel.label + "##" + std::to_string(i);
+
+			if (!sweepMode)
+			{
+				// xstart: il primo campione si trova a tMax - count*xscale
+				double xstart = tMax - (count * xscale);
+				ImPlot::PlotLine(plotLabel.c_str(),
+					samples.data(),
+					count,
+					xscale,
+					xstart,
+					spec);
+			}
+			else
+			{
+				// Asse dei tempi ricavato dai campioni stessi: il campione i è a
+				// t0 + i*xscale, con t0 ricavato dal tempo dell'ultimo campione
+				// (copiato insieme ai dati, quindi coerente con essi).
+				const double tLast = channel.lastSampleTime;
+				const double t0 = tLast - (count - 1) * xscale;
+
+				// La passata corrente parte all'ultimo multiplo di sweepLength;
+				// cursorX è la posizione del "raggio" dentro la finestra.
+				const double curStart = std::floor(tLast / sweepLength) * sweepLength;
+				const double cursorX = tLast - curStart;
+				const double prevStart = curStart - sweepLength;
+
+				// Primo campione della passata corrente (0 se la storia non arriva
+				// fin lì: si disegna solo ciò che c'è)
+				const int curFirst = std::clamp(static_cast<int>(std::ceil((curStart - t0) / xscale - 1e-9)), 0, count);
+
+				// Residuo della passata precedente: solo a destra del raggio, e attenuato,
+				// così il nuovo tracciato lo "cancella" avanzando. Va disegnato PRIMA
+				// della traccia corrente, che così resta sopra.
+				if (cursorX < m_windowTime)
+				{
+					const int prevFirst = std::max(0, static_cast<int>(std::ceil((prevStart + cursorX - t0) / xscale - 1e-9)));
+					const int prevLast = std::min(curFirst - 1, static_cast<int>(std::floor((prevStart + m_windowTime - t0) / xscale + 1e-9)));
+					if (prevLast >= prevFirst)
+					{
+						ImPlotSpec dimSpec = spec;
+						dimSpec.LineColor.w = 0.35f;
+						ImPlot::PlotLine((plotLabel + "prev").c_str(),
+							samples.data() + prevFirst,
+							prevLast - prevFirst + 1,
+							xscale,
+							t0 + prevFirst * xscale - prevStart,
+							dimSpec);
+					}
+				}
+
+				// Passata corrente: dal suo inizio fino al raggio (o alla fine della
+				// finestra, se il raggio è nel tratto di ritorno)
+				if (curFirst < count)
+				{
+					const double xstart = t0 + curFirst * xscale - curStart;
+					const int visible = static_cast<int>(std::floor((m_windowTime - xstart) / xscale + 1e-9)) + 1;
+					const int n = std::min(count - curFirst, visible);
+					if (n > 0)
+						ImPlot::PlotLine(plotLabel.c_str(),
+							samples.data() + curFirst,
+							n,
+							xscale,
+							xstart,
+							spec);
+				}
+			}
+
+			if (m_oscShowMeasures)
+				plotted.emplace_back(i, std::move(samples));
+		}
+
+		// Misure sui campioni oggi visibili (dopo i PlotLine i limiti sono definitivi)
+		if (m_oscShowMeasures)
+		{
+			const ImPlotRect limits = ImPlot::GetPlotLimits();
+			for (const auto &[index, samples] : plotted)
+			{
+				const auto &channel = m_frozenChannels[index];
+				const int count = static_cast<int>(samples.size());
+
+				int first, last;
+				if (sweepMode)
+				{
+					// In sweep la parte disegnata cambia a ogni passata e il "raggio" si
+					// sposta: si misura sull'ultima finestra di campioni, uguale in
+					// ampiezza a quella che si vedrebbe in modalità scorrimento.
+					const int windowSamples = std::max(1, static_cast<int>(std::floor(m_windowTime / xscale)) + 1);
+					last = count - 1;
+					first = std::max(0, count - windowSamples);
+				}
+				else
+				{
+					const double xstart = tMax - (count * xscale);
+					first = static_cast<int>(std::ceil((limits.X.Min - xstart) / xscale));
+					last = static_cast<int>(std::floor((limits.X.Max - xstart) / xscale));
+					first = std::clamp(first, 0, count - 1);
+					last = std::clamp(last, 0, count - 1);
+				}
+				if (last < first)
+					continue;
+
+				double lo = samples[first], hi = samples[first], sum = 0.0, sumSquares = 0.0;
+				for (int k = first; k <= last; k++)
+				{
+					lo = std::min(lo, samples[k]);
+					hi = std::max(hi, samples[k]);
+					sum += samples[k];
+					sumSquares += samples[k] * samples[k];
+				}
+				const int n = last - first + 1;
+
+				ChannelMeasure m;
+				m.label = channel.label;
+				m.color = ImVec4(channel.channelColor.r, channel.channelColor.g, channel.channelColor.b, 1.0f);
+				m.unit = (channel.type == ProbeType::nodeVoltage || channel.type == ProbeType::differentialVoltage) ? "V" : "A";
+				m.peakToPeak = hi - lo;
+				m.mean = sum / n;
+				m.rms = std::sqrt(sumSquares / n);
+				m.frequency = EstimateFrequency(samples, first, last, xscale, m.mean, m.peakToPeak);
+				measures.push_back(std::move(m));
+			}
 		}
 
 		ImPlot::EndPlot();
+	}
+
+	// --- Tabella delle misure ---
+	if (m_oscShowMeasures)
+	{
+		if (ImGui::BeginTable("##measures", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
+		{
+			ImGui::TableSetupColumn("Canale");
+			ImGui::TableSetupColumn("Vpp");
+			ImGui::TableSetupColumn("Media");
+			ImGui::TableSetupColumn("RMS");
+			ImGui::TableSetupColumn("Freq.");
+			ImGui::TableHeadersRow();
+
+			for (const ChannelMeasure &m : measures)
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextColored(m.color, "%s", m.label.c_str());
+				ImGui::TableSetColumnIndex(1);
+				ImGui::TextUnformatted(FormatEngineering(m.peakToPeak, m.unit).c_str());
+				ImGui::TableSetColumnIndex(2);
+				ImGui::TextUnformatted(FormatEngineering(m.mean, m.unit).c_str());
+				ImGui::TableSetColumnIndex(3);
+				ImGui::TextUnformatted(FormatEngineering(m.rms, m.unit).c_str());
+				ImGui::TableSetColumnIndex(4);
+				ImGui::TextUnformatted(m.frequency > 0.0 ? FormatEngineering(m.frequency, "Hz").c_str() : "-");
+			}
+			ImGui::EndTable();
+		}
 	}
 
 	ImGui::End();

@@ -128,6 +128,32 @@ namespace CircuitLab {
 		// (stesso trucco di m_frozenTMax): appena si attiva Freeze, resta fermo
 		// sull'ultimo snapshot live.
 		bool m_oscFrozen = false;
+
+		// Modalità di visualizzazione dell'oscilloscopio:
+		//  - scorrimento: l'asse X avanza col tempo e la traccia "cammina" (come un
+		//    registratore a striscia);
+		//  - sweep: l'asse X è una finestra fissa [0, finestra] e la traccia parte
+		//    ogni volta da sinistra ridisegnandosi sopra la precedente, come uno
+		//    scope reale. L'inizio di ogni passata è allineato al periodo della
+		//    frequenza più alta del circuito (come Auto Sync), quindi un segnale
+		//    periodico si ripresenta sempre nella stessa posizione.
+		static constexpr int OSC_MODE_ROLLING = 0;
+		static constexpr int OSC_MODE_SWEEP = 1;
+		int m_oscMode = OSC_MODE_ROLLING;
+
+		// Formato dei numeri sugli assi dell'oscilloscopio (scelto dall'utente)
+		static constexpr int OSC_NOTATION_AUTO = 0;        // formato predefinito di ImPlot
+		static constexpr int OSC_NOTATION_SCIENTIFIC = 1;  // 2.5e-3
+		static constexpr int OSC_NOTATION_SI = 2;          // 2.5 ms, 2.5 mV
+		int m_oscNotation = OSC_NOTATION_AUTO;
+
+		// Adatta continuamente l'asse Y ai dati visibili (di default l'asse partiva
+		// fisso a +-15 e andava regolato a mano)
+		bool m_oscAutoY = true;
+
+		// Mostra sotto il grafico la tabella delle misure (Vpp, media, RMS, frequenza)
+		// calcolate sulla porzione di campioni oggi visibile
+		bool m_oscShowMeasures = false;
 		double m_frozenTMax = 0.0;
 		std::vector<OscilloscopeChannel> m_frozenChannels;
 

@@ -176,13 +176,16 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 	m_solver = std::make_unique<Solver>();
 	m_circuit->SetTimestep(m_hSim);
 
+	// Colori saturi e ben distinguibili tra loro (anche per chi ha difficoltà con
+	// rosso/verde) su sfondo scuro; ordinati in modo che i primi canali, i più
+	// usati, siano i più diversi tra loro.
 	m_channelPalette = {
-			{1.0f, 0.4f, 0.4f},  // rosso
-			{0.4f, 1.0f, 0.4f},  // verde
-			{0.4f, 0.6f, 1.0f},  // blu
-			{1.0f, 1.0f, 0.4f},  // giallo
-			{1.0f, 0.6f, 0.2f},  // arancio
-			{0.8f, 0.4f, 1.0f},  // viola
+			{1.00f, 0.87f, 0.20f},  // giallo
+			{0.25f, 0.85f, 1.00f},  // ciano
+			{1.00f, 0.40f, 0.85f},  // magenta
+			{0.45f, 1.00f, 0.45f},  // verde
+			{1.00f, 0.60f, 0.20f},  // arancio
+			{0.70f, 0.60f, 1.00f},  // lavanda
 	};
 
 	m_simStatus = SimulationStatus::stopped;
@@ -744,6 +747,9 @@ void CircuitLab::Application::SampleChannels(const SimulationOutput &output)
 		}
 
 		channel.samples.push_back(value);
+		// Simulate() ha già avanzato m_simulationTime di h: il campione appena
+		// aggiunto appartiene allo step risolto a (m_simulationTime - h).
+		channel.lastSampleTime = m_simulationTime - m_hSim;
 		if (static_cast<int>(channel.samples.size()) > OscilloscopeChannel::MAX_SAMPLES)
 			channel.samples.pop_front();
 	}
@@ -763,15 +769,23 @@ void CircuitLab::Application::AddChannel(ProbeType type, int idA, int idB, int c
 
 	switch (type)
 	{
-	case ProbeType::nodeVoltage:          label = "V(" + std::to_string(idA) + ")"; break;
-	case ProbeType::differentialVoltage:  label = "V(" + std::to_string(idA) + "," + std::to_string(idB) + ")"; break;
+	// Nomi nello stesso stile del canvas: nodi "N2", componenti "R6" (prefisso di
+	// tipo + id), così il canale si riconosce a colpo d'occhio nel circuito.
+	case ProbeType::nodeVoltage:          label = "V(N" + std::to_string(idA) + ")"; break;
+	case ProbeType::differentialVoltage:  label = "V(N" + std::to_string(idA) + "-N" + std::to_string(idB) + ")"; break;
 	case ProbeType::componentCurrent:
 	{
 		std::lock_guard<std::mutex> lock(m_circuitMutex);
 		label = "I(" + Component::ComponentTypeName(m_circuit->GetComponentType(compId)) + std::to_string(compId) + ")";
 		break;
 	}
-	case ProbeType::branchCurrent:        label = "I(" + std::to_string(idA) + "," + std::to_string(idB) + ")"; break;
+	case ProbeType::branchCurrent:
+	{
+		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		label = "I(" + Component::ComponentTypeName(m_circuit->GetComponentType(compId)) + std::to_string(compId) +
+			": N" + std::to_string(idA) + "-N" + std::to_string(idB) + ")";
+		break;
+	}
 	}
 
 	channel.type = type;
