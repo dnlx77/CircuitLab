@@ -86,6 +86,26 @@ namespace CircuitLab {
 		inline static const sf::Color PARTICLE_COLOR_NEUTRAL = sf::Color::Yellow;        // Corrente ~0
 		inline static const sf::Color BACKGROUND_COLOR = sf::Color(30, 30, 30); // Colore sfondo canvas
 
+		// Zoom del canvas (rotellina del mouse). m_view è la vista del canvas:
+		// il suo size vale (dimensione canvas / m_zoom), quindi zoom > 1 ingrandisce.
+		static constexpr float ZOOM_MIN = 0.25f;
+		static constexpr float ZOOM_MAX = 4.0f;
+		static constexpr float ZOOM_STEP = 1.1f;  // Fattore moltiplicativo per ogni "tacca" di rotellina
+		float m_zoom = 1.0f;
+
+		// Pan del canvas: trascinando col tasto centrale, m_panLastPixel è l'ultima
+		// posizione del cursore (in pixel di finestra) da cui calcolare lo spostamento.
+		bool m_panning = false;
+		sf::Vector2i m_panLastPixel;
+
+		// Griglia di allineamento: visibilità e aggancio (snap) sono indipendenti.
+		// Passo espresso in unità mondo (non dipende dallo zoom).
+		static constexpr float GRID_MIN_SCREEN_SPACING = 8.0f;  // Sotto questa distanza a schermo il passo di disegno raddoppia
+		static constexpr int GRID_MAJOR_EVERY = 5;              // Una linea ogni N più marcata
+		bool m_showGrid = true;
+		bool m_snapToGrid = true;
+		int m_gridSize = 20;
+
 		SimulationOutput m_simulationOutput;  // Ultimo risultato di simulazione ricevuto
 		bool m_showOscilloscope;
 		double m_windowTime;
@@ -185,6 +205,23 @@ namespace CircuitLab {
 		// che segue il terminale) da un semplice punto medio invisibile tra due
 		// componenti — vedi CheckClick e UpdateLinksForComponent.
 		bool NodeViewHasBusEdge(int nodeViewId) const;
+
+		// Converte una posizione in pixel della finestra in coordinate mondo
+		// (tenendo conto di zoom e spostamento della vista), arrotondata all'intero.
+		sf::Vector2i WorldPos(sf::Vector2i pixelPos) const;
+
+		// Riporta lo zoom a 100% e la vista alla posizione iniziale
+		void ResetZoom();
+
+		// Se l'aggancio è attivo restituisce il nodo di griglia più vicino a p, altrimenti p
+		sf::Vector2f SnapToGrid(sf::Vector2f p) const;
+
+		// Sposta il componente in modo che il suo primo terminale cada su un nodo
+		// di griglia (no-op se l'aggancio è disattivato)
+		void SnapComponentToGrid(ComponentView &cw);
+
+		// Disegna le linee della griglia sull'area di mondo visibile
+		void DrawGrid();
 
 		// Disegna il pannello laterale ImGui (proprietà componente selezionato, oscilloscopio, save/load)
 		void DrawImageGuiPanel();

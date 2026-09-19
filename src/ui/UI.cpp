@@ -14,6 +14,10 @@
 // Aggiorna selComp con il risultato; se nulla è trovato, imposta state = none.
 void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 {
+	// pos è in coordinate mondo; la tolleranza è definita in pixel di SCHERMO,
+	// quindi va divisa per lo zoom (a zoom 2x, 7 px a schermo sono 3.5 unità mondo).
+	const float tol = CLICK_TOLLERANCE / m_zoom;
+
 	for (const auto &comp : m_componentViewList)
 	{
 		ComponentDesign des = comp.GetComponetDesign();
@@ -31,8 +35,8 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 		for (const auto &terminal : des.terminalOffset)
 		{
 			// Click dentro la zona di tolleranza del terminale?
-			if ((x1 >= terminal.x - CLICK_TOLLERANCE) && (x1 <= terminal.x + CLICK_TOLLERANCE) &&
-				(y1 >= terminal.y - CLICK_TOLLERANCE) && (y1 <= terminal.y + CLICK_TOLLERANCE))
+			if ((x1 >= terminal.x - tol) && (x1 <= terminal.x + tol) &&
+				(y1 >= terminal.y - tol) && (y1 <= terminal.y + tol))
 			{
 				selComp.compId = comp.GetComponentLink();
 				selComp.terminalIndex = i;
@@ -71,12 +75,12 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 		if (diffVec == sf::Vector2f(0.f, 0.f))
 			continue;
 		sf::Vector2f unitaryVec = diffVec.normalized();
-		sf::Vector2f shrunkA({ link.startPos.x + unitaryVec.x * CLICK_TOLLERANCE, link.startPos.y + unitaryVec.y * CLICK_TOLLERANCE });
-		sf::Vector2f shrunkB({ link.targetPos.x - unitaryVec.x * CLICK_TOLLERANCE, link.targetPos.y - unitaryVec.y * CLICK_TOLLERANCE });
+		sf::Vector2f shrunkA({ link.startPos.x + unitaryVec.x * tol, link.startPos.y + unitaryVec.y * tol });
+		sf::Vector2f shrunkB({ link.targetPos.x - unitaryVec.x * tol, link.targetPos.y - unitaryVec.y * tol });
 
 		float dist = PointToStraightDistance(shrunkA, shrunkB, posF);
 
-		if (dist <= CLICK_TOLLERANCE &&
+		if (dist <= tol &&
 			posF.x >= std::min(shrunkA.x, shrunkB.x) - EPSILON &&
 			posF.x <= std::max(shrunkA.x, shrunkB.x) + EPSILON &&
 			posF.y >= std::min(shrunkA.y, shrunkB.y) - EPSILON &&
@@ -106,8 +110,8 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 		if (nv.linkViewIds.size() != 2 || NodeViewHasBusEdge(nv.id))
 		{
 			// Click dentro la zona di tolleranza del terminale?
-			if ((posF.x >= nv.position.x - CLICK_TOLLERANCE) && (posF.x <= nv.position.x + CLICK_TOLLERANCE) &&
-				(posF.y >= nv.position.y - CLICK_TOLLERANCE) && (posF.y <= nv.position.y + CLICK_TOLLERANCE))
+			if ((posF.x >= nv.position.x - tol) && (posF.x <= nv.position.x + tol) &&
+				(posF.y >= nv.position.y - tol) && (posF.y <= nv.position.y + tol))
 			{
 				selComp.compId = -1;
 				selComp.terminalIndex = -1;
@@ -294,43 +298,55 @@ void CircuitLab::UI::HandleEvents()
 
 		else if (const auto *mouseEvent = event->getIf<sf::Event::MouseButtonPressed>())
 		{
-			auto pos = mouseEvent->position;
+			// Da qui in poi tutto il codice lavora in coordinate MONDO (le stesse in
+			// cui sono salvate le posizioni di componenti/nodi/fili): con lo zoom
+			// non coincidono più coi pixel della finestra, quindi si converte una
+			// volta sola qui. pixelPos resta disponibile per i test "sono sopra il
+			// canvas o sopra il pannello?", che sono per loro natura in pixel.
+			sf::Vector2i pixelPos = mouseEvent->position;
+			auto pos = WorldPos(pixelPos);
 
 			if (mouseEvent->button == sf::Mouse::Button::Left && (m_selectedComponent.state != SelectionState::draggingComponent && m_selectedComponent.state != SelectionState::draggingNodeView))
 			{
 				// Aggiunta componenti con tasto modificatore + click
 				bool placedNode = false;
-				if (pos.x < static_cast<int>(m_width - PANEL_WIDTH))
+				if (pixelPos.x < static_cast<int>(m_width - PANEL_WIDTH))
 				{
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
 					{
 						int id = m_onCircuitChange(ComponentType::resistor);
 						AddViewComponent(id, "Resistor", ComponentType::resistor, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+						SnapComponentToGrid(m_componentViewList.back());
 					}
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
 					{
 						int id = m_onCircuitChange(ComponentType::voltageGenerator);
 						AddViewComponent(id, "Voltage source", ComponentType::voltageGenerator, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+						SnapComponentToGrid(m_componentViewList.back());
 					}
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G))
 					{
 						int id = m_onCircuitChange(ComponentType::ground);
 						AddViewComponent(id, "Ground", ComponentType::ground, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+						SnapComponentToGrid(m_componentViewList.back());
 					}
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::C))
 					{
 						int id = m_onCircuitChange(ComponentType::capacitor);
 						AddViewComponent(id, "Capacitor", ComponentType::capacitor, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+						SnapComponentToGrid(m_componentViewList.back());
 					}
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::L))
 					{
 						int id = m_onCircuitChange(ComponentType::inductor);
 						AddViewComponent(id, "Inductor", ComponentType::inductor, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+						SnapComponentToGrid(m_componentViewList.back());
 					}
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S))
 					{
 						int id = m_onCircuitChange(ComponentType::switchComponent);
 						AddViewComponent(id, "Switch", ComponentType::switchComponent, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+						SnapComponentToGrid(m_componentViewList.back());
 					}
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::N))
 					{
@@ -338,7 +354,7 @@ void CircuitLab::UI::HandleEvents()
 						// un nodo vuoto non è un componente, è puramente un punto di aggancio
 						// visivo (nodeId -1, come un terminale mai collegato) a cui collegare
 						// dei fili in seguito, esattamente come ai terminali di un componente.
-						AddNodeView(-1, sf::Vector2f(static_cast<float>(pos.x), static_cast<float>(pos.y)));
+						AddNodeView(-1, SnapToGrid(sf::Vector2f(static_cast<float>(pos.x), static_cast<float>(pos.y))));
 						// Il nodo appena creato è esattamente sotto al cursore: senza questo
 						// flag, la CheckClick qui sotto lo selezionerebbe subito da solo
 						// (o, se un altro nodo era già selezionato da un click precedente,
@@ -742,6 +758,15 @@ void CircuitLab::UI::HandleEvents()
 					}
 				}
 			}
+			else if (mouseEvent->button == sf::Mouse::Button::Middle)
+			{
+				// Inizia il pan solo se il click è sul canvas (non su pannello/oscilloscopio)
+				if (!ImGui::GetIO().WantCaptureMouse && pixelPos.x < static_cast<int>(m_width - PANEL_WIDTH))
+				{
+					m_panning = true;
+					m_panLastPixel = pixelPos;
+				}
+			}
 			else if (mouseEvent->button == sf::Mouse::Button::Right)
 			{
 				if (!ImGui::GetIO().WantCaptureMouse) CheckClick(pos, m_selectedComponent);
@@ -796,39 +821,79 @@ void CircuitLab::UI::HandleEvents()
 		}
 		else if (const auto *mouseMovedEvent = event->getIf<sf::Event::MouseMoved>())
 		{
-			auto pos = mouseMovedEvent->position;
+			if (m_panning)
+			{
+				// Lo spostamento in pixel va diviso per lo zoom per diventare unità mondo;
+				// il segno è negativo perché è la vista a muoversi in senso opposto al
+				// cursore (il circuito segue la mano).
+				sf::Vector2i deltaPx = mouseMovedEvent->position - m_panLastPixel;
+				m_view.move(-sf::Vector2f(static_cast<float>(deltaPx.x), static_cast<float>(deltaPx.y)) / m_zoom);
+				m_panLastPixel = mouseMovedEvent->position;
+			}
+
+			auto pos = WorldPos(mouseMovedEvent->position);
 			Vec2 newPos;
+
+			// Il trascinamento resta confinato alla porzione di mondo oggi visibile
+			// (prima coincideva con [0, larghezza canvas] x [0, altezza]).
+			const sf::Vector2f viewHalf = m_view.getSize() / 2.0f;
+			const sf::Vector2f viewMin = m_view.getCenter() - viewHalf;
+			const sf::Vector2f viewMax = m_view.getCenter() + viewHalf;
+
 			if (m_selectedComponent.state == SelectionState::draggingComponent)
 			{
-				newPos.x = std::clamp(pos.x - m_compClickOffset.x, 0.0f, static_cast<float>(m_width - PANEL_WIDTH));
-				newPos.y = std::clamp(pos.y - m_compClickOffset.y, 0.0f, static_cast<float>(m_heigth));
+				newPos.x = std::clamp(pos.x - m_compClickOffset.x, viewMin.x, viewMax.x);
+				newPos.y = std::clamp(pos.y - m_compClickOffset.y, viewMin.y, viewMax.y);
 
 				for (auto &cw : m_componentViewList)
 					if (cw.GetComponentLink() == m_selectedComponent.compId)
+					{
 						cw.SetPosition(newPos);
+						SnapComponentToGrid(cw);
+					}
 
 				UpdateLinksForComponent(m_selectedComponent.compId);
 			}
 			else if (m_selectedComponent.state == SelectionState::draggingNodeView)
 			{
-				newPos.x = std::clamp(pos.x - m_compClickOffset.x, 0.0f, static_cast<float>(m_width - PANEL_WIDTH));
-				newPos.y = std::clamp(pos.y - m_compClickOffset.y, 0.0f, static_cast<float>(m_heigth));
+				sf::Vector2f nodePos = SnapToGrid(sf::Vector2f(
+					std::clamp(pos.x - m_compClickOffset.x, viewMin.x, viewMax.x),
+					std::clamp(pos.y - m_compClickOffset.y, viewMin.y, viewMax.y)));
 
 				for (auto &nv : m_nodeViewList)
 					if (nv.id == m_selectedComponent.nodeViewId)
 					{
-						nv.position.x = newPos.x;
-						nv.position.y = newPos.y;
+						nv.position = nodePos;
 
-						UpdateLinksForNodeView(m_selectedComponent.nodeViewId, sf::Vector2f(newPos.x, newPos.y));
+						UpdateLinksForNodeView(m_selectedComponent.nodeViewId, nodePos);
 						break;
 					}
+			}
+		}
+		else if (const auto *wheelEvent = event->getIf<sf::Event::MouseWheelScrolled>())
+		{
+			// Zoom con la rotellina, ancorato al cursore: il punto del circuito
+			// sotto il mouse resta fermo sullo schermo mentre si zooma. Ignorato
+			// sopra il pannello/oscilloscopio (dove la rotellina serve a ImGui/ImPlot).
+			if (wheelEvent->wheel == sf::Mouse::Wheel::Vertical &&
+				!ImGui::GetIO().WantCaptureMouse &&
+				wheelEvent->position.x < static_cast<int>(m_width - PANEL_WIDTH))
+			{
+				const sf::Vector2f before = m_window.mapPixelToCoords(wheelEvent->position, m_view);
+
+				m_zoom = std::clamp(m_zoom * std::pow(ZOOM_STEP, wheelEvent->delta), ZOOM_MIN, ZOOM_MAX);
+				m_view.setSize(sf::Vector2f(static_cast<float>(m_width - PANEL_WIDTH), static_cast<float>(m_heigth)) / m_zoom);
+
+				const sf::Vector2f after = m_window.mapPixelToCoords(wheelEvent->position, m_view);
+				m_view.move(before - after);
 			}
 		}
 		else if (const auto *mouseReleasedEvent = event->getIf<sf::Event::MouseButtonReleased>())
 		{
 			if (mouseReleasedEvent->button == sf::Mouse::Button::Right)
 				m_selectedComponent.state = SelectionState::none;
+			else if (mouseReleasedEvent->button == sf::Mouse::Button::Middle)
+				m_panning = false;
 		}
 		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete) && (m_selectedComponent.state != SelectionState::draggingComponent && m_selectedComponent.state != SelectionState::draggingNodeView))
 		{
@@ -925,7 +990,12 @@ void CircuitLab::UI::HandleEvents()
 			{
 				for (auto &cw : m_componentViewList)
 					if (cw.GetComponentLink() == m_selectedComponent.compId)
+					{
 						cw.SetRotation(static_cast<float>(static_cast<int>(cw.GetRotation() + 45) % 360));
+						// Ruotando attorno al centro il primo terminale si sposta: lo
+						// si riaggancia alla griglia (no-op se l'aggancio è disattivato).
+						SnapComponentToGrid(cw);
+					}
 
 				UpdateLinksForComponent(m_selectedComponent.compId);
 			}
@@ -984,6 +1054,22 @@ void CircuitLab::UI::DrawImageGuiPanel()
 	ImGui::Separator();
 	if (ImGui::Button(m_showOscilloscope ? "Hide Oscilloscope" : "Show Oscilloscope"))
 		m_showOscilloscope = !m_showOscilloscope;
+	ImGui::Separator();
+
+	ImGui::Checkbox("Mostra griglia", &m_showGrid);
+	ImGui::Checkbox("Aggancia alla griglia", &m_snapToGrid);
+	const char *gridSizeNames[] = { "10", "20", "40" };
+	const int gridSizes[] = { 10, 20, 40 };
+	int gridSizeIndex = 1;
+	for (int i = 0; i < 3; i++)
+		if (gridSizes[i] == m_gridSize)
+			gridSizeIndex = i;
+	if (ImGui::Combo("Passo griglia", &gridSizeIndex, gridSizeNames, 3))
+		m_gridSize = gridSizes[gridSizeIndex];
+	ImGui::Text("Zoom: %d%%", static_cast<int>(std::lround(m_zoom * 100.0f)));
+	ImGui::SameLine();
+	if (ImGui::Button("Reset zoom"))
+		ResetZoom();
 	ImGui::Separator();
 
 	// Mostra il risultato della simulazione o un messaggio di errore
@@ -1798,9 +1884,87 @@ CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &t
 		throw std::runtime_error("Impossibile caricare il font");
 
 	m_view = sf::View(sf::FloatRect({ 0.0f, 0.0f }, { static_cast<float>(m_width - PANEL_WIDTH), static_cast<float>(m_heigth) }));
+	// Il viewport serve già prima del primo Render (WorldPos/mapPixelToCoords
+	// lo usano per convertire il mouse), quindi si imposta qui e non solo là.
+	m_view.setViewport(sf::FloatRect({ 0.f, 0.f }, { static_cast<float>(m_width - PANEL_WIDTH) / m_width, 1.f }));
 
 	m_linkViewIdCount = 0;
 	m_nodeViewCount = 0;
+}
+
+sf::Vector2i CircuitLab::UI::WorldPos(sf::Vector2i pixelPos) const
+{
+	sf::Vector2f world = m_window.mapPixelToCoords(pixelPos, m_view);
+	return sf::Vector2i(static_cast<int>(std::lround(world.x)), static_cast<int>(std::lround(world.y)));
+}
+
+void CircuitLab::UI::ResetZoom()
+{
+	m_zoom = 1.0f;
+	m_view.setSize({ static_cast<float>(m_width - PANEL_WIDTH), static_cast<float>(m_heigth) });
+	m_view.setCenter(m_view.getSize() / 2.0f);
+}
+
+sf::Vector2f CircuitLab::UI::SnapToGrid(sf::Vector2f p) const
+{
+	if (!m_snapToGrid)
+		return p;
+
+	const float g = static_cast<float>(m_gridSize);
+	return { std::round(p.x / g) * g, std::round(p.y / g) * g };
+}
+
+// Aggancia il componente in modo che sia il suo PRIMO TERMINALE (non il centro)
+// a cadere su un nodo della griglia: sono i terminali a cui si attaccano i fili,
+// quindi è lì che l'allineamento si vede. Il centro viene traslato della stessa
+// quantità. Con rotazioni multiple di 90° tutti gli altri terminali cadono a loro
+// volta sulla griglia (finché il passo divide la distanza tra i terminali).
+void CircuitLab::UI::SnapComponentToGrid(ComponentView &cw)
+{
+	if (!m_snapToGrid || cw.GetComponetDesign().terminalOffset.empty())
+		return;
+
+	const sf::Vector2f rot = GetRotatedTerminalPos(cw, 0);
+	const sf::Vector2f term = SnapToGrid({ cw.GetPosition().x + rot.x, cw.GetPosition().y + rot.y });
+	cw.SetPosition(Vec2(term.x - rot.x, term.y - rot.y));
+}
+
+void CircuitLab::UI::DrawGrid()
+{
+	const sf::Vector2f half = m_view.getSize() / 2.0f;
+	const sf::Vector2f minP = m_view.getCenter() - half;
+	const sf::Vector2f maxP = m_view.getCenter() + half;
+
+	// Se a schermo le linee sarebbero troppo fitte (zoom molto indietro) si
+	// raddoppia il passo finché tornano leggibili, invece di sfumare in un grigio piatto.
+	float step = static_cast<float>(m_gridSize);
+	while (step * m_zoom < GRID_MIN_SCREEN_SPACING)
+		step *= 2.0f;
+
+	const sf::Color minor(255, 255, 255, 22);
+	const sf::Color major(255, 255, 255, 48);
+
+	sf::VertexArray lines(sf::PrimitiveType::Lines);
+
+	const int firstX = static_cast<int>(std::floor(minP.x / step));
+	const int lastX = static_cast<int>(std::ceil(maxP.x / step));
+	for (int i = firstX; i <= lastX; i++)
+	{
+		const sf::Color &c = (i % GRID_MAJOR_EVERY == 0) ? major : minor;
+		lines.append(sf::Vertex{ { i * step, minP.y }, c });
+		lines.append(sf::Vertex{ { i * step, maxP.y }, c });
+	}
+
+	const int firstY = static_cast<int>(std::floor(minP.y / step));
+	const int lastY = static_cast<int>(std::ceil(maxP.y / step));
+	for (int i = firstY; i <= lastY; i++)
+	{
+		const sf::Color &c = (i % GRID_MAJOR_EVERY == 0) ? major : minor;
+		lines.append(sf::Vertex{ { minP.x, i * step }, c });
+		lines.append(sf::Vertex{ { maxP.x, i * step }, c });
+	}
+
+	m_window.draw(lines);
 }
 
 // Shutdown di ImGui-SFML alla distruzione della UI
@@ -2082,6 +2246,9 @@ void CircuitLab::UI::Render()
 
 	m_view.setViewport(sf::FloatRect({ 0.f, 0.f }, { (static_cast<float>(m_width - PANEL_WIDTH) / m_width), 1.f }));
 	m_window.setView(m_view);
+
+	if (m_showGrid)
+		DrawGrid();
 
 	DrawComponents();
 
