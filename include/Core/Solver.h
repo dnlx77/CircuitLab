@@ -10,7 +10,17 @@ namespace CircuitLab {
 	// di simulazione (vedi Circuit::ComputeMatrix, che la cachea).
 	class Solver {
 	private:
+		// Fattorizzazione QR della matrice EQUILIBRATA: A' = diag(m_rowScale) * A * diag(m_colScale).
+		// Un circuito MNA mescola conduttanze di ordini di grandezza diversissimi
+		// (un interruttore chiuso, un condensatore con Geq = C/h a passo piccolo, un
+		// carico di megaohm): senza normalizzare, il rapporto tra il termine più
+		// grande e il più piccolo supera la precisione del double e Eigen dichiara
+		// singolare una matrice perfettamente valida (o ne restituisce la soluzione
+		// con errori enormi). Scalando righe e colonne a norma ~1 quel rapporto
+		// sparisce; il risultato torna alla scala originale in SolveCircuit.
 		Eigen::ColPivHouseholderQR<Eigen::MatrixXd> m_matrix;
+		Eigen::VectorXd m_rowScale;
+		Eigen::VectorXd m_colScale;
 		bool m_isMatrixInvertible;
 
 	public:

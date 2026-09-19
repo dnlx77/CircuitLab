@@ -9,6 +9,16 @@
 
 namespace CircuitLab {
 
+	// Conduttanza (in Siemens) con cui si approssima un cortocircuito ideale:
+	// interruttore chiuso, resistore/induttore di valore quasi nullo. Vale 1 µΩ.
+	// Non va alzata "per essere più ideale": la soluzione lineare (QR in double)
+	// ha un rumore di arrotondamento proporzionale al termine più grande della
+	// matrice, e con 1e12 S l'errore sulle tensioni arrivava a decine di mV, fino
+	// a soluzioni prive di senso quando un condensatore grande (Geq = C/h) fa
+	// crescere ancora l'intervallo dinamico. Con 1e6 S l'errore scende a ~1e-8 V,
+	// mentre la caduta sul "filo" resta trascurabile (1 A -> 1 µV).
+	inline constexpr double SHORT_CIRCUIT_CONDUCTANCE = 1e6;
+
 	// Contesto passato a StampVector ad ogni step di simulazione:
 	// t = tempo corrente, h = passo di integrazione, companionState = stato del modello
 	// companion per componenti dinamici (es. condensatori/induttori, quando introdotti).

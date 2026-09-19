@@ -16,7 +16,7 @@ void CircuitLab::Capacitor::StampMatrix(Eigen::MatrixXd &A,
 {
 	(void)voltageSourceMap;
 
-	m_conductance = (h > 1e-15) ? (m_capacitance / h) : 1e12;
+	m_conductance = (h > 1e-15) ? (m_capacitance / h) : SHORT_CIRCUIT_CONDUCTANCE;
 
 	int n1 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
 	int n2 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;

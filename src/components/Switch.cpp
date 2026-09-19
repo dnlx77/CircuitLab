@@ -12,7 +12,7 @@ CircuitLab::Switch::Switch(bool closed) : Component(2, ComponentType::switchComp
 void CircuitLab::Switch::SetClosed(bool closed)
 {
 	m_closed = closed;
-	m_conductance = closed ? 1e12 : 1e-12;
+	m_conductance = closed ? SHORT_CIRCUIT_CONDUCTANCE : 1e-12;
 }
 
 // Identico a Resistor::StampMatrix: una conduttanza tra i nodi n1 e n2.

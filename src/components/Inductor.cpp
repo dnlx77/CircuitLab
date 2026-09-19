@@ -18,7 +18,7 @@ void CircuitLab::Inductor::StampMatrix(Eigen::MatrixXd &A,
 {
 	(void)voltageSourceMap;
 
-	m_conductance = (m_inductance > 1e-9) ? (h / m_inductance) : 1e12;
+	m_conductance = (m_inductance > 1e-9) ? (h / m_inductance) : SHORT_CIRCUIT_CONDUCTANCE;
 
 	int n1 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
 	int n2 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;

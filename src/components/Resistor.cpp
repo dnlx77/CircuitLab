@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "Components/Resistor.h"
 #include "Common/ComponentType.h"
 
@@ -13,10 +15,12 @@ void CircuitLab::Resistor::SetResistance(double res)
 {
 	m_resistance = res;
 
-	if (m_resistance > 1e-9)
-		m_conductance = 1.0 / m_resistance;
+	// Si limita a SHORT_CIRCUIT_CONDUCTANCE anche per R piccole ma non nulle
+	// (es. 1 nΩ darebbe 1e9 S): lo stesso intervallo dinamico eccessivo.
+	if (m_resistance > 0.0)
+		m_conductance = std::min(1.0 / m_resistance, SHORT_CIRCUIT_CONDUCTANCE);
 	else
-		m_conductance = 1e12; // Approssima un cortocircuito ideale
+		m_conductance = SHORT_CIRCUIT_CONDUCTANCE; // Approssima un cortocircuito ideale
 }
 
 // Contributo MNA di una resistenza tra i nodi n1 e n2:
