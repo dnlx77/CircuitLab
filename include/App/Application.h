@@ -53,10 +53,23 @@ namespace CircuitLab {
 		static constexpr double BATCH_TARGET_TIME = 0.010; // 10ms virtuali per batch
 		static constexpr int MAX_STEPS_PER_BATCH = 5000;   // anti-spirale della morte
 
+		// Newton-Raphson per i circuiti con componenti non lineari (es. diodo)
+		// (il criterio di convergenza è del singolo componente: Component::HasConverged)
+		static constexpr int MAX_NEWTON_ITERATIONS = 50;
+
 		// Factory method: crea il componente corretto in base al tipo richiesto dalla UI,
 		// con valori di default (es. resistenza 1kΩ, generatore DC 0V) — non prende un
 		// valore esplicito: l'utente lo imposta dopo dalla UI.
 		std::unique_ptr<Component> MakeComponent(ComponentType type);
+
+		// Risolve lo step corrente quando il circuito contiene componenti non lineari:
+		// itera Newton-Raphson ripartendo dalla soluzione dello step precedente. Ad
+		// ogni iterazione ristampa il modello companion dei componenti non lineari
+		// sopra la parte lineare (già calcolata da Circuit::ComputeMatrix/ComputeVector),
+		// rifattorizza e risolve. Restituisce nullopt se una matrice è singolare;
+		// converged dice se le iterazioni sono arrivate a convergenza.
+		// Va chiamato con m_circuitMutex già acquisito (da Simulate).
+		std::optional<Eigen::VectorXd> SolveNonlinearStep(bool &converged);
 
 		void SimulationLoop();
 		void RenderLoop();

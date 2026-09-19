@@ -13,7 +13,8 @@ namespace CircuitLab {
 		only_ground_circuit,  // Il circuito contiene solo componenti ground (nessun nodo attivo)
 		no_circuit,           // Il puntatore al circuito è nullo (errore interno)
 		solve_error,          // La matrice MNA è singolare, sistema non risolvibile
-		disconnected_terminal // Un componente ha un terminale non collegato a nulla
+		disconnected_terminal, // Un componente ha un terminale non collegato a nulla
+		no_convergence        // Le iterazioni di Newton-Raphson (componenti non lineari, es. diodo) non convergono
 	};
 
 	// Struttura di output restituita da Application::RunSimulation() alla UI.

@@ -77,6 +77,21 @@ namespace CircuitLab {
 
 		bool IsCircuitEmpty() const { return m_components.empty(); }
 
+		// True se almeno un componente è non lineare (es. un diodo): in quel caso
+		// la matrice A cambia ad ogni iterazione e non basta la fattorizzazione cachata.
+		bool HasNonlinearComponents() const;
+
+		// Aggiunge a A e B il modello companion di tutti i componenti non lineari,
+		// linearizzati attorno alla soluzione x. A e B vanno passati già inizializzati
+		// con la parte lineare (copie di GetCircuitMatrix()/GetCircuitVector()).
+		// Restituisce true se almeno un componente ha limitato la propria tensione.
+		bool StampNonlinear(Eigen::MatrixXd &A, Eigen::VectorXd &B, const Eigen::VectorXd &x) const;
+
+		// True se tutti i componenti non lineari sono coerenti con la soluzione x
+		// (vedi Component::HasConverged). Va chiamato dopo aver risolto con
+		// la linearizzazione stampata da StampNonlinear.
+		bool NonlinearConverged(const Eigen::VectorXd &x) const;
+
 		// Restituisce true se il circuito contiene solo componenti ground
 		// (caso degenere: nessun nodo attivo nella matrice MNA)
 		bool CircuitHasOnlyGround() const;

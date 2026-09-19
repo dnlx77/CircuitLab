@@ -348,6 +348,12 @@ void CircuitLab::UI::HandleEvents()
 						AddViewComponent(id, "Switch", ComponentType::switchComponent, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
 						SnapComponentToGrid(m_componentViewList.back());
 					}
+					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D))
+					{
+						int id = m_onCircuitChange(ComponentType::diode);
+						AddViewComponent(id, "Diode", ComponentType::diode, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+						SnapComponentToGrid(m_componentViewList.back());
+					}
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::N))
 					{
 						// A differenza degli altri tasti, non passa da m_onCircuitChange/Circuit:
@@ -1083,6 +1089,8 @@ void CircuitLab::UI::DrawImageGuiPanel()
 		ImGui::Text("Il circuito contiene solo componenti ground!");
 	else if (m_simulationOutput.simRes == SimulationResult::disconnected_terminal)
 		ImGui::Text("Circuito non valido: c'e' un terminale scollegato o un ramo aperto. Simulazione interrotta.");
+	else if (m_simulationOutput.simRes == SimulationResult::no_convergence)
+		ImGui::Text("La simulazione non converge (componente non lineare).");
 	else
 	{
 		ImGui::Text("Risultato: [");
@@ -1132,7 +1140,10 @@ void CircuitLab::UI::DrawImageGuiPanel()
 		for (auto &[key, value] : values)
 		{
 			std::string label(ComponentValueToString(key));
-			ImGui::InputDouble(label.c_str(), &value);
+			// Il formato di default (%.6f) mostrerebbe Is ~ 1e-14 come 0.000000:
+			// per lui serve la notazione scientifica.
+			const char *format = (key == ComponentValue::saturationCurrent) ? "%.3e" : "%.6f";
+			ImGui::InputDouble(label.c_str(), &value, 0.0, 0.0, format);
 			if (ImGui::IsItemDeactivatedAfterEdit())
 			{
 				values.at(key) = value;
@@ -1251,6 +1262,8 @@ void CircuitLab::UI::DrawComponents()
 			compString += "L";
 		else if (comp.GetComponentType() == ComponentType::switchComponent)
 			compString += "S";
+		else if (comp.GetComponentType() == ComponentType::diode)
+			compString += "D";
 
 		compString += std::to_string(comp.GetComponentLink());
 
@@ -1622,6 +1635,8 @@ std::string_view CircuitLab::UI::ComponentValueToString(CircuitLab::ComponentVal
 	case ComponentValue::phase:      return "Phase";
 	case ComponentValue::capacitance: return "Capacitance";
 	case ComponentValue::inductance: return "Inductance";
+	case ComponentValue::saturationCurrent: return "Sat. current (Is)";
+	case ComponentValue::emissionCoefficient: return "Emission coeff. (n)";
 	default:                         return "Unknown";
 	}
 }

@@ -76,6 +76,40 @@ namespace CircuitLab {
 			const std::map<int, int> &voltageSourceMap,
 			const StampContext &ctx) = 0;
 
+		// True per i componenti la cui corrente non è lineare nella tensione (es. il
+		// diodo): non possono essere stampati una volta sola in A, quindi la
+		// simulazione deve risolvere ogni step con iterazioni di Newton-Raphson
+		// (vedi Application::SolveNonlinearStep). Default: componente lineare.
+		virtual bool IsNonlinear() const { return false; }
+
+		// Solo per i componenti non lineari: linearizza il componente attorno alla
+		// soluzione x dell'iterazione precedente di Newton e stampa il modello
+		// companion risultante (conduttanza in A, generatore equivalente in B).
+		// Restituisce true se il componente ha dovuto limitare la propria tensione
+		// (in quel caso l'iterazione non può essere considerata convergita).
+		// Default: no-op, restituisce false.
+		virtual bool StampNonlinear(Eigen::MatrixXd &A,
+			Eigen::VectorXd &B,
+			const std::map<int, int> &nodeMap,
+			const Eigen::VectorXd &x)
+		{
+			(void)A; (void)B; (void)nodeMap; (void)x;
+			return false;
+		}
+
+		// Solo per i componenti non lineari: dopo aver risolto il sistema con la
+		// linearizzazione stampata da StampNonlinear, verifica se la soluzione x è
+		// coerente col componente VERO — cioè se la corrente predetta dal modello
+		// linearizzato coincide (entro tolleranza) con quella reale nel nuovo punto.
+		// È il test di convergenza di SPICE: a differenza del confronto tra due
+		// soluzioni successive non viene falsato dal rumore numerico dei nodi
+		// quasi isolati. Default: true.
+		virtual bool HasConverged(const std::map<int, int> &nodeMap, const Eigen::VectorXd &x) const
+		{
+			(void)nodeMap; (void)x;
+			return true;
+		}
+
 		// Restituisce il numero di variabili extra introdotte nella matrice MNA.
 		// Di default 0; le sorgenti di tensione lo sovrascrivono con 1
 		// (la corrente incognita che scorre nel generatore).

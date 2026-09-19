@@ -14,6 +14,7 @@ namespace CircuitLab {
 		capacitor,     // Condensatore ideale
 		inductor,      // Induttore ideale
 		switchComponent, // Interruttore ideale (aperto/chiuso, non ha un valore continuo)
+		diode,         // Diodo a giunzione (non lineare, modello di Shockley)
 	};
 
 	NLOHMANN_JSON_SERIALIZE_ENUM(ComponentType, {
@@ -23,6 +24,7 @@ namespace CircuitLab {
 		{ ComponentType::capacitor, "Capacitor" },
 		{ ComponentType::inductor, "Inductor" },
 		{ ComponentType::switchComponent, "Switch" },
+		{ ComponentType::diode, "Diode" },
 	})
 
 	enum class WaveFormType {

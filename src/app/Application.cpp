@@ -9,6 +9,7 @@
 #include "Components/Capacitor.h"
 #include "Components/Inductor.h"
 #include "Components/Switch.h"
+#include "Components/Diode.h"
 #include "Common/SimulationOutput.h"
 #include "UI/Ui.h"
 #include "Common/Logger.h"
@@ -28,6 +29,7 @@ namespace {
 //   - capacitor:     valore in Farad
 //   - inductor:      valore in Henry
 //   - switch:        chiuso di default
+//   - diode:         Is = 1e-14 A, n = 1 (silicio generico)
 std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type)
 {
 	switch (type) {
@@ -37,8 +39,57 @@ std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(Co
 	case ComponentType::capacitor:			return std::make_unique<Capacitor>(0.000001);
 	case ComponentType::inductor:			return std::make_unique<Inductor>(0.001);
 	case ComponentType::switchComponent:	return std::make_unique<Switch>(true);
+	case ComponentType::diode:				return std::make_unique<Diode>();
 	default:								return nullptr;
 	}
+}
+
+// Newton-Raphson per un singolo step temporale. Il punto di partenza è la
+// soluzione dello step precedente (le tensioni cambiano poco da uno step
+// all'altro, quindi di solito bastano 2-4 iterazioni); se la dimensione non
+// coincide (circuito modificato dall'ultimo step) si riparte da zero.
+std::optional<Eigen::VectorXd> CircuitLab::Application::SolveNonlinearStep(bool &converged)
+{
+	converged = false;
+
+	const Eigen::MatrixXd &linearA = m_circuit->GetCircuitMatrix();
+	const Eigen::VectorXd &linearB = m_circuit->GetCircuitVector();
+
+	Eigen::VectorXd x = (m_simulationResult.size() == linearB.size())
+		? m_simulationResult
+		: Eigen::VectorXd::Zero(linearB.size());
+
+	for (int iter = 0; iter < MAX_NEWTON_ITERATIONS; iter++)
+	{
+		Eigen::MatrixXd A = linearA;
+		Eigen::VectorXd b = linearB;
+		bool limited = m_circuit->StampNonlinear(A, b, x);
+
+		// A cambia ad ogni iterazione: la fattorizzazione cachata da
+		// Circuit::ComputeMatrix (matrice statica) non è più valida qui.
+		m_solver->Factorize(A);
+		auto next = m_solver->SolveCircuit(b);
+		if (!next.has_value())
+			return std::nullopt;
+
+		x = *next;
+
+		// Convergenza (come SPICE): nessun componente ha dovuto limitare la
+		// tensione in questa iterazione (un valore limitato non è la vera
+		// soluzione, solo un passo intermedio) E la corrente predetta dal modello
+		// linearizzato coincide con quella reale nel nuovo punto. Non si confronta
+		// invece x con l'iterazione precedente: per i nodi quasi isolati (tutti i
+		// diodi spenti + un condensatore grande, con Geq = C/h enorme) la
+		// soluzione lineare ha rumore di arrotondamento maggiore di qualunque
+		// tolleranza ragionevole, e il ciclo non convergerebbe mai.
+		if (!limited && m_circuit->NonlinearConverged(x))
+		{
+			converged = true;
+			break;
+		}
+	}
+
+	return x;
 }
 
 void CircuitLab::Application::SimulationLoop()
@@ -430,7 +481,20 @@ void CircuitLab::Application::Simulate()
 	// Risolve il sistema MNA; restituisce nullopt se la matrice è singolare
 	m_circuit->ComputeMatrix();
 	m_circuit->ComputeVector(ctx);
-	auto result = m_solver->SolveCircuit(m_circuit->GetCircuitVector());
+	std::optional<Eigen::VectorXd> result;
+	if (m_circuit->HasNonlinearComponents())
+	{
+		bool converged = false;
+		result = SolveNonlinearStep(converged);
+
+		if (result.has_value() && !converged)
+		{
+			output.simRes = SimulationResult::no_convergence;
+			return;
+		}
+	}
+	else
+		result = m_solver->SolveCircuit(m_circuit->GetCircuitVector());
 
 	if (!result.has_value())
 	{
@@ -566,6 +630,27 @@ void CircuitLab::Application::Simulate()
 			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
 
 			ind->UpdateState(v1, v2);
+		}
+		else if (comp->GetType() == ComponentType::diode)
+		{
+			std::vector<int> termList = comp->GetTerminalNodeIds();
+			// Vedi commento nel ramo resistor: <= 0 copre ground (0) e terminale
+			// mai collegato (-1), entrambi assenti da m_nodesMap.
+			if (termList[0] <= 0)
+				v1 = 0.0;
+			else
+				v1 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[0])];
+			if (termList[1] <= 0)
+				v2 = 0.0;
+			else
+				v2 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[1])];
+
+			// Corrente anodo->catodo dall'equazione di Shockley con la Vd
+			// convergente (stesso verso positivo del resistore: terminale 0 -> 1).
+			auto *diode = static_cast<Diode *>(comp.get());
+			double current = diode->Current(v1 - v2);
+			componentCurrent[comp->GetId()] = current;
+			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
 		}
 	}
 

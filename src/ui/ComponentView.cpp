@@ -12,6 +12,7 @@ const std::map<CircuitLab::ComponentType, CircuitLab::ComponentDesign> CircuitLa
 	{ CircuitLab::ComponentType::capacitor,      { 20, 40, 4, { {0, -20}, {0, 20} }, -1 } },
 	{ CircuitLab::ComponentType::inductor,       { 20, 40, 4, { {0, -20}, {0, 20} }, -1 } },
 	{ CircuitLab::ComponentType::switchComponent, { 20, 40, 4, { {0, -20}, {0, 20} }, -1 } },
+	{ CircuitLab::ComponentType::diode,          { 20, 40, 4, { {0, -20}, {0, 20} }, -1 } },
 };
 
 CircuitLab::ComponentView::ComponentView(int componentLink, const Vec2 &position,
@@ -176,6 +177,15 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderWindow &window, sf::Color c
 		draw({ {0,-20}, {0,-12} }, sf::PrimitiveType::Lines);
 		draw({ {0,12}, {0,20} }, sf::PrimitiveType::Lines);
 		draw({ {0,-12}, switchClosed ? sf::Vector2f{0,12} : sf::Vector2f{9,6} }, sf::PrimitiveType::Lines);
+		break;
+
+	case ComponentType::diode:
+		// Anodo (terminale 0, in alto) -> triangolo con l'apice verso il catodo
+		// (terminale 1, in basso), chiuso da una barra sul lato del catodo.
+		draw({ {0,-20}, {0,-8} }, sf::PrimitiveType::Lines);
+		draw({ {-8,-8}, {8,-8}, {0,8}, {-8,-8} }, sf::PrimitiveType::LineStrip);
+		draw({ {-8,8}, {8,8} }, sf::PrimitiveType::Lines);
+		draw({ {0,8}, {0,20} }, sf::PrimitiveType::Lines);
 		break;
 
 	default:

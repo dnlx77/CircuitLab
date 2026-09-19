@@ -8,6 +8,8 @@ namespace CircuitLab {
 		frequency,
 		phase,
 		capacitance,
-		inductance
+		inductance,
+		saturationCurrent,   // Is del diodo (Ampere)
+		emissionCoefficient  // n del diodo (fattore di idealità)
 	};
 }

@@ -36,6 +36,7 @@ std::string CircuitLab::Component::ComponentTypeName(ComponentType type)
 	case ComponentType::capacitor:			return "C";
 	case ComponentType::inductor:			return "L";
 	case ComponentType::switchComponent:	return "S";
+	case ComponentType::diode:				return "D";
 	default:								return "?";
 
 	}

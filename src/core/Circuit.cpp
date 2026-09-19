@@ -78,6 +78,31 @@ void CircuitLab::Circuit::ComputeVector(const StampContext &ctx)
 		comp->StampVector(m_circuitVector, m_nodesMap, m_voltageSourceMap, ctx);
 }
 
+bool CircuitLab::Circuit::HasNonlinearComponents() const
+{
+	for (const auto &comp : m_components)
+		if (comp->IsNonlinear())
+			return true;
+	return false;
+}
+
+bool CircuitLab::Circuit::StampNonlinear(Eigen::MatrixXd &A, Eigen::VectorXd &B, const Eigen::VectorXd &x) const
+{
+	bool anyLimited = false;
+	for (const auto &comp : m_components)
+		if (comp->IsNonlinear())
+			anyLimited |= comp->StampNonlinear(A, B, m_nodesMap, x);
+	return anyLimited;
+}
+
+bool CircuitLab::Circuit::NonlinearConverged(const Eigen::VectorXd &x) const
+{
+	for (const auto &comp : m_components)
+		if (comp->IsNonlinear() && !comp->HasConverged(m_nodesMap, x))
+			return false;
+	return true;
+}
+
 // Restituisce l'ID del terminale dato il componente e l'indice del terminale (-1 se non trovato)
 int CircuitLab::Circuit::GetTerminalId(int compId, int termIndex) const
 {
