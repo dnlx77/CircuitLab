@@ -8,6 +8,7 @@
 #include "Common/UICommon.h"
 #include "Common/ComponentValue.h"
 #include "Common/OscilloscopeChannel.h"
+#include "UI/WireGraph.h"
 
 namespace CircuitLab {
 
@@ -28,6 +29,10 @@ namespace CircuitLab {
 		using fnGetCompTerminalId = std::function<std::vector<int>(int compId)>;
 		// Callback per eliminare un componente dal circuito
 		using fnDeleteComponent = std::function<void(int compId)>;
+		// Callback per lasciare libero un terminale (nodeId -1) quando la UI ne toglie il filo
+		using fnFreeTerminal = std::function<void(int compId, int termIndex)>;
+		// Callback per togliere dalla massa un gruppo di terminali che il disegno mostra ancora uniti
+		using fnDetachFromGround = std::function<void(const std::vector<std::pair<int, int>> &terminals)>;
 
 		using fnOnSave = std::function<void(const std::string &filePath)>; // Callback per salvare il circuito su file
 		using fnOnLoad = std::function<void(const std::string &filePath)>; // Callback per caricare il circuito da file
@@ -61,8 +66,6 @@ namespace CircuitLab {
 		sf::Font m_font;        // Font usato per le etichette dei componenti sul canvas
 		sf::View m_view;
 
-		unsigned int m_linkViewIdCount;
-		unsigned int m_nodeViewCount;
 
 		// Costanti di configurazione UI
 		static constexpr int CLICK_TOLLERANCE = 7;         // Tolleranza click sui terminali (pixel)
@@ -160,8 +163,14 @@ namespace CircuitLab {
 		SelecetedComponent m_selectedComponent; // Componente/terminale attualmente selezionato
 
 		std::vector<ComponentView> m_componentViewList; // Lista delle viste grafiche dei componenti
-		std::vector<LinkView> m_linkViewList;           // Lista dei collegamenti (fili) da disegnare
-		std::vector<NodeView> m_nodeViewList;
+		// Topologia dei collegamenti (NodeView e fili): vive in WireGraph, che ne
+		// contiene tutte le operazioni di modifica e si prova da sola. Le liste e i
+		// contatori qui sotto ne sono riferimenti, per leggerli e disegnarli direttamente.
+		WireGraph m_graph;
+		std::vector<LinkView> &m_linkViewList = m_graph.linkViews;   // Lista dei collegamenti (fili) da disegnare
+		std::vector<NodeView> &m_nodeViewList = m_graph.nodeViews;
+		unsigned int &m_linkViewIdCount = m_graph.linkViewIdCount;
+		unsigned int &m_nodeViewCount = m_graph.nodeViewCount;
 		std::unordered_map<int, double> m_linkViewCurrentList;
 		std::vector<LinkPararticles> m_linkParticlesList;
 
@@ -176,6 +185,8 @@ namespace CircuitLab {
 		fnCreateLink m_onCreateLink;
 		fnGetCompTerminalId m_onGetCompTerminalId; // Richiede i nodeId dei terminali al circuito
 		fnDeleteComponent m_onDeleteComponent;     // Richiede la rimozione di un componente al circuito
+		fnFreeTerminal m_onFreeTerminal;           // Richiede al circuito di liberare un terminale il cui filo è stato tolto
+		fnDetachFromGround m_onDetachFromGround;   // Richiede al circuito di staccare dalla massa un gruppo di terminali
 		fnOnSave m_onSave;
 		fnOnLoad m_onLoad;
 		fnOnNew m_onNew;
@@ -224,13 +235,6 @@ namespace CircuitLab {
 
 		// Restituisce il NodeView con l'ID dato (lancia eccezione se non trovato)
 		NodeView GetNodeViewById(int nodeViewId) const;
-
-		// True se il NodeView partecipa a un tratto di bus (come sorgente o come
-		// destinazione), non solo a tap di componenti. Usato per distinguere una
-		// vera giunzione interattiva (selezionabile/trascinabile, non "fantasma"
-		// che segue il terminale) da un semplice punto medio invisibile tra due
-		// componenti — vedi CheckClick e UpdateLinksForComponent.
-		bool NodeViewHasBusEdge(int nodeViewId) const;
 
 		// Converte una posizione in pixel della finestra in coordinate mondo
 		// (tenendo conto di zoom e spostamento della vista), arrotondata all'intero.
@@ -305,6 +309,8 @@ namespace CircuitLab {
 		void SetOnCreateLink(const fnCreateLink &func) { m_onCreateLink = func; }
 		void SetOnGetCompTerminalId(const fnGetCompTerminalId &func) { m_onGetCompTerminalId = func; }
 		void SetOnDeleteComponent(const fnDeleteComponent &func) { m_onDeleteComponent = func; }
+		void SetOnFreeTerminal(const fnFreeTerminal &func) { m_onFreeTerminal = func; }
+		void SetOnDetachFromGround(const fnDetachFromGround &func) { m_onDetachFromGround = func; }
 		void SetOnSave(const fnOnSave &func) { m_onSave = func; }
 		void SetOnLoad(const fnOnLoad &func) { m_onLoad = func; }
 		void SetOnNew(const fnOnNew &func) { m_onNew = func; }
@@ -338,56 +344,37 @@ namespace CircuitLab {
 
 		// Aggiunge un tratto di bus (filo tra due NodeView, nessun componente
 		// coinvolto) al canvas; restituisce l'ID assegnato alla nuova LinkView.
-		// Usato dal caricamento da file (vedi IOManager) e da SplitLinkIntoNewNodeView.
+		// Usato dal caricamento da file (vedi IOManager); a runtime i tratti di bus si
+		// creano tramite WireGraph (m_graph), che li registra anche sui due NodeView.
 		int AddBusLinkView(int sourceNodeViewId, int targetNodeViewId);
 
-		// Stacca il link dato dal suo NodeView attuale (il "genitore") in un
-		// nuovo NodeView (stesso nodeId, stessa posizione iniziale del genitore),
-		// collegato ad esso con un nuovo tratto di bus. Nessuna chiamata al
-		// Circuit: è puramente una riorganizzazione visiva, la topologia
-		// elettrica non cambia. Restituisce l'ID del nuovo NodeView (-1 se
-		// linkId non esiste). Usato da Ctrl+drag destro su un filo (split).
-		int SplitLinkIntoNewNodeView(int linkId);
+		// Collega due elementi selezionati con un tratto di bus (un "filo"): terminale,
+		// nodo libero, o un punto sul mezzo di un filo esistente (dove nasce un nodo
+		// libero, per una derivazione a T). Il Circuit viene avvisato PRIMA del disegno
+		// e, se rifiuta il collegamento, non si disegna nulla. Non fa nulla se i due
+		// elementi sono già nello stesso nodo (si formerebbe un ciclo di fili).
+		void ConnectSelections(const SelecetedComponent &first, const SelecetedComponent &second);
 
-		// Rimuove un tratto di bus (inverso di SplitLinkIntoNewNodeView) e
-		// pulisce entrambi i suoi estremi tramite CollapseIfDangling: un
-		// estremo rimasto senza alcun link viene eliminato, uno rimasto con un
-		// solo tap viene riattaccato direttamente all'altro estremo. Non fa
-		// nulla se linkId non è un tratto di bus.
-		void RemoveBusEdge(int linkId);
+		// Comunica al Circuit i terminali a cui la UI ha tolto ogni filo (vedi
+		// WireGraph::RemoveComponent): tornano liberi anche per lui.
+		void FreeTerminals(const std::vector<TerminalRef> &terminals);
 
-		// Se il NodeView nvId è rimasto senza alcun link lo elimina; se gli è
-		// rimasto un solo link e quel link è un tap, lo riattacca direttamente
-		// a otherNvId (se esiste) eliminando nvId; se quel link è invece un
-		// tratto di bus (nessun tap proprio rimasto: un "moncone"), lo rimuove
-		// a cascata tramite RemoveBusEdge. Non fa nulla se ha 2+ link (giunzione
-		// normale) o se nvId non esiste (già rimosso da una collapse precedente).
-		void CollapseIfDangling(int nvId, int otherNvId);
+		// Dopo aver cancellato un Ground: i gruppi di terminali che il disegno mostra
+		// ancora uniti ma che non hanno più nessuna massa vengono staccati dallo 0 nel
+		// Circuit (restano collegati tra loro). candidates = i terminali che erano nel
+		// gruppo del Ground, raccolti prima della cancellazione.
+		void DetachSurvivingGroupsFromGround(const std::vector<TerminalRef> &candidates);
 
-		// Collega direttamente due NodeView già esistenti (es. due nodi
-		// piazzati a mano con "N", o una giunzione e un nodo vuoto) con un
-		// tratto di bus. Se ENTRAMBI i gruppi hanno già almeno un tap reale
-		// (un componente collegato da qualche parte al loro interno), notifica
-		// anche il Circuit per unificare davvero i due nodi elettrici — altrimenti
-		// resterebbero visivamente collegati ma elettricamente distinti. Se uno
-		// o entrambi i gruppi sono ancora vuoti, il collegamento resta puramente
-		// visivo, come il primo filo su un nodo vuoto (vedi HandleEvents).
-		void JoinTwoNodeViews(int nvIdA, int nvIdB);
-
-		// Percorre, seguendo solo i tratti di bus (mai un tratto di bus stesso,
-		// che ha compIdA/termIndexA a -1 e andrebbe scambiato per un componente
-		// vero), il gruppo di NodeView a cui appartiene startNodeViewId, e
-		// restituisce {compId, termIndex} del primo tap reale trovato, escluso
-		// (se specificato) quello indicato da excludeCompId/excludeTermIndex —
-		// utile per trovare "un ALTRO tap" quando si sta unendo un gruppo che
-		// contiene già il terminale corrente. Restituisce {-1,-1} se il gruppo
-		// non ha nessun tap reale (utilizzabile, che non sia quello escluso).
-		std::pair<int, int> FindRealTapInGroup(int startNodeViewId, int excludeCompId = -1, int excludeTermIndex = -1) const;
+		// Converte nel modello attuale i NodeView letti da un file vecchio (a hub).
+		// Chiamato da IOManager dopo il caricamento, solo per i file vecchi.
+		void ConvertLegacyNodeViews();
 
 		//int AddViewLinkToNode(int comp1, int term1, int nodeViewId);
 
-		// Aggiunge un NodeView (hub) al canvas; restituisce l'ID assegnato
-		int AddNodeView(int nodeId, sf::Vector2f position);
+		// Aggiunge un NodeView al canvas; restituisce l'ID assegnato. Con anchorCompId
+		// != -1 è ancorato a quel terminale (vedi NodeView). manual serve solo alla
+		// lettura dei file vecchi (vedi NodeView::manual).
+		int AddNodeView(int nodeId, sf::Vector2f position, bool manual, int anchorCompId = -1, int anchorTermIndex = -1, bool attached = false);
 
 		// Sostituisce la lista dei linkViewIds appartenenti al NodeView nodeViewId (usato da IOManager al caricamento)
 		void UpdateNodeViewLinkIds(int nodeViewId, std::vector<int> linkViewIds);

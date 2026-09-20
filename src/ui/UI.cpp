@@ -165,14 +165,35 @@ namespace {
 }
 
 // Determina quale componente o terminale si trova sotto il punto cliccato.
-// Controlla prima i terminali (area più piccola, priorità alta),
-// poi il corpo del componente (rettangolo centrale).
+// Controlla in quest'ordine: i NodeView (compresi quelli ancorati a un terminale,
+// che stanno sopra di esso), poi i terminali e il corpo dei componenti, infine i fili.
 // Aggiorna selComp con il risultato; se nulla è trovato, imposta state = none.
 void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 {
 	// pos è in coordinate mondo; la tolleranza è definita in pixel di SCHERMO,
 	// quindi va divisa per lo zoom (a zoom 2x, 7 px a schermo sono 3.5 unità mondo).
 	const float tol = CLICK_TOLLERANCE / m_zoom;
+	sf::Vector2f posF(static_cast<float>(pos.x), static_cast<float>(pos.y));
+
+	// NodeView per primi, sia liberi sia ancorati a un terminale: un NodeView appena
+	// creato sta esattamente sopra il suo terminale, ma il pallino deve poter essere
+	// preso (e trascinato) subito. Cliccarlo equivale a cliccare il terminale: la
+	// connessione riguarda comunque lo stesso gruppo di fili. Il corpo del componente
+	// resta raggiungibile per spostarlo.
+	for (const auto &nv : m_nodeViewList)
+	{
+		if ((posF.x >= nv.position.x - tol) && (posF.x <= nv.position.x + tol) &&
+			(posF.y >= nv.position.y - tol) && (posF.y <= nv.position.y + tol))
+		{
+			selComp.compId = -1;
+			selComp.terminalIndex = -1;
+			selComp.linkId = -1;
+			selComp.nodeViewId = nv.id;
+			selComp.state = SelectionState::nodeViewSelected;
+			selComp.clickPos = posF;
+			return;
+		}
+	}
 
 	for (const auto &comp : m_componentViewList)
 	{
@@ -221,11 +242,9 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 		}
 	}
 
-	// click su un linkView
-	sf::Vector2f posF(static_cast<float>(pos.x), static_cast<float>(pos.y));
+	// click su un filo (un tratto di bus, o il tap di un NodeView staccato dal terminale)
 	for (auto const &link : m_linkViewList)
 	{
-		NodeView nv = GetNodeViewFromLInkId(link.id);
 		sf::Vector2f diffVec({ link.targetPos.x - link.startPos.x, link.targetPos.y - link.startPos.y });
 
 		if (diffVec == sf::Vector2f(0.f, 0.f))
@@ -252,32 +271,6 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 			return;
 		}
 
-	}
-
-	// click su un nodeView: qualunque cosa DIVERSA dal classico punto medio
-	// invisibile di un filo a 2 componenti (esattamente 2 tap, nessun bus,
-	// posizionato automaticamente sopra un terminale — quello resta escluso).
-	// Sono quindi selezionabili: una vera giunzione (>2 link), un nodo con un
-	// tratto di bus (punto di presa deliberato, anche a 2 link), un nodo con
-	// un solo tap (es. appena collegato a un componente, in attesa del
-	// secondo capo) e un nodo piazzato manualmente non ancora usato (0 link).
-	for (const auto &nv : m_nodeViewList)
-	{
-		if (nv.linkViewIds.size() != 2 || NodeViewHasBusEdge(nv.id))
-		{
-			// Click dentro la zona di tolleranza del terminale?
-			if ((posF.x >= nv.position.x - tol) && (posF.x <= nv.position.x + tol) &&
-				(posF.y >= nv.position.y - tol) && (posF.y <= nv.position.y + tol))
-			{
-				selComp.compId = -1;
-				selComp.terminalIndex = -1;
-				selComp.linkId = -1;
-				selComp.nodeViewId = nv.id;
-				selComp.state = SelectionState::nodeViewSelected;
-				selComp.clickPos = sf::Vector2f({ posF.x, posF.y });
-				return;
-			}
-		}
 	}
 
 	// Nessun componente trovato sotto il click
@@ -336,44 +329,23 @@ sf::Vector2f CircuitLab::UI::GetRotatedTerminalPos(const ComponentView &cw, int 
 
 void CircuitLab::UI::UpdateLinksForComponent(int compId)
 {
-	for (auto &cv : m_componentViewList)
+	for (const auto &cv : m_componentViewList)
 	{
-		if (cv.GetComponentLink() == compId)
+		if (cv.GetComponentLink() != compId)
+			continue;
+
+		ComponentDesign des = cv.GetComponetDesign();
+		for (int i = 0; i < static_cast<int>(des.terminalOffset.size()); i++)
 		{
-			ComponentDesign des = cv.GetComponetDesign();
-			for (int i = 0; i < des.terminalOffset.size(); i++)
-			{
-				sf::Vector2f rotTer = GetRotatedTerminalPos(cv, i);
-				sf::Vector2f posTer;
-				posTer.x = cv.GetPosition().x + rotTer.x;
-				posTer.y = cv.GetPosition().y + rotTer.y;
+			sf::Vector2f rotTer = GetRotatedTerminalPos(cv, i);
+			sf::Vector2f posTer(cv.GetPosition().x + rotTer.x, cv.GetPosition().y + rotTer.y);
 
-				for (auto &lv : m_linkViewList)
-					if (lv.compIdA == compId && lv.termIndexA == i)
-					{
-						lv.startPos = posTer;
-
-						// Se il nodeView è fantasma, segue il terminale. È fantasma
-						// solo il classico punto medio invisibile tra ESATTAMENTE due
-						// tap (creato automaticamente sopra un terminale, non ha mai
-						// avuto una posizione propria) — non un nodo con un solo tap
-						// (es. appena collegato, in attesa del secondo capo) né uno
-						// con un tratto di bus: quelli hanno una posizione scelta
-						// deliberatamente dall'utente e non vanno risincronizzati.
-						for (auto &nv : m_nodeViewList)
-							if (nv.id == lv.nodeViewId && nv.linkViewIds.size() == 2 && !NodeViewHasBusEdge(nv.id))
-							{
-								nv.position = posTer;
-								// Aggiorna targetPos di tutti i link collegati al nodeView
-								for (int lvId : nv.linkViewIds)
-									for (auto &otherLv : m_linkViewList)
-										if (otherLv.id == lvId)
-											otherLv.targetPos = posTer;
-								break;
-							}
-					}
-			}
+			// Il filo del terminale ora parte da posTer; il NodeView ancorato lo segue
+			// solo se è ancora agganciato (uno che l'utente ha trascinato altrove resta
+			// dove sta, e il filo tra terminale e nodo si allunga).
+			m_graph.MoveTerminal(compId, i, posTer);
 		}
+		return;
 	}
 }
 
@@ -414,22 +386,6 @@ CircuitLab::NodeView CircuitLab::UI::GetNodeViewById(int nodeViewId) const
 			return nv;
 
 	throw std::runtime_error("NodeView not found for id: " + std::to_string(nodeViewId));
-}
-
-bool CircuitLab::UI::NodeViewHasBusEdge(int nodeViewId) const
-{
-	for (const auto &nv : m_nodeViewList)
-		if (nv.id == nodeViewId)
-		{
-			for (int lvId : nv.linkViewIds)
-				for (const auto &lv : m_linkViewList)
-					if (lv.id == lvId &&
-						(lv.sourceNodeViewId == nodeViewId ||
-							(lv.nodeViewId == nodeViewId && lv.sourceNodeViewId != -1)))
-						return true;
-			return false;
-		}
-	return false;
 }
 
 void CircuitLab::UI::UpdateNodeViewLinkIds(int nodeViewId, std::vector<int> linkViewIds)
@@ -516,7 +472,7 @@ void CircuitLab::UI::HandleEvents()
 						// un nodo vuoto non è un componente, è puramente un punto di aggancio
 						// visivo (nodeId -1, come un terminale mai collegato) a cui collegare
 						// dei fili in seguito, esattamente come ai terminali di un componente.
-						AddNodeView(-1, SnapToGrid(sf::Vector2f(static_cast<float>(pos.x), static_cast<float>(pos.y))));
+						AddNodeView(-1, SnapToGrid(sf::Vector2f(static_cast<float>(pos.x), static_cast<float>(pos.y))), true);
 						// Il nodo appena creato è esattamente sotto al cursore: senza questo
 						// flag, la CheckClick qui sotto lo selezionerebbe subito da solo
 						// (o, se un altro nodo era già selezionato da un click precedente,
@@ -547,374 +503,27 @@ void CircuitLab::UI::HandleEvents()
 						m_onToggleSwitch(m_selectedComponent.compId);
 					}
 				}
-				else if (m_selectedComponent.state == SelectionState::terminalSelected)
+				else if (!placedNode && !ImGui::GetIO().WantCaptureMouse &&
+					(m_selectedComponent.state == SelectionState::terminalSelected ||
+						m_selectedComponent.state == SelectionState::linkSelected ||
+						m_selectedComponent.state == SelectionState::nodeViewSelected))
 				{
-					// Salva i dati del primo terminale selezionato
-					int comp1 = m_selectedComponent.compId;
-					int term1 = m_selectedComponent.terminalIndex;
+					// Secondo click: dopo aver selezionato un terminale, un filo o un nodo,
+					// un secondo elemento dello stesso tipo li collega con un filo. Se il
+					// secondo click cade su altro (spazio vuoto, un corpo di componente) non
+					// succede nulla e la prima selezione resta.
+					SelecetedComponent second;
+					CheckClick(pos, second);
 
-					SelecetedComponent temp;
-					if (!ImGui::GetIO().WantCaptureMouse) CheckClick(pos, temp);
-
-					if (temp.state == SelectionState::terminalSelected)
+					if (second.state == SelectionState::terminalSelected ||
+						second.state == SelectionState::linkSelected ||
+						second.state == SelectionState::nodeViewSelected)
 					{
-						int comp2 = temp.compId;
-						int term2 = temp.terminalIndex;
-						int nodeIdTerm1 = m_onGetCompTerminalId(comp1)[term1];
-						int nodeIdTerm2 = m_onGetCompTerminalId(comp2)[term2];
-
-						if (comp1 != comp2 && (nodeIdTerm1 != nodeIdTerm2 || (nodeIdTerm1 == -1 && nodeIdTerm2 == -1)))
-						{
-							bool isConnect = m_onCreateLink(comp1, term1, comp2, term2);
-
-							if (isConnect)
-							{
-								int mathNodeId = m_onGetCompTerminalId(comp1)[term1];
-
-								int nvId1 = GetNodeViewIdByTerminal(comp1, term1);
-								int nvId2 = GetNodeViewIdByTerminal(comp2, term2);
-
-								sf::Vector2f comp1TermPos = GetTerminalPositionbyCompId(comp1)[term1];
-								sf::Vector2f comp2TermPos = GetTerminalPositionbyCompId(comp2)[term2];
-
-								if (nvId1 == -1 && nvId2 == -1)
-								{
-									// Scenario 1: nessun nodeView esistente
-									//sf::Vector2f newPos = { (comp1TermPos.x + comp2TermPos.x) / 2.0f,
-									//						(comp1TermPos.y + comp2TermPos.y) / 2.0f };
-
-									sf::Vector2f newPos = comp2TermPos;
-
-									NodeView newNV;
-									newNV.id = ++m_nodeViewCount;
-									newNV.nodeId = mathNodeId;
-									newNV.position = newPos;
-
-									LinkView lv1, lv2;
-									lv1.id = ++m_linkViewIdCount;
-									lv1.startPos = comp1TermPos;
-									lv1.targetPos = comp2TermPos;
-									lv1.compIdA = comp1;
-									lv1.termIndexA = term1;
-									lv1.nodeViewId = newNV.id;
-
-									lv2.id = ++m_linkViewIdCount;
-									lv2.startPos = comp2TermPos;
-									lv2.targetPos = comp2TermPos;
-									lv2.compIdA = comp2;
-									lv2.termIndexA = term2;
-									lv2.nodeViewId = newNV.id;
-
-									newNV.linkViewIds.push_back(lv1.id);
-									newNV.linkViewIds.push_back(lv2.id);
-
-									m_nodeViewList.push_back(newNV);
-									m_linkViewList.push_back(lv1);
-									m_linkViewList.push_back(lv2);
-								}
-								else if (nvId1 != -1 && nvId2 == -1)
-								{
-									// Scenario 2: term1 ha già un nodeView
-									LinkView lv2;
-									lv2.id = ++m_linkViewIdCount;
-									lv2.startPos = comp2TermPos;
-									lv2.targetPos = GetNodeViewById(nvId1).position;
-									lv2.compIdA = comp2;
-									lv2.termIndexA = term2;
-									lv2.nodeViewId = nvId1;
-
-									m_linkViewList.push_back(lv2);
-
-									for (auto &nv : m_nodeViewList)
-										if (nv.id == nvId1)
-										{
-											nv.linkViewIds.push_back(lv2.id);
-											break;
-										}
-								}
-								else if (nvId1 == -1 && nvId2 != -1)
-								{
-									// Scenario 3: term2 ha già un nodeView
-									LinkView lv1;
-									lv1.id = ++m_linkViewIdCount;
-									lv1.startPos = comp1TermPos;
-									lv1.targetPos = GetNodeViewById(nvId2).position;
-									lv1.compIdA = comp1;
-									lv1.termIndexA = term1;
-									lv1.nodeViewId = nvId2;
-
-									m_linkViewList.push_back(lv1);
-
-									for (auto &nv : m_nodeViewList)
-										if (nv.id == nvId2)
-										{
-											nv.linkViewIds.push_back(lv1.id);
-											break;
-										}
-								}
-								else if (nvId1 != -1 && nvId2 != -1 && nvId1 != nvId2)
-								{
-									// Scenario 4: merge dei due nodeView
-									auto itNv2 = std::find_if(m_nodeViewList.begin(), m_nodeViewList.end(),
-										[nvId2](const NodeView &nv) { return nv.id == nvId2; });
-
-									if (itNv2 != m_nodeViewList.end())
-									{
-										for (int linkIdToMove : itNv2->linkViewIds)
-										{
-											for (auto &lv : m_linkViewList)
-												if (lv.id == linkIdToMove)
-												{
-													lv.nodeViewId = nvId1;
-													lv.targetPos = GetNodeViewById(nvId1).position;
-													break;
-												}
-
-											for (auto &nv : m_nodeViewList)
-												if (nv.id == nvId1)
-												{
-													nv.linkViewIds.push_back(linkIdToMove);
-													break;
-												}
-										}
-										m_nodeViewList.erase(itNv2);
-									}
-								}
-							}
-						}
+						ConnectSelections(m_selectedComponent, second);
 
 						m_selectedComponent.state = SelectionState::none;
 						m_selectedComponent.compId = -1;
 						m_selectedComponent.terminalIndex = -1;
-						m_selectedComponent.nodeViewId = -1;
-					}
-					else if (temp.state == SelectionState::linkSelected || temp.state == SelectionState::nodeViewSelected)
-					{
-						bool isDuplicated = false;
-						// secondo click su link dopo primo su terminale
-						for (const auto &lv : m_linkViewList)
-						{
-							if (lv.compIdA == m_selectedComponent.compId && lv.termIndexA == m_selectedComponent.terminalIndex)
-							{
-								isDuplicated = true;
-								break;
-							}
-						}
-						if (!isDuplicated)
-						{
-							LinkView newLink;
-
-							newLink.id = ++m_linkViewIdCount;
-							newLink.startPos = GetTerminalPositionbyCompId(m_selectedComponent.compId)[m_selectedComponent.terminalIndex];
-							newLink.compIdA = m_selectedComponent.compId;
-							newLink.termIndexA = m_selectedComponent.terminalIndex;
-							if (temp.state == SelectionState::linkSelected)
-								newLink.nodeViewId = GetNodeViewIdByLinkId(temp.linkId);
-							else
-								newLink.nodeViewId = temp.nodeViewId;
-
-							newLink.targetPos = GetNodeViewById(newLink.nodeViewId).position;
-
-							m_linkViewList.emplace_back(newLink);
-
-							for (auto &nv : m_nodeViewList)
-								if (nv.id == newLink.nodeViewId)
-								{
-									nv.linkViewIds.emplace_back(newLink.id);
-									break;
-								}
-
-							// Trova un compId già collegato al nodeView per notificare Circuit.
-							// Se il nodeView era vuoto prima di questo link (es. un nodo
-							// piazzato a mano con "N" e non ancora usato), non c'è nessun
-							// altro terminale con cui collegarsi a livello di Circuit: il
-							// terminale corrente resta come era (libero, se lo era) finché
-							// un SECONDO filo non arriva sullo stesso nodo — esattamente
-							// come un componente appena piazzato, non ancora collegato.
-							NodeView nv;
-							if (temp.state == SelectionState::linkSelected)
-								nv = GetNodeViewFromLInkId(temp.linkId);
-							else
-								nv = GetNodeViewById(temp.nodeViewId);
-
-							if (nv.linkViewIds.size() > 1)
-							{
-								// FindRealTapInGroup ignora i tratti di bus (compIdA=-1) e
-								// cerca anche oltre il vicino diretto, lungo tutto l'albero
-								// di bus del gruppo — non solo i link ancorati proprio a nv.
-								auto [existingCompId, existingTermIndex] = FindRealTapInGroup(
-									nv.id, m_selectedComponent.compId, m_selectedComponent.terminalIndex);
-
-								m_onCreateLink(m_selectedComponent.compId, m_selectedComponent.terminalIndex, existingCompId, existingTermIndex);
-							}
-						}
-						else
-						{
-							int nvId1 = GetNodeViewIdByTerminal(m_selectedComponent.compId, m_selectedComponent.terminalIndex);
-							int nvId2 = (temp.state == SelectionState::linkSelected) ?
-								GetNodeViewIdByLinkId(temp.linkId) :
-								temp.nodeViewId;
-
-							// Scenario 4: merge
-							auto itNv2 = std::find_if(m_nodeViewList.begin(), m_nodeViewList.end(),
-								[nvId2](const NodeView &nv) { return nv.id == nvId2; });
-
-							if (itNv2 != m_nodeViewList.end() && nvId1 != nvId2)
-							{
-								for (int linkIdToMove : itNv2->linkViewIds)
-								{
-									for (auto &lv : m_linkViewList)
-										if (lv.id == linkIdToMove)
-										{
-											lv.nodeViewId = nvId1;
-											lv.targetPos = GetNodeViewById(nvId1).position;
-											break;
-										}
-
-									for (auto &nv : m_nodeViewList)
-										if (nv.id == nvId1)
-										{
-											nv.linkViewIds.push_back(linkIdToMove);
-											break;
-										}
-								}
-								m_nodeViewList.erase(itNv2);
-
-								// Notifica Circuit (esclude il terminale corrente, già
-								// presente nel gruppo: serve un ALTRO tap reale con cui
-								// unificare davvero i due nodi elettrici)
-								auto [existingCompId, existingTermIndex] = FindRealTapInGroup(
-									nvId1, m_selectedComponent.compId, m_selectedComponent.terminalIndex);
-								m_onCreateLink(m_selectedComponent.compId, m_selectedComponent.terminalIndex, existingCompId, existingTermIndex);
-							}
-						}
-
-						// Reset selezione
-						m_selectedComponent.state = SelectionState::none;
-						m_selectedComponent.compId = -1;
-						m_selectedComponent.terminalIndex = -1;
-						m_selectedComponent.nodeViewId = -1;
-					}
-				}
-				else if (m_selectedComponent.state == SelectionState::linkSelected || m_selectedComponent.state == SelectionState::nodeViewSelected)
-				{
-					// Ho cliccato su un terminale dopo aver cliccato su un link devo creare il nodeview
-					SelecetedComponent temp;
-					if (!ImGui::GetIO().WantCaptureMouse) CheckClick(pos, temp);
-
-					if (temp.state == SelectionState::terminalSelected)
-					{
-						bool isDuplicated = false;
-						// secondo click su terminale dopo primo su link
-						for (const auto &lv : m_linkViewList)
-						{
-							if (lv.compIdA == temp.compId && lv.termIndexA == temp.terminalIndex)
-							{
-								isDuplicated = true;
-								break;
-							}
-						}
-
-						if (!isDuplicated)
-						{
-							LinkView newLink;
-							newLink.id = ++m_linkViewIdCount;
-							newLink.startPos = GetTerminalPositionbyCompId(temp.compId)[temp.terminalIndex];
-							newLink.compIdA = temp.compId;
-							newLink.termIndexA = temp.terminalIndex;
-							if (m_selectedComponent.state == SelectionState::linkSelected)
-								newLink.nodeViewId = GetNodeViewIdByLinkId(m_selectedComponent.linkId);
-							else
-								newLink.nodeViewId = m_selectedComponent.nodeViewId;
-
-							newLink.targetPos = GetNodeViewById(newLink.nodeViewId).position;
-
-							m_linkViewList.emplace_back(newLink);
-
-							for (auto &nv : m_nodeViewList)
-								if (nv.id == newLink.nodeViewId)
-								{
-									nv.linkViewIds.emplace_back(newLink.id);
-									break;
-								}
-
-							// Trova un compId già collegato al nodeView per notificare Circuit.
-							// FindRealTapInGroup ignora i tratti di bus e cerca anche oltre
-							// il vicino diretto, lungo tutto l'albero di bus del gruppo.
-							NodeView nv;
-							if (m_selectedComponent.state == SelectionState::linkSelected)
-								nv = GetNodeViewFromLInkId(m_selectedComponent.linkId);
-							else
-								nv = GetNodeViewById(m_selectedComponent.nodeViewId);
-
-							auto [existingCompId, existingTermIndex] = FindRealTapInGroup(
-								nv.id, temp.compId, temp.terminalIndex);
-
-							m_onCreateLink(temp.compId, temp.terminalIndex, existingCompId, existingTermIndex);
-						}
-						else
-						{
-							int nvId1 = (m_selectedComponent.state == SelectionState::linkSelected) ?
-								GetNodeViewIdByLinkId(m_selectedComponent.linkId) :
-								m_selectedComponent.nodeViewId;
-							int nvId2 = GetNodeViewIdByTerminal(temp.compId, temp.terminalIndex);
-
-							// Scenario 4: merge
-							auto itNv2 = std::find_if(m_nodeViewList.begin(), m_nodeViewList.end(),
-								[nvId2](const NodeView &nv) { return nv.id == nvId2; });
-
-							if (itNv2 != m_nodeViewList.end() && nvId1 != nvId2)
-							{
-								for (int linkIdToMove : itNv2->linkViewIds)
-								{
-									for (auto &lv : m_linkViewList)
-										if (lv.id == linkIdToMove)
-										{
-											lv.nodeViewId = nvId1;
-											lv.targetPos = GetNodeViewById(nvId1).position;
-											break;
-										}
-
-									for (auto &nv : m_nodeViewList)
-										if (nv.id == nvId1)
-										{
-											nv.linkViewIds.push_back(linkIdToMove);
-											break;
-										}
-								}
-								m_nodeViewList.erase(itNv2);
-
-								// Notifica Circuit (esclude temp: è il terminale appena
-								// aggiunto, serve un ALTRO tap reale del gruppo)
-								auto [existingCompId, existingTermIndex] = FindRealTapInGroup(
-									nvId1, temp.compId, temp.terminalIndex);
-								m_onCreateLink(temp.compId, temp.terminalIndex, existingCompId, existingTermIndex);
-							}
-						}
-
-						// Reset selezione
-						m_selectedComponent.state = SelectionState::none;
-						m_selectedComponent.compId = -1;
-						m_selectedComponent.nodeViewId = -1;
-						m_selectedComponent.terminalIndex = -1;
-					}
-					else if (temp.state == SelectionState::linkSelected || temp.state == SelectionState::nodeViewSelected)
-					{
-						// Click su un nodo (o su un filo) dopo aver già selezionato
-						// un altro nodo/filo: unisce direttamente i due NodeView con
-						// un tratto di bus (utile per collegare tra loro due nodi
-						// piazzati a mano con "N", prima ancora di agganciarci sopra
-						// qualunque componente).
-						int nvIdA = (m_selectedComponent.state == SelectionState::linkSelected)
-							? GetNodeViewIdByLinkId(m_selectedComponent.linkId)
-							: m_selectedComponent.nodeViewId;
-						int nvIdB = (temp.state == SelectionState::linkSelected)
-							? GetNodeViewIdByLinkId(temp.linkId)
-							: temp.nodeViewId;
-
-						JoinTwoNodeViews(nvIdA, nvIdB);
-
-						m_selectedComponent.state = SelectionState::none;
 						m_selectedComponent.linkId = -1;
 						m_selectedComponent.nodeViewId = -1;
 					}
@@ -941,7 +550,7 @@ void CircuitLab::UI::HandleEvents()
 					// Split: Ctrl+drag destro su un filo lo stacca dal suo NodeView
 					// in un nuovo hub (stesso nodo elettrico, nessuna chiamata al
 					// Circuit), e inizia subito a trascinarlo come un nodo normale.
-					int newNodeViewId = SplitLinkIntoNewNodeView(m_selectedComponent.linkId);
+					int newNodeViewId = m_graph.InsertNodeOnBusEdge(m_selectedComponent.linkId, m_selectedComponent.clickPos);
 					if (newNodeViewId != -1)
 					{
 						m_selectedComponent.compId = -1;
@@ -1022,14 +631,10 @@ void CircuitLab::UI::HandleEvents()
 					std::clamp(pos.x - m_compClickOffset.x, viewMin.x, viewMax.x),
 					std::clamp(pos.y - m_compClickOffset.y, viewMin.y, viewMax.y)));
 
-				for (auto &nv : m_nodeViewList)
-					if (nv.id == m_selectedComponent.nodeViewId)
-					{
-						nv.position = nodePos;
-
-						UpdateLinksForNodeView(m_selectedComponent.nodeViewId, nodePos);
-						break;
-					}
+				// Un NodeView ancorato a un terminale, appena lo si sposta, si stacca: da
+				// lì in poi non segue più il componente e il filo tra terminale e nodo si vede.
+				m_graph.DetachIfAnchored(m_selectedComponent.nodeViewId);
+				UpdateLinksForNodeView(m_selectedComponent.nodeViewId, nodePos);
 			}
 		}
 		else if (const auto *wheelEvent = event->getIf<sf::Event::MouseWheelScrolled>())
@@ -1053,14 +658,27 @@ void CircuitLab::UI::HandleEvents()
 		else if (const auto *mouseReleasedEvent = event->getIf<sf::Event::MouseButtonReleased>())
 		{
 			if (mouseReleasedEvent->button == sf::Mouse::Button::Right)
+			{
+				// Un NodeView ancorato rilasciato vicino al suo terminale si riaggancia:
+				// torna sul terminale e riprende a seguirlo.
+				if (m_selectedComponent.state == SelectionState::draggingNodeView)
+				{
+					const NodeView *dragged = m_graph.FindNodeView(m_selectedComponent.nodeViewId);
+					if (dragged && dragged->anchorCompId != -1)
+					{
+						const std::vector<sf::Vector2f> terminals = GetTerminalPositionbyCompId(dragged->anchorCompId);
+						if (dragged->anchorTermIndex >= 0 && dragged->anchorTermIndex < static_cast<int>(terminals.size()))
+							m_graph.TryReattach(dragged->id, terminals[dragged->anchorTermIndex], (CLICK_TOLLERANCE + NODE_RADIUS) / m_zoom);
+					}
+				}
 				m_selectedComponent.state = SelectionState::none;
+			}
 			else if (mouseReleasedEvent->button == sf::Mouse::Button::Middle)
 				m_panning = false;
 		}
 		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete) && (m_selectedComponent.state != SelectionState::draggingComponent && m_selectedComponent.state != SelectionState::draggingNodeView))
 		{
-			// Eliminazione del componente selezionato con tasto Delete:
-			// rimuove la vista, i fili collegati e notifica il circuito
+			// Eliminazione con tasto Delete
 			if (m_selectedComponent.state == SelectionState::componentSelected)
 			{
 				int id = m_selectedComponent.compId;
@@ -1074,31 +692,27 @@ void CircuitLab::UI::HandleEvents()
 					m_componentViewList.end()
 				);
 
-				LOG_DEBUG("nodeView count before: " << m_nodeViewList.size());
-				for (const auto &lv : m_linkViewList)
-					if (lv.compIdA == id)
+				// Se è un Ground, si ricordano i terminali collegati con lui (nel
+				// disegno) prima di toglierlo: quelli che restano uniti tra loro senza
+				// nessun'altra massa vanno staccati dallo 0 nel Circuit.
+				std::vector<TerminalRef> groundGroup;
+				if (m_onGetComponentTypeById(id) == ComponentType::ground)
+					for (int term = 0; term < 2; term++)
 					{
-						int nvId = lv.nodeViewId;
-						RemoveLinkFromNodeView(nvId, lv.id);
-						// Elimina il nodo se è rimasto senza link; se gli è rimasto
-						// solo un tratto di bus (nessun tap proprio: un "moncone"
-						// dopo questa cancellazione), lo rimuove a cascata. Se gli
-						// è rimasto un tap normale (il consueto hub a 2 tap), non
-						// fa nulla — comportamento invariato.
-						CollapseIfDangling(nvId, -1);
+						int nvId = m_graph.NodeViewIdOfTerminal(id, term);
+						if (nvId == -1)
+							continue;
+						for (const auto &terminal : m_graph.TerminalsInGroup(nvId))
+							if (terminal.first != id)
+								groundGroup.push_back(terminal);
 					}
-				LOG_DEBUG("nodeView count after: " << m_nodeViewList.size());
 
-				// Rimuove i fili collegati al componente eliminato
-				m_linkViewList.erase(
-					std::remove_if(m_linkViewList.begin(), m_linkViewList.end(),
-						[id](const LinkView &lw) {
-							return (lw.compIdA == id);
-						}),
-					m_linkViewList.end()
-				);
+				// Toglie i fili e i NodeView del componente; i terminali degli altri
+				// componenti rimasti senza più fili tornano liberi anche nel Circuit.
+				FreeTerminals(m_graph.RemoveComponent(id));
+				DetachSurvivingGroupsFromGround(groundGroup);
 
-				m_onDeleteComponent(m_selectedComponent.compId);
+				m_onDeleteComponent(id);
 
 				// Reset selezione
 				m_selectedComponent.state = SelectionState::none;
@@ -1108,39 +722,22 @@ void CircuitLab::UI::HandleEvents()
 			}
 			else if (m_selectedComponent.state == SelectionState::linkSelected)
 			{
-				// Solo i tratti di bus si cancellano direttamente (annulla uno
-				// split): un tap normale si rimuove cancellando il componente
-				// a cui appartiene, non il singolo filo.
-				bool isBusEdge = false;
-				for (const auto &lv : m_linkViewList)
-					if (lv.id == m_selectedComponent.linkId && lv.sourceNodeViewId != -1)
-					{
-						isBusEdge = true;
-						break;
-					}
-
-				if (isBusEdge)
-					RemoveBusEdge(m_selectedComponent.linkId);
+				// Un filo tra due terminali non si cancella da solo: il Circuit non sa
+				// scollegare, e il disegno direbbe una cosa diversa dal circuito. Si
+				// può però togliere un nodo di passaggio (annulla un nodo inserito sul
+				// filo): il filo torna un unico tratto.
+				int passThrough = m_graph.PassThroughNodeOfEdge(m_selectedComponent.linkId);
+				if (passThrough != -1)
+					FreeTerminals(m_graph.RemoveFreeNodeView(passThrough));
 
 				m_selectedComponent.state = SelectionState::none;
 				m_selectedComponent.linkId = -1;
 			}
 			else if (m_selectedComponent.state == SelectionState::nodeViewSelected)
 			{
-				// Cancella solo un nodo piazzato a mano e mai collegato a nulla
-				// (0 link): una giunzione con qualcosa già attaccato non si
-				// tocca da qui, va smontata prima (cancella i componenti/i
-				// tratti di bus collegati).
-				int nvId = m_selectedComponent.nodeViewId;
-				for (const auto &nv : m_nodeViewList)
-					if (nv.id == nvId && nv.linkViewIds.empty())
-					{
-						m_nodeViewList.erase(
-							std::remove_if(m_nodeViewList.begin(), m_nodeViewList.end(),
-								[nvId](const NodeView &n) { return n.id == nvId; }),
-							m_nodeViewList.end());
-						break;
-					}
+				// Si cancellano solo i nodi liberi (i loro vicini restano collegati tra
+				// loro). Il NodeView di un terminale sparisce insieme al suo componente.
+				FreeTerminals(m_graph.RemoveFreeNodeView(m_selectedComponent.nodeViewId));
 
 				m_selectedComponent.state = SelectionState::none;
 				m_selectedComponent.nodeViewId = -1;
@@ -1474,7 +1071,7 @@ void CircuitLab::UI::DrawWires()
 
 void CircuitLab::UI::DrawNodes()
 {
-	for (const auto nv : m_nodeViewList)
+	for (const auto &nv : m_nodeViewList)
 	{
 		// Disegna i nodi come cerchi verdi
 		sf::CircleShape node(NODE_RADIUS);
@@ -2153,13 +1750,13 @@ void CircuitLab::UI::CreateLinkViewCurrentList()
 		m_linkViewCurrentList[lv.id] = (lv.termIndexA == 0) ? -current : current;
 	}
 
-	// 2) Correnti dei tratti di bus: un nodo elettrico può essere rappresentato
-	// da più NodeView collegati da tratti di bus, per pura leggibilità del
-	// disegno (vedi SplitLinkIntoNewNodeView). La corrente su ciascun tratto si
-	// ottiene per accumulo KCL: quanto entra nel sottoalbero "dall'altra parte"
-	// deve uscire tutto da questo filo. Nessuna ambiguità: per costruzione lo
-	// split crea sempre una nuova foglia, quindi il grafo dei tratti di bus di
-	// uno stesso nodo è sempre un albero, mai un ciclo di fili ideali paralleli.
+	// 2) Correnti dei tratti di bus: ogni filo tra due terminali è un tratto di bus
+	// tra i loro NodeView, e un nodo elettrico è rappresentato da più NodeView
+	// collegati così. La corrente su ciascun tratto si ottiene per accumulo KCL:
+	// quanto entra nel sottoalbero "dall'altra parte" deve uscire tutto da questo
+	// filo. Nessuna ambiguità: il grafo dei tratti di bus di uno stesso nodo è
+	// sempre un albero (collegare due elementi già nello stesso nodo è rifiutato,
+	// vedi ConnectSelections), mai un ciclo di fili ideali paralleli.
 	std::set<int> visited;
 	for (const auto &startNv : m_nodeViewList)
 	{
@@ -2221,6 +1818,28 @@ void CircuitLab::UI::CreateLinkViewCurrentList()
 
 		if (groupTapLinks.empty())
 			continue; // Nessun tap nel gruppo: nessuna corrente da propagare.
+
+		// Un Ground ha un solo terminale e non compare tra le correnti di ramo: il
+		// suo tap vale 0 (punto 1), ma la corrente che scarica a massa esiste. Senza
+		// contarla il bilancio KCL del gruppo non chiude e i fili verso massa
+		// mostrerebbero 0. La si ricava come l'opposto della somma degli altri tap
+		// (con più masse nello stesso gruppo, che non si può ripartire, va alla prima).
+		{
+			const LinkView *groundTap = nullptr;
+			double othersSum = 0.0;
+			for (const auto *tap : groupTapLinks)
+			{
+				if (m_onGetComponentTypeById(tap->compIdA) == ComponentType::ground)
+				{
+					if (!groundTap)
+						groundTap = tap;
+				}
+				else
+					othersSum += m_linkViewCurrentList[tap->id];
+			}
+			if (groundTap)
+				m_linkViewCurrentList[groundTap->id] = -othersSum;
+		}
 
 		// Corrente netta iniettata in ciascun NodeView dai propri tap (già
 		// calcolate al punto 1; positiva = dal terminale VERSO il NodeView).
@@ -2315,26 +1934,7 @@ int CircuitLab::UI::GetNodeViewIdByTerminal(int compId, int termIndex) const
 
 void CircuitLab::UI::UpdateLinksForNodeView(int nodeViewId, sf::Vector2f newPos)
 {
-	for (auto &nv : m_nodeViewList)
-		if (nv.id == nodeViewId)
-		{
-			nv.position = newPos;
-			// Un link in linkViewIds può toccare questo hub come destinazione
-			// (tap normale, o lato "arrivo" di un tratto di bus: aggiorna targetPos)
-			// o come sorgente di un tratto di bus che PARTE da qui: aggiorna startPos.
-			// I due casi non sono mutuamente esclusivi in generale, ma per un dato
-			// link lo sono sempre (nodeViewId e sourceNodeViewId non coincidono mai).
-			for (int lvId : nv.linkViewIds)
-				for (auto &lv : m_linkViewList)
-					if (lv.id == lvId)
-					{
-						if (lv.nodeViewId == nodeViewId)
-							lv.targetPos = newPos;
-						if (lv.sourceNodeViewId == nodeViewId)
-							lv.startPos = newPos;
-					}
-			break;
-		}
+	m_graph.SetNodeViewPosition(nodeViewId, newPos);
 }
 
 // Inizializza la finestra SFML e ImGui-SFML.
@@ -2483,211 +2083,167 @@ int CircuitLab::UI::AddBusLinkView(int sourceNodeViewId, int targetNodeViewId)
 	return link.id;
 }
 
-int CircuitLab::UI::SplitLinkIntoNewNodeView(int linkId)
+int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position, bool manual, int anchorCompId, int anchorTermIndex, bool attached)
 {
-	LinkView *lv = nullptr;
-	for (auto &l : m_linkViewList)
-		if (l.id == linkId) { lv = &l; break; }
-	if (!lv) return -1;
-
-	int parentNvId = lv->nodeViewId;
-	NodeView parentNv = GetNodeViewById(parentNvId);
-
-	// Nuovo hub nella stessa posizione del genitore (stesso nodo elettrico,
-	// stesso nodeId "di partenza"): resta invisibile finché l'utente non lo
-	// trascina altrove. Nessuna chiamata al Circuit — la topologia non cambia.
-	int newNvId = AddNodeView(parentNv.nodeId, parentNv.position);
-
-	// Stacca il link dal genitore e lo riattacca al nuovo hub.
-	lv->nodeViewId = newNvId;
-	lv->targetPos = parentNv.position;
-
-	// Tratto di bus che ricollega il nuovo hub al genitore.
-	int busLinkId = AddBusLinkView(parentNvId, newNvId);
-
-	for (auto &nv : m_nodeViewList)
-	{
-		if (nv.id == parentNvId)
-		{
-			nv.linkViewIds.erase(
-				std::remove(nv.linkViewIds.begin(), nv.linkViewIds.end(), linkId),
-				nv.linkViewIds.end());
-			nv.linkViewIds.push_back(busLinkId);
-		}
-		else if (nv.id == newNvId)
-		{
-			nv.linkViewIds.push_back(linkId);
-			nv.linkViewIds.push_back(busLinkId);
-		}
-	}
-
-	return newNvId;
+	return m_graph.AddNodeView(nodeId, position, manual, anchorCompId, anchorTermIndex, attached);
 }
 
-void CircuitLab::UI::RemoveBusEdge(int linkId)
+void CircuitLab::UI::ConvertLegacyNodeViews()
 {
-	int sourceId = -1, targetId = -1;
-	bool found = false;
-	for (const auto &lv : m_linkViewList)
-		if (lv.id == linkId && lv.sourceNodeViewId != -1)
-		{
-			sourceId = lv.sourceNodeViewId;
-			targetId = lv.nodeViewId;
-			found = true;
-			break;
-		}
-	if (!found) return;
-
-	m_linkViewList.erase(
-		std::remove_if(m_linkViewList.begin(), m_linkViewList.end(),
-			[linkId](const LinkView &l) { return l.id == linkId; }),
-		m_linkViewList.end());
-
-	for (auto &nv : m_nodeViewList)
-		if (nv.id == sourceId || nv.id == targetId)
-			nv.linkViewIds.erase(std::remove(nv.linkViewIds.begin(), nv.linkViewIds.end(), linkId), nv.linkViewIds.end());
-
-	// L'ordine conta: se entrambi gli estremi restano con un solo tap (il caso
-	// più comune, "annulla uno split semplice"), il primo si riattacca nel
-	// secondo; il secondo, a quel punto, ha già 2+ link e non collassa più.
-	CollapseIfDangling(sourceId, targetId);
-	CollapseIfDangling(targetId, sourceId);
+	m_graph.ConvertLegacy();
 }
 
-void CircuitLab::UI::CollapseIfDangling(int nvId, int otherNvId)
+void CircuitLab::UI::FreeTerminals(const std::vector<TerminalRef> &terminals)
 {
-	NodeView *nv = nullptr;
-	for (auto &n : m_nodeViewList)
-		if (n.id == nvId) { nv = &n; break; }
-	if (!nv) return; // già rimosso da una collapse precedente
-
-	if (nv->linkViewIds.empty())
-	{
-		m_nodeViewList.erase(
-			std::remove_if(m_nodeViewList.begin(), m_nodeViewList.end(),
-				[nvId](const NodeView &n) { return n.id == nvId; }),
-			m_nodeViewList.end());
+	if (!m_onFreeTerminal)
 		return;
-	}
+	for (const auto &[compId, termIndex] : terminals)
+		m_onFreeTerminal(compId, termIndex);
+}
 
-	if (nv->linkViewIds.size() != 1)
-		return; // giunzione normale (2+ link): nulla da fare
+void CircuitLab::UI::DetachSurvivingGroupsFromGround(const std::vector<TerminalRef> &candidates)
+{
+	if (!m_onDetachFromGround)
+		return;
 
-	int soleLinkId = nv->linkViewIds.front();
-	LinkView *soleLink = nullptr;
-	for (auto &l : m_linkViewList)
-		if (l.id == soleLinkId) { soleLink = &l; break; }
-	if (!soleLink) return;
-
-	if (soleLink->sourceNodeViewId == -1)
+	std::set<int> doneGroups; // un gruppo va trattato una volta sola (chiave: il suo id più basso)
+	for (const auto &[compId, termIndex] : candidates)
 	{
-		// L'unico link rimasto è un tap: lo si riattacca direttamente
-		// all'altro estremo, se esiste (altrimenti si lascia il tap così com'è
-		// — è il comportamento già esistente per un normale hub a 2 tap dopo
-		// la cancellazione dell'altro componente, dove non c'è nessun "altro
-		// estremo" bus a cui riattaccarsi).
-		bool otherExists = false;
-		for (const auto &n : m_nodeViewList)
-			if (n.id == otherNvId) { otherExists = true; break; }
-		if (!otherExists) return;
+		const int nvId = m_graph.NodeViewIdOfTerminal(compId, termIndex);
+		if (nvId == -1)
+			continue; // rimasto solo: è già stato liberato
 
-		NodeView otherNv = GetNodeViewById(otherNvId);
-		soleLink->nodeViewId = otherNvId;
-		soleLink->targetPos = otherNv.position;
+		const std::set<int> group = m_graph.CollectGroup(nvId);
+		if (!doneGroups.insert(*group.begin()).second)
+			continue;
 
-		for (auto &n : m_nodeViewList)
-			if (n.id == otherNvId) { n.linkViewIds.push_back(soleLinkId); break; }
+		// Un altro Ground nello stesso gruppo: resta a massa, non c'è nulla da fare
+		const std::vector<TerminalRef> terminals = m_graph.TerminalsInGroup(nvId);
+		bool stillGrounded = false;
+		for (const auto &terminal : terminals)
+			if (m_onGetComponentTypeById(terminal.first) == ComponentType::ground)
+				stillGrounded = true;
 
-		m_nodeViewList.erase(
-			std::remove_if(m_nodeViewList.begin(), m_nodeViewList.end(),
-				[nvId](const NodeView &n) { return n.id == nvId; }),
-			m_nodeViewList.end());
-	}
-	else
-	{
-		// L'unico link rimasto è un tratto di bus: questo nodo non ha più
-		// alcun tap proprio (un "moncone" senza motivo di esistere). Lo
-		// rimuove a cascata, il che elimina anche questo NodeView (finirà
-		// con 0 link) tramite la stessa funzione applicata all'altro estremo.
-		RemoveBusEdge(soleLinkId);
+		if (!stillGrounded)
+			m_onDetachFromGround(terminals);
 	}
 }
 
-// Percorre, seguendo solo i tratti di bus, il gruppo di NodeView a cui
-// appartiene startNodeViewId, e restituisce il primo tap reale (componente +
-// indice terminale) che trova. {-1,-1} se il gruppo è ancora del tutto vuoto
-// (nessun componente collegato da nessuna parte al suo interno).
-std::pair<int, int> CircuitLab::UI::FindRealTapInGroup(int startNodeViewId, int excludeCompId, int excludeTermIndex) const
+void CircuitLab::UI::ConnectSelections(const SelecetedComponent &first, const SelecetedComponent &second)
 {
-	std::set<int> visited;
-	std::vector<int> queue{ startNodeViewId };
-	visited.insert(startNodeViewId);
-
-	while (!queue.empty())
+	// NodeView che rappresenta il gruppo (il nodo elettrico) di un elemento
+	// selezionato, -1 se non ne ha ancora uno (un terminale mai collegato) o
+	// se l'elemento non esiste più.
+	auto groupNodeView = [this](const SelecetedComponent &sel) -> int
 	{
-		int currentId = queue.back();
-		queue.pop_back();
-
-		const NodeView &nv = GetNodeViewById(currentId);
-		for (int lvId : nv.linkViewIds)
+		switch (sel.state)
 		{
-			for (const auto &lv : m_linkViewList)
-			{
-				if (lv.id != lvId) continue;
-
-				if (lv.sourceNodeViewId == -1)
-				{
-					if (lv.nodeViewId == currentId &&
-						!(lv.compIdA == excludeCompId && lv.termIndexA == excludeTermIndex))
-						return { lv.compIdA, lv.termIndexA };
-				}
-				else
-				{
-					int neighborId = (lv.sourceNodeViewId == currentId) ? lv.nodeViewId : lv.sourceNodeViewId;
-					if (!visited.count(neighborId))
-					{
-						visited.insert(neighborId);
-						queue.push_back(neighborId);
-					}
-				}
-				break;
-			}
+		case SelectionState::terminalSelected:
+			return m_graph.NodeViewIdOfTerminal(sel.compId, sel.terminalIndex);
+		case SelectionState::nodeViewSelected:
+			return m_graph.FindNodeView(sel.nodeViewId) ? sel.nodeViewId : -1;
+		case SelectionState::linkSelected:
+		{
+			const LinkView *lv = m_graph.FindLinkView(sel.linkId);
+			if (!lv)
+				return -1;
+			// un tratto di bus ha due estremi, ma sono nello stesso gruppo; un tap
+			// (filo di un NodeView staccato) porta al suo NodeView
+			return lv->sourceNodeViewId != -1 ? lv->sourceNodeViewId : lv->nodeViewId;
 		}
+		default:
+			return -1;
+		}
+	};
+
+	// Lo stesso elemento cliccato due volte
+	if (first.state == second.state &&
+		((first.state == SelectionState::terminalSelected && first.compId == second.compId && first.terminalIndex == second.terminalIndex) ||
+			(first.state == SelectionState::linkSelected && first.linkId == second.linkId) ||
+			(first.state == SelectionState::nodeViewSelected && first.nodeViewId == second.nodeViewId)))
+		return;
+
+	const int groupA = groupNodeView(first);
+	const int groupB = groupNodeView(second);
+
+	// Un elemento che non esiste più (es. un filo sparito tra i due click)
+	if ((first.state != SelectionState::terminalSelected && groupA == -1) ||
+		(second.state != SelectionState::terminalSelected && groupB == -1))
+		return;
+
+	// Già nello stesso nodo elettrico: un secondo filo tra i due formerebbe un
+	// ciclo, e per un ciclo di fili ideali le correnti sono indeterminate.
+	if (groupA != -1 && groupB != -1 && m_graph.SameGroup(groupA, groupB))
+		return;
+
+	// Un terminale per ciascun lato con cui avvisare il Circuit: il terminale stesso,
+	// o un qualunque terminale collegato al gruppo. Un gruppo ancora vuoto (un nodo
+	// libero senza nessun componente) non ne ha: il collegamento resta puramente
+	// visivo finché non arriva un secondo terminale, come un componente appena
+	// piazzato e non ancora collegato.
+	auto representativeTap = [this](const SelecetedComponent &sel, int group) -> TerminalRef
+	{
+		if (sel.state == SelectionState::terminalSelected)
+			return { sel.compId, sel.terminalIndex };
+		return group == -1 ? TerminalRef{ -1, -1 } : m_graph.FindRealTapInGroup(group);
+	};
+	const TerminalRef tapA = representativeTap(first, groupA);
+	const TerminalRef tapB = representativeTap(second, groupB);
+
+	if (tapA.first != -1 && tapB.first != -1)
+	{
+		if (tapA.first == tapB.first)
+			return; // due terminali dello stesso componente non si collegano
+
+		// Due terminali già sullo stesso nodo elettrico (o a massa entrambi) non si collegano
+		if (first.state == SelectionState::terminalSelected && second.state == SelectionState::terminalSelected)
+		{
+			const int nodeIdA = m_onGetCompTerminalId(tapA.first)[tapA.second];
+			const int nodeIdB = m_onGetCompTerminalId(tapB.first)[tapB.second];
+			if (nodeIdA == nodeIdB && nodeIdA != -1)
+				return;
+		}
+
+		// Il Circuit decide per primo: se rifiuta, non si disegna nulla
+		if (!m_onCreateLink(tapA.first, tapA.second, tapB.first, tapB.second))
+			return;
 	}
-	return { -1, -1 };
-}
 
-void CircuitLab::UI::JoinTwoNodeViews(int nvIdA, int nvIdB)
-{
-	if (nvIdA == nvIdB) return;
+	// Ogni lato diventa un NodeView: quello del terminale (creato se manca), il nodo
+	// scelto, oppure un nodo libero nuovo sul filo nel punto cliccato.
+	auto resolve = [this](const SelecetedComponent &sel) -> int
+	{
+		switch (sel.state)
+		{
+		case SelectionState::terminalSelected:
+		{
+			const std::vector<sf::Vector2f> terminals = GetTerminalPositionbyCompId(sel.compId);
+			if (sel.terminalIndex < 0 || sel.terminalIndex >= static_cast<int>(terminals.size()))
+				return -1;
+			return m_graph.EnsureTerminalNodeView(sel.compId, sel.terminalIndex, terminals[sel.terminalIndex]);
+		}
+		case SelectionState::nodeViewSelected:
+			return sel.nodeViewId;
+		case SelectionState::linkSelected:
+		{
+			const LinkView *lv = m_graph.FindLinkView(sel.linkId);
+			if (!lv)
+				return -1;
+			if (lv->sourceNodeViewId == -1)
+				return lv->nodeViewId; // filo di un NodeView staccato: ci si collega a quel nodo
+			return m_graph.InsertNodeOnBusEdge(sel.linkId, sel.clickPos);
+		}
+		default:
+			return -1;
+		}
+	};
 
-	auto [compA, termA] = FindRealTapInGroup(nvIdA);
-	auto [compB, termB] = FindRealTapInGroup(nvIdB);
+	const int nodeA = resolve(first);
+	const int nodeB = resolve(second);
+	if (nodeA == -1 || nodeB == -1 || nodeA == nodeB || m_graph.SameGroup(nodeA, nodeB))
+		return;
 
-	// Tratto di bus visivo tra i due nodi, comunque sia (registrato su entrambi).
-	int busLinkId = AddBusLinkView(nvIdA, nvIdB);
-	for (auto &nv : m_nodeViewList)
-		if (nv.id == nvIdA || nv.id == nvIdB)
-			nv.linkViewIds.push_back(busLinkId);
-
-	// Se entrambi i gruppi hanno già un tap reale, notifica il Circuit per
-	// unificarli davvero: senza questo, resterebbero visivamente collegati
-	// ma elettricamente due nodi distinti. Se uno dei due è ancora vuoto
-	// (nessun componente collegato al suo interno), non c'è nulla da unificare
-	// a livello di Circuit — resta un collegamento puramente visivo, come il
-	// primo filo su un nodo vuoto.
-	if (compA != -1 && compB != -1)
-		m_onCreateLink(compA, termA, compB, termB);
-}
-
-int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position)
-{
-	NodeView newNodeView;
-	newNodeView.id = ++m_nodeViewCount;
-	newNodeView.nodeId = nodeId;
-	newNodeView.position = position;
-	m_nodeViewList.push_back(newNodeView);
-	return newNodeView.id;
+	m_graph.AddBusEdge(nodeA, nodeB);
 }
 
 void CircuitLab::UI::Clear()

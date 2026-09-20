@@ -3,15 +3,19 @@
 
 namespace CircuitLab {
 
-	// "Hub" visivo che rappresenta un nodo elettrico (nodeId) sul canvas.
-	// Più LinkView possono puntare allo stesso NodeView (stesso nodeViewId):
-	// è così che più terminali risultano collegati allo stesso nodo elettrico.
-	// Comportamento attuale: "fantasma" (invisibile, <=2 link) o "giunzione"
-	// (pallino verde visibile, >2 link) — vedi TODO: renderla trascinabile.
+	// Punto visivo del disegno a cui arrivano fili. Più fili possono toccare lo
+	// stesso NodeView, ed è così che più terminali risultano collegati allo stesso
+	// nodo elettrico. Due specie (vedi WireGraph.h per il modello completo):
+	//  - ANCORATO (anchorCompId != -1): uno per ogni terminale collegato, creato
+	//    sopra il terminale e legato ad esso da un tap. Finché è "agganciato"
+	//    (attached) sta sul terminale e lo segue; se l'utente lo trascina altrove si
+	//    stacca, e il tap diventa un filo visibile.
+	//  - LIBERO (anchorCompId == -1): un nodo voluto dall'utente (tasto N, split,
+	//    inserito sul mezzo di un filo). Ha solo tratti di bus.
 	//
-	// Un singolo nodo elettrico può oggi essere rappresentato da PIÙ NodeView
-	// collegati tra loro da tratti di bus (LinkView con sourceNodeViewId != -1),
-	// per motivi di leggibilità del disegno (vedi il campo sourceNodeViewId sopra).
+	// Un singolo nodo elettrico è rappresentato da PIÙ NodeView collegati tra loro
+	// da tratti di bus (LinkView con sourceNodeViewId != -1): ogni filo tra due
+	// terminali è appunto un tratto di bus tra i loro NodeView.
 	// ATTENZIONE: il campo nodeId qui sotto è una cache impostata alla creazione
 	// e NON viene mai aggiornato in seguito, mentre Circuit::ConnectTerminals può
 	// rinumerare in blocco i nodeId reali (caso massa/merge, vedi Circuit.cpp).
@@ -23,6 +27,13 @@ namespace CircuitLab {
 		int nodeId;                     // nodeId del circuito (Core) rappresentato da questo hub — vedi ATTENZIONE sopra
 		sf::Vector2f position;
 		std::vector<int> linkViewIds;   // LinkView (tap o tratti di bus) che toccano questo hub
+		int anchorCompId = -1;          // Terminale a cui è ancorato (-1 = NodeView libero)
+		int anchorTermIndex = -1;
+		bool attached = false;          // Solo se ancorato: true = sta sul terminale e lo segue
+		// Solo per leggere i file salvati col vecchio modello a hub (vedi
+		// WireGraph::ConvertLegacy): là distingueva un nodo voluto dall'utente da un
+		// punto medio automatico. Nel modello attuale non ha altri usi.
+		bool manual = false;
 	};
 
 	// Rappresentazione visiva di UN SOLO capo di un collegamento: un filo dal

@@ -452,6 +452,49 @@ int CircuitLab::Circuit::AddComponent(std::unique_ptr<Component> comp)
 	return id;
 }
 
+void CircuitLab::Circuit::FreeTerminal(int compId, int termIndex)
+{
+	Component *comp = GetComponentById(compId);
+	if (!comp || termIndex < 0 || termIndex >= static_cast<int>(comp->GetTerminals().size()))
+		return;
+
+	comp->GetTerminal(termIndex).SetNodeId(-1);
+
+	m_links.erase(
+		std::remove_if(m_links.begin(), m_links.end(),
+			[compId, termIndex](const Link &l) {
+				return (l.compId1 == compId && l.termIndex1 == termIndex) ||
+					(l.compId2 == compId && l.termIndex2 == termIndex);
+			}),
+		m_links.end()
+	);
+
+	InvalidateCircuit();
+}
+
+void CircuitLab::Circuit::DetachFromGround(const std::vector<std::pair<int, int>> &terminals)
+{
+	std::vector<Terminal *> grounded;
+	for (const auto &[compId, termIndex] : terminals)
+	{
+		Component *comp = GetComponentById(compId);
+		if (!comp || termIndex < 0 || termIndex >= static_cast<int>(comp->GetTerminals().size()))
+			continue;
+		if (comp->GetTerminals()[termIndex].GetNodeId() == 0)
+			grounded.push_back(&comp->GetTerminal(termIndex));
+	}
+	if (grounded.empty())
+		return;
+
+	// Un terminale solo non ha più nessuno con cui condividere il nodo; due o più
+	// restano uniti su un nodo nuovo (che una massa ricollegata poi riporterà a 0).
+	const int newNodeId = (grounded.size() == 1) ? -1 : m_nextNodeId++;
+	for (Terminal *terminal : grounded)
+		terminal->SetNodeId(newNodeId);
+
+	InvalidateCircuit();
+}
+
 // Rimuove un componente dal circuito insieme a tutti i link che lo coinvolgono.
 // I nodeId dei terminali rimasti NON vengono toccati: nessun componente di questo
 // simulatore può collegare i propri due terminali tra loro (ConnectTerminals lo
@@ -483,6 +526,31 @@ void CircuitLab::Circuit::RemoveComponent(int compId)
 			}),
 		m_links.end()
 	);
+
+	// Un terminale rimasto SOLO sul suo nodo non è più collegato a nulla: lo si
+	// riporta a "libero" (-1). Vale sia per un nodo reale (>0) rimasto con un
+	// terminale, sia per la massa (0) quando è stato eliminato l'ultimo componente
+	// Ground. Senza questo il terminale conserverebbe il vecchio numero di nodo
+	// (o resterebbe collegato a massa) senza alcun filo che lo mostri, e
+	// l'interfaccia, che ora toglie il filo insieme al componente, direbbe una
+	// cosa diversa dal circuito. Gli altri terminali dei nodi condivisi restano.
+	std::map<int, int> terminalsPerNode;
+	bool groundLeft = false;
+	for (const auto &comp : m_components)
+	{
+		if (comp->IsGround())
+			groundLeft = true;
+		for (const auto &term : comp->GetTerminals())
+			if (term.GetNodeId() > 0)
+				terminalsPerNode[term.GetNodeId()]++;
+	}
+	for (const auto &comp : m_components)
+		for (int i = 0; i < static_cast<int>(comp->GetTerminals().size()); i++)
+		{
+			const int nodeId = comp->GetTerminals()[i].GetNodeId();
+			if ((nodeId > 0 && terminalsPerNode[nodeId] == 1) || (nodeId == 0 && !groundLeft))
+				comp->GetTerminal(i).SetNodeId(-1);
+		}
 
 	InvalidateCircuit();
 }

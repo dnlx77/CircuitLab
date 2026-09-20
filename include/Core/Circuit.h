@@ -67,6 +67,22 @@ namespace CircuitLab {
 		// Rimuove un componente dal circuito e ricostruisce le connessioni rimaste
 		void RemoveComponent(int compId);
 
+		// Scollega un solo terminale dal suo nodo: torna "libero" (nodeId -1) e
+		// spariscono i link che lo riguardano. La UI lo chiama quando toglie il
+		// filo di un terminale rimasto senza controparte (es. dopo aver cancellato
+		// l'altro componente): serve a distinguere un terminale davvero libero da
+		// uno ancora a massa tramite un altro Ground, cosa che il Circuit da solo
+		// non può sapere (tutte le masse condividono il nodo 0).
+		void FreeTerminal(int compId, int termIndex);
+
+		// Toglie dalla massa un gruppo di terminali collegati tra loro: quelli tra
+		// terminals che oggi sono a massa (nodo 0) restano collegati TRA LORO su un
+		// nodo nuovo, senza più la massa (un solo terminale: diventa libero). La UI lo
+		// chiama quando cancella un Ground e restano dei terminali che il disegno
+		// mostra ancora uniti: senza questo tornerebbero a -1 uno per uno, e
+		// ricollegando una nuova massa se ne collegherebbe uno solo.
+		void DetachFromGround(const std::vector<std::pair<int, int>> &terminals);
+
 		// Segnala che il circuito è stato modificato e va ricalcolato
 		void InvalidateCircuit() { m_isDirty = true; }
 

@@ -230,6 +230,21 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			m_circuit->RemoveComponent(compId);
 		});
 
+	m_ui->SetOnFreeTerminal([this](int compId, int termIndex)
+		{
+			// La UI ha tolto il filo di questo terminale: lo lascia libero anche nel circuito
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			m_circuit->FreeTerminal(compId, termIndex);
+		});
+
+	m_ui->SetOnDetachFromGround([this](const std::vector<std::pair<int, int>> &terminals)
+		{
+			// La UI ha cancellato un Ground: questi terminali restano uniti tra loro
+			// ma non sono più a massa
+			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			m_circuit->DetachFromGround(terminals);
+		});
+
 	// Collega IOManager ad Application e UI tramite callback,
 	// con la stessa logica usata per i callback della UI:
 	// IOManager non conosce né Circuit né UI direttamente.
@@ -274,9 +289,14 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			return m_ui->AddBusLinkView(sourceNodeViewId, targetNodeViewId);
 		});
 
-	m_ioManager->SetOnNodeViewLoad([this](int nodeId, sf::Vector2f position) -> int
+	m_ioManager->SetOnNodeViewLoad([this](int nodeId, sf::Vector2f position, bool manual, int anchorCompId, int anchorTermIndex, bool attached) -> int
 		{
-			return m_ui->AddNodeView(nodeId, position);
+			return m_ui->AddNodeView(nodeId, position, manual, anchorCompId, anchorTermIndex, attached);
+		});
+
+	m_ioManager->SetOnConvertLegacyNodeViews([this]()
+		{
+			m_ui->ConvertLegacyNodeViews();
 		});
 
 	m_ioManager->SetOnUpdateNodeViewLinkIds([this](int nodeViewId, std::vector<int> linkViewIds)
