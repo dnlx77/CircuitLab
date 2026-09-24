@@ -69,6 +69,14 @@ namespace CircuitLab {
 
 		// Costanti di configurazione UI
 		static constexpr int CLICK_TOLLERANCE = 7;         // Tolleranza click sui terminali (pixel)
+		// Distanza minima (pixel di schermo) perché il trascinamento di un NodeView
+		// sia considerato tale, invece che il tremolio inevitabile di un semplice
+		// click. Senza questa soglia, un right-click che selezionava un pallino
+		// ANCORATO (i pallini si prendono prima del corpo, vedi CheckClick) lo
+		// staccava già al primo, minimo movimento del mouse — perdendo l'aggancio
+		// col terminale senza che l'utente se ne accorgesse (bug osservato: un filo
+		// rimasto indietro dopo aver spostato di nuovo il componente).
+		static constexpr float NODE_DRAG_THRESHOLD = 4.0f;
 		static constexpr double DEFAULT_RESISTANCE = 1.0;  // Resistenza di default (Ohm)
 		static constexpr double DEFAULT_VOLTAGE = 5.0;     // Tensione di default (Volt)
 		static constexpr float DEFAULT_ROTATION = 0.0f;    // Rotazione di default (gradi)

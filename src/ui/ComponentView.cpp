@@ -13,6 +13,8 @@ const std::map<CircuitLab::ComponentType, CircuitLab::ComponentDesign> CircuitLa
 	{ CircuitLab::ComponentType::inductor,       { 20, 40, 4, { {0, -20}, {0, 20} }, -1 } },
 	{ CircuitLab::ComponentType::switchComponent, { 20, 40, 4, { {0, -20}, {0, 20} }, -1 } },
 	{ CircuitLab::ComponentType::diode,          { 20, 40, 4, { {0, -20}, {0, 20} }, -1 } },
+	// 4 terminali: 0/1 = primario +/-, 2/3 = secondario +/- (vedi Transformer.h)
+	{ CircuitLab::ComponentType::transformer,    { 44, 44, 4, { {-20, -20}, {-20, 20}, {20, -20}, {20, 20} }, -1 } },
 };
 
 CircuitLab::ComponentView::ComponentView(int componentLink, const Vec2 &position,
@@ -187,6 +189,62 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderWindow &window, sf::Color c
 		draw({ {-8,8}, {8,8} }, sf::PrimitiveType::Lines);
 		draw({ {0,8}, {0,20} }, sf::PrimitiveType::Lines);
 		break;
+
+	case ComponentType::transformer:
+	{
+		// Nucleo: due barre verticali tra i due avvolgimenti.
+		draw({ {-3,-15}, {-3,15} }, sf::PrimitiveType::Lines);
+		draw({ {3,-15}, {3,15} }, sf::PrimitiveType::Lines);
+
+		// Lead di ciascun terminale verso il proprio avvolgimento.
+		draw({ {-20,-20}, {-20,-15} }, sf::PrimitiveType::Lines);
+		draw({ {-20,15}, {-20,20} }, sf::PrimitiveType::Lines);
+		draw({ {20,-20}, {20,-15} }, sf::PrimitiveType::Lines);
+		draw({ {20,15}, {20,20} }, sf::PrimitiveType::Lines);
+
+		// Ciascun avvolgimento: stessa approssimazione a gobbe dell'induttore
+		// (vedi sopra) ma verticale, rivolta verso il nucleo al centro.
+		constexpr int HUMPS = 3;
+		constexpr int SAMPLES_PER_HUMP = 8;
+		constexpr float COIL_Y_START = -15.0f;
+		constexpr float COIL_Y_END = 15.0f;
+		constexpr float COIL_AMPLITUDE = 6.0f;
+
+		auto drawCoil = [&](float baseX, float sign)
+		{
+			std::vector<sf::Vector2f> coilPoints;
+			coilPoints.reserve(HUMPS * SAMPLES_PER_HUMP + 1);
+			for (int i = 0; i <= HUMPS * SAMPLES_PER_HUMP; i++)
+			{
+				float t = static_cast<float>(i) / (HUMPS * SAMPLES_PER_HUMP);
+				float humpPhase = std::fmod(t * HUMPS, 1.0f);
+				coilPoints.push_back({
+					baseX + sign * COIL_AMPLITUDE * std::sin(humpPhase * std::numbers::pi_v<float>),
+					COIL_Y_START + t * (COIL_Y_END - COIL_Y_START)
+					});
+			}
+			sf::VertexArray coil(sf::PrimitiveType::LineStrip, coilPoints.size());
+			for (std::size_t i = 0; i < coilPoints.size(); i++)
+				coil[i] = sf::Vertex{ coilPoints[i], color };
+			window.draw(coil, states);
+		};
+		drawCoil(-20.0f, 1.0f);  // primario: gobbe verso il nucleo (a destra)
+		drawCoil(20.0f, -1.0f);  // secondario: gobbe verso il nucleo (a sinistra)
+
+		// Pallini di polarità (convenzione standard): indicano quale coppia di
+		// terminali ha la stessa fase istantanea, sul lato dei terminali "+" (0 e 2).
+		auto drawDot = [&](float x, float y)
+		{
+			sf::CircleShape dot(2.0f);
+			dot.setOrigin({ 2.0f, 2.0f });
+			dot.setPosition({ x, y });
+			dot.setFillColor(color);
+			window.draw(dot, states);
+		};
+		drawDot(-14.0f, -13.0f);
+		drawDot(14.0f, -13.0f);
+		break;
+	}
 
 	default:
 		break;

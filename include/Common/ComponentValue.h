@@ -10,6 +10,9 @@ namespace CircuitLab {
 		capacitance,
 		inductance,
 		saturationCurrent,   // Is del diodo (Ampere)
-		emissionCoefficient  // n del diodo (fattore di idealità)
+		emissionCoefficient, // n del diodo (fattore di idealità)
+		primaryInductance,   // L1 del trasformatore (Henry)
+		secondaryInductance, // L2 del trasformatore (Henry)
+		couplingCoefficient  // k del trasformatore (0..1, adimensionale)
 	};
 }

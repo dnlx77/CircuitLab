@@ -28,6 +28,7 @@ namespace {
 		case CircuitLab::ComponentType::inductor:         return "L";
 		case CircuitLab::ComponentType::switchComponent:  return "S";
 		case CircuitLab::ComponentType::diode:            return "D";
+		case CircuitLab::ComponentType::transformer:      return "T";
 		default:                                          return "";
 		}
 	}
@@ -45,6 +46,8 @@ namespace {
 		case CircuitLab::ComponentValue::capacitance:       return "F";
 		case CircuitLab::ComponentValue::inductance:        return "H";
 		case CircuitLab::ComponentValue::saturationCurrent: return "A";
+		case CircuitLab::ComponentValue::primaryInductance:   return "H";
+		case CircuitLab::ComponentValue::secondaryInductance: return "H";
 		default:                                            return "";
 		}
 	}
@@ -466,6 +469,12 @@ void CircuitLab::UI::HandleEvents()
 						AddViewComponent(id, "Diode", ComponentType::diode, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
 						SnapComponentToGrid(m_componentViewList.back());
 					}
+					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::T))
+					{
+						int id = m_onCircuitChange(ComponentType::transformer);
+						AddViewComponent(id, "Transformer", ComponentType::transformer, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+						SnapComponentToGrid(m_componentViewList.back());
+					}
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::N))
 					{
 						// A differenza degli altri tasti, non passa da m_onCircuitChange/Circuit:
@@ -627,14 +636,23 @@ void CircuitLab::UI::HandleEvents()
 			}
 			else if (m_selectedComponent.state == SelectionState::draggingNodeView)
 			{
-				sf::Vector2f nodePos = SnapToGrid(sf::Vector2f(
-					std::clamp(pos.x - m_compClickOffset.x, viewMin.x, viewMax.x),
-					std::clamp(pos.y - m_compClickOffset.y, viewMin.y, viewMax.y)));
+				// Sotto la soglia, dalla posizione del click che ha avviato il
+				// trascinamento, non si muove ancora nulla: un pallino ancorato resta
+				// agganciato (vedi NODE_DRAG_THRESHOLD).
+				const sf::Vector2f delta(pos.x - m_selectedComponent.clickPos.x, pos.y - m_selectedComponent.clickPos.y);
+				const float dragThreshold = NODE_DRAG_THRESHOLD / m_zoom;
+				if (delta.x * delta.x + delta.y * delta.y >= dragThreshold * dragThreshold)
+				{
+					sf::Vector2f nodePos = SnapToGrid(sf::Vector2f(
+						std::clamp(pos.x - m_compClickOffset.x, viewMin.x, viewMax.x),
+						std::clamp(pos.y - m_compClickOffset.y, viewMin.y, viewMax.y)));
 
-				// Un NodeView ancorato a un terminale, appena lo si sposta, si stacca: da
-				// lì in poi non segue più il componente e il filo tra terminale e nodo si vede.
-				m_graph.DetachIfAnchored(m_selectedComponent.nodeViewId);
-				UpdateLinksForNodeView(m_selectedComponent.nodeViewId, nodePos);
+					// Un NodeView ancorato a un terminale, appena lo si sposta davvero, si
+					// stacca: da lì in poi non segue più il componente e il filo tra
+					// terminale e nodo si vede.
+					m_graph.DetachIfAnchored(m_selectedComponent.nodeViewId);
+					UpdateLinksForNodeView(m_selectedComponent.nodeViewId, nodePos);
+				}
 			}
 		}
 		else if (const auto *wheelEvent = event->getIf<sf::Event::MouseWheelScrolled>())
@@ -1692,6 +1710,9 @@ std::string_view CircuitLab::UI::ComponentValueToString(CircuitLab::ComponentVal
 	case ComponentValue::inductance: return "Inductance";
 	case ComponentValue::saturationCurrent: return "Sat. current (Is)";
 	case ComponentValue::emissionCoefficient: return "Emission coeff. (n)";
+	case ComponentValue::primaryInductance: return "Primary inductance (L1)";
+	case ComponentValue::secondaryInductance: return "Secondary inductance (L2)";
+	case ComponentValue::couplingCoefficient: return "Coupling (k)";
 	default:                         return "Unknown";
 	}
 }
@@ -1739,15 +1760,21 @@ void CircuitLab::UI::CreateLinkViewCurrentList()
 			continue;
 
 		std::vector<int> termList = m_onGetCompTerminalId(lv.compIdA);
-		if (termList.size() < 2)
+		// I terminali sono raggruppati a coppie (0,1), (2,3), ...: ogni coppia è un
+		// "ramo" con corrente propria e indipendente dalle altre (es. primario e
+		// secondario di un trasformatore). Il tap di termIndexA usa la sua coppia,
+		// non sempre (0,1) — un componente a 2 soli terminali ha una coppia sola,
+		// quindi il comportamento per resistori/diodi/ecc. resta invariato.
+		int pairBase = (lv.termIndexA / 2) * 2;
+		if (pairBase + 1 >= static_cast<int>(termList.size()))
 		{
 			m_linkViewCurrentList[lv.id] = 0.0;
 			continue;
 		}
-		int nodeId1 = termList[0];
-		int nodeId2 = termList[1];
+		int nodeId1 = termList[pairBase];
+		int nodeId2 = termList[pairBase + 1];
 		double current = m_simulationOutput.currentBranch[{nodeId1, nodeId2, lv.compIdA}];
-		m_linkViewCurrentList[lv.id] = (lv.termIndexA == 0) ? -current : current;
+		m_linkViewCurrentList[lv.id] = (lv.termIndexA % 2 == 0) ? -current : current;
 	}
 
 	// 2) Correnti dei tratti di bus: ogni filo tra due terminali è un tratto di bus
@@ -1900,7 +1927,18 @@ void CircuitLab::UI::UpdateParticles(float dt)
 {
 	for (auto &lp : m_linkParticlesList)
 	{
-		lp.offset = std::fmod(lp.offset + static_cast<float>(m_linkViewCurrentList[lp.linkViewId]) * dt * PARTICLE_SPEED_SCALE + 1.0f, 1.0f);
+		// Riporta l'avanzamento in [0,1) con x - floor(x), non fmod(x + 1, 1): fmod
+		// mantiene il segno del dividendo, quindi con uno spostamento negativo più
+		// grande di 1 (corrente istantanea molto alta, es. un trasformatore con
+		// accoppiamento vicino a 1 collegato senza resistenza in serie, che nel primo
+		// passo di simulazione può dare una corrente enorme prima che il transitorio
+		// si stabilizzi) il "+1" di sicurezza non basta e offset resta negativo. Un
+		// singolo offset negativo fa disegnare quel frame di particelle estrapolate
+		// all'indietro, ben oltre l'inizio del filo — il pallino "fuori dal circuito"
+		// notato ogni tanto vicino a un generatore appena avviata la simulazione.
+		// x - floor(x) è invece corretto per qualunque x, positivo o negativo.
+		float x = lp.offset + static_cast<float>(m_linkViewCurrentList[lp.linkViewId]) * dt * PARTICLE_SPEED_SCALE;
+		lp.offset = x - std::floor(x);
 	}
 }
 

@@ -104,6 +104,9 @@
     <ClCompile Include="..\src\components\Diode.cpp">
       <Filter>src\Components</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\components\Transformer.cpp">
+      <Filter>src\Components</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\core\Circuit.cpp">
       <Filter>src\Core</Filter>
     </ClCompile>
@@ -179,6 +182,9 @@
       <Filter>Include\Components</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Components\Diode.h">
+      <Filter>Include\Components</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Components\Transformer.h">
       <Filter>Include\Components</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Core\Circuit.h">

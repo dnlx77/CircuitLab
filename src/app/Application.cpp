@@ -10,6 +10,7 @@
 #include "Components/Inductor.h"
 #include "Components/Switch.h"
 #include "Components/Diode.h"
+#include "Components/Transformer.h"
 #include "Common/SimulationOutput.h"
 #include "UI/Ui.h"
 #include "Common/Logger.h"
@@ -30,6 +31,7 @@ namespace {
 //   - inductor:      valore in Henry
 //   - switch:        chiuso di default
 //   - diode:         Is = 1e-14 A, n = 1 (silicio generico)
+//   - transformer:   L1 = L2 = 1 mH, k = 0.999 (accoppiamento 1:1 quasi ideale)
 std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type)
 {
 	switch (type) {
@@ -40,6 +42,7 @@ std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(Co
 	case ComponentType::inductor:			return std::make_unique<Inductor>(0.001);
 	case ComponentType::switchComponent:	return std::make_unique<Switch>(true);
 	case ComponentType::diode:				return std::make_unique<Diode>();
+	case ComponentType::transformer:		return std::make_unique<Transformer>();
 	default:								return nullptr;
 	}
 }
@@ -674,6 +677,33 @@ void CircuitLab::Application::Simulate()
 			double current = diode->Current(v1 - v2);
 			componentCurrent[comp->GetId()] = current;
 			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
+		}
+		else if (comp->GetType() == ComponentType::transformer)
+		{
+			// 4 terminali: 0/1 = primario, 2/3 = secondario, ciascuna coppia con
+			// la propria corrente indipendente (vedi Transformer.h). componentCurrent
+			// tiene solo la corrente di primario (per il probe "corrente di
+			// componente" dell'oscilloscopio, che ha un solo valore per id);
+			// branchCurrent ha invece una voce per ciascun avvolgimento.
+			std::vector<int> termList = comp->GetTerminalNodeIds();
+			auto voltageAt = [&](int idx) -> double
+			{
+				if (termList[idx] <= 0)
+					return 0.0;
+				return m_simulationResult[m_circuit->GetIndexFromNodes(termList[idx])];
+			};
+			double vPrimary = voltageAt(0) - voltageAt(1);
+			double vSecondary = voltageAt(2) - voltageAt(3);
+
+			// Correnti alla soluzione convergente, lette PRIMA di aggiornare lo
+			// stato (stesso schema di condensatore/induttore).
+			auto *transformer = static_cast<Transformer *>(comp.get());
+			auto [primaryCurrent, secondaryCurrent] = transformer->BranchCurrents(vPrimary, vSecondary);
+			componentCurrent[comp->GetId()] = primaryCurrent;
+			branchCurrent[{termList[0], termList[1], comp->GetId()}] = primaryCurrent;
+			branchCurrent[{termList[2], termList[3], comp->GetId()}] = secondaryCurrent;
+
+			transformer->UpdateWindingState(vPrimary, vSecondary);
 		}
 	}
 
