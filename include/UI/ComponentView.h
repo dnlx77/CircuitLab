@@ -55,8 +55,10 @@ namespace CircuitLab {
 		// waveForm sceglie l'icona interna del generatore di tensione (+/-, sinusoide,
 		// onda quadra); switchClosed sceglie se disegnare la lama dell'interruttore
 		// chiusa o aperta. Entrambi i parametri sono ignorati dai tipi a cui non si
-		// applicano.
-		void DrawSymbol(sf::RenderWindow &window, sf::Color color, WaveFormType waveForm, bool switchClosed) const;
+		// applicano. target è sf::RenderTarget (non sf::RenderWindow) apposta: sia il
+		// canvas sia un sf::RenderTexture (usato per le icone della palette, vedi
+		// UI::BuildPaletteIcons) derivano da RenderTarget.
+		void DrawSymbol(sf::RenderTarget &target, sf::Color color, WaveFormType waveForm, bool switchClosed) const;
 
 		void SetPosition(const Vec2 &position) { m_position = position; }
 		void SetRotation(float rotation) { m_rotation = rotation; }

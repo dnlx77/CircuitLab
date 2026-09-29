@@ -1,6 +1,7 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <functional>
+#include <map>
 
 #include "Common/ComponentType.h"
 #include "Common/SimulationOutput.h"
@@ -184,6 +185,12 @@ namespace CircuitLab {
 
 		sf::Vector2f m_compClickOffset;
 
+		// Icone pre-renderizzate (una per tipo di componente della palette, vedi
+		// DrawComponentPalette) su una piccola RenderTexture: il simbolo è statico
+		// (nessuna posa dipende dallo stato di un'istanza reale), quindi si
+		// disegna una sola volta, nel costruttore, invece che ogni frame.
+		std::map<ComponentType, sf::RenderTexture> m_paletteIcons;
+
 		sf::RenderWindow m_window; // Finestra SFML
 		sf::Clock m_deltaClock;
 
@@ -251,6 +258,10 @@ namespace CircuitLab {
 		// Riporta lo zoom a 100% e la vista alla posizione iniziale
 		void ResetZoom();
 
+		// Aggiorna dimensioni finestra, vista del canvas e viewport dopo che
+		// l'utente ha ridimensionato la finestra trascinandone il bordo.
+		void HandleResize(unsigned int newWidth, unsigned int newHeight);
+
 		// Se l'aggancio è attivo restituisce il nodo di griglia più vicino a p, altrimenti p
 		sf::Vector2f SnapToGrid(sf::Vector2f p) const;
 
@@ -263,6 +274,29 @@ namespace CircuitLab {
 
 		// Disegna il pannello laterale ImGui (proprietà componente selezionato, oscilloscopio, save/load)
 		void DrawImageGuiPanel();
+
+		// Crea un componente del tipo dato in posizione pos (coordinate mondo) e lo
+		// aggiunge al canvas con lo snap alla griglia già usato per i tasti R/V/G/C/
+		// L/S/D/T/Y: unico punto in cui passano sia il piazzamento da tastiera sia
+		// quello dalla palette laterale (click o drag&drop), vedi DrawComponentPalette.
+		void PlaceNewComponent(ComponentType type, sf::Vector2i pos);
+
+		// Disegna la palette dei componenti nel pannello laterale, divisa per
+		// categoria: ogni voce è un pulsante che piazza il componente al centro
+		// della vista se cliccato, o si trascina sul canvas (vedi DrawCanvasDropTarget).
+		void DrawComponentPalette();
+
+		// Popola m_paletteIcons: per ogni tipo della palette disegna il simbolo
+		// IEC (ComponentView::DrawSymbol) su una RenderTexture dedicata. Chiamato
+		// una sola volta dal costruttore.
+		void BuildPaletteIcons();
+
+		// Overlay invisibile sopra il canvas, esistente solo mentre è in corso un
+		// drag dalla palette: intercetta il rilascio del drop e piazza il
+		// componente lì. Va chiamato ogni frame dopo DrawImageGuiPanel(); essendo
+		// creato solo durante il drag, non interferisce mai con le normali
+		// interazioni del canvas (che restano sugli eventi SFML grezzi in HandleEvents).
+		void DrawCanvasDropTarget();
 
 		// Disegna tutti i componenti (corpo + terminali + etichette) nel canvas
 		void DrawComponents();

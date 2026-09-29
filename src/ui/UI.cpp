@@ -43,6 +43,65 @@ namespace {
 			type == CircuitLab::ComponentType::changeoverSwitch;
 	}
 
+	// Nome interno di un tipo di componente (salvato come "name" in ComponentView,
+	// vedi UI::PlaceNewComponent); non è mostrato in UI (il canvas usa solo
+	// ComponentPrefix+id), quindi conta solo per coerenza tra le istanze.
+	const char *ComponentDisplayName(CircuitLab::ComponentType type)
+	{
+		switch (type)
+		{
+		case CircuitLab::ComponentType::resistor:         return "Resistor";
+		case CircuitLab::ComponentType::voltageGenerator: return "Voltage source";
+		case CircuitLab::ComponentType::ground:           return "Ground";
+		case CircuitLab::ComponentType::capacitor:        return "Capacitor";
+		case CircuitLab::ComponentType::inductor:         return "Inductor";
+		case CircuitLab::ComponentType::switchComponent:  return "Switch";
+		case CircuitLab::ComponentType::diode:            return "Diode";
+		case CircuitLab::ComponentType::transformer:      return "Transformer";
+		case CircuitLab::ComponentType::changeoverSwitch: return "Changeover switch";
+		default:                                          return "Component";
+		}
+	}
+
+	// Una voce della palette componenti nel pannello laterale (vedi
+	// UI::DrawComponentPalette): l'etichetta include la scorciatoia da tastiera,
+	// così l'utente non deve più memorizzarle a parte.
+	struct PaletteEntry { CircuitLab::ComponentType type; const char *label; };
+	struct PaletteCategory { const char *name; std::vector<PaletteEntry> entries; };
+
+	const std::vector<PaletteCategory> &ComponentPalette()
+	{
+		using CircuitLab::ComponentType;
+		static const std::vector<PaletteCategory> palette = {
+			{ "Passivi", {
+				{ ComponentType::resistor, "Resistore (R)" },
+				{ ComponentType::capacitor, "Condensatore (C)" },
+				{ ComponentType::inductor, "Induttore (L)" },
+			} },
+			{ "Sorgenti", {
+				{ ComponentType::voltageGenerator, "Generatore (V)" },
+			} },
+			{ "Commutazione", {
+				{ ComponentType::switchComponent, "Interruttore (S)" },
+				{ ComponentType::changeoverSwitch, "Deviatore (Y)" },
+			} },
+			{ "Semiconduttori", {
+				{ ComponentType::diode, "Diodo (D)" },
+			} },
+			{ "Accoppiati", {
+				{ ComponentType::transformer, "Trasformatore (T)" },
+			} },
+			{ "Altro", {
+				{ ComponentType::ground, "Massa (G)" },
+			} },
+		};
+		return palette;
+	}
+
+	// Identificatore del tipo di payload ImGui per il drag&drop dalla palette
+	// al canvas (vedi UI::DrawComponentPalette / UI::DrawCanvasDropTarget).
+	constexpr const char *COMPONENT_DRAG_PAYLOAD = "CIRCUITLAB_COMPONENT_TYPE";
+
 	// Unità di misura di una proprietà di componente ("" se adimensionale o non
 	// univoca, es. la fase, per cui non si mostra alcuna forma con prefisso SI).
 	const char *ComponentValueUnit(CircuitLab::ComponentValue value)
@@ -411,6 +470,13 @@ void CircuitLab::UI::UpdateNodeViewLinkIds(int nodeViewId, std::vector<int> link
 		}
 }
 
+void CircuitLab::UI::PlaceNewComponent(ComponentType type, sf::Vector2i pos)
+{
+	int id = m_onCircuitChange(type);
+	AddViewComponent(id, ComponentDisplayName(type), type, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+	SnapComponentToGrid(m_componentViewList.back());
+}
+
 void CircuitLab::UI::HandleEvents()
 {
 	// --- Gestione eventi ---
@@ -420,6 +486,9 @@ void CircuitLab::UI::HandleEvents()
 
 		if (event->is<sf::Event::Closed>())
 			m_window.close();
+
+		else if (const auto *resizedEvent = event->getIf<sf::Event::Resized>())
+			HandleResize(resizedEvent->size.x, resizedEvent->size.y);
 
 		else if (const auto *mouseEvent = event->getIf<sf::Event::MouseButtonPressed>())
 		{
@@ -438,59 +507,23 @@ void CircuitLab::UI::HandleEvents()
 				if (pixelPos.x < static_cast<int>(m_width - PANEL_WIDTH))
 				{
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
-					{
-						int id = m_onCircuitChange(ComponentType::resistor);
-						AddViewComponent(id, "Resistor", ComponentType::resistor, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
-						SnapComponentToGrid(m_componentViewList.back());
-					}
+						PlaceNewComponent(ComponentType::resistor, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
-					{
-						int id = m_onCircuitChange(ComponentType::voltageGenerator);
-						AddViewComponent(id, "Voltage source", ComponentType::voltageGenerator, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
-						SnapComponentToGrid(m_componentViewList.back());
-					}
+						PlaceNewComponent(ComponentType::voltageGenerator, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G))
-					{
-						int id = m_onCircuitChange(ComponentType::ground);
-						AddViewComponent(id, "Ground", ComponentType::ground, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
-						SnapComponentToGrid(m_componentViewList.back());
-					}
+						PlaceNewComponent(ComponentType::ground, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::C))
-					{
-						int id = m_onCircuitChange(ComponentType::capacitor);
-						AddViewComponent(id, "Capacitor", ComponentType::capacitor, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
-						SnapComponentToGrid(m_componentViewList.back());
-					}
+						PlaceNewComponent(ComponentType::capacitor, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::L))
-					{
-						int id = m_onCircuitChange(ComponentType::inductor);
-						AddViewComponent(id, "Inductor", ComponentType::inductor, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
-						SnapComponentToGrid(m_componentViewList.back());
-					}
+						PlaceNewComponent(ComponentType::inductor, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S))
-					{
-						int id = m_onCircuitChange(ComponentType::switchComponent);
-						AddViewComponent(id, "Switch", ComponentType::switchComponent, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
-						SnapComponentToGrid(m_componentViewList.back());
-					}
+						PlaceNewComponent(ComponentType::switchComponent, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D))
-					{
-						int id = m_onCircuitChange(ComponentType::diode);
-						AddViewComponent(id, "Diode", ComponentType::diode, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
-						SnapComponentToGrid(m_componentViewList.back());
-					}
+						PlaceNewComponent(ComponentType::diode, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::T))
-					{
-						int id = m_onCircuitChange(ComponentType::transformer);
-						AddViewComponent(id, "Transformer", ComponentType::transformer, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
-						SnapComponentToGrid(m_componentViewList.back());
-					}
+						PlaceNewComponent(ComponentType::transformer, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Y))
-					{
-						int id = m_onCircuitChange(ComponentType::changeoverSwitch);
-						AddViewComponent(id, "Changeover switch", ComponentType::changeoverSwitch, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
-						SnapComponentToGrid(m_componentViewList.back());
-					}
+						PlaceNewComponent(ComponentType::changeoverSwitch, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::N))
 					{
 						// A differenza degli altri tasti, non passa da m_onCircuitChange/Circuit:
@@ -807,12 +840,137 @@ void CircuitLab::UI::HandleEvents()
 	}
 }
 
+void CircuitLab::UI::BuildPaletteIcons()
+{
+	constexpr unsigned int ICON_TEXTURE_SIZE = 64;
+	// Vista di 64x64 unità mondo centrata sull'origine: margine sufficiente
+	// attorno a ogni simbolo, che si estende al più a +-26 unità (gli
+	// avvolgimenti del trasformatore, i più larghi di tutti quelli disegnati
+	// da ComponentView::DrawSymbol).
+	const sf::View iconView(sf::Vector2f{ 0.0f, 0.0f }, sf::Vector2f{ 64.0f, 64.0f });
+
+	for (const auto &category : ComponentPalette())
+		for (const auto &entry : category.entries)
+		{
+			if (m_paletteIcons.contains(entry.type))
+				continue;
+
+			auto [it, inserted] = m_paletteIcons.try_emplace(entry.type, sf::Vector2u{ ICON_TEXTURE_SIZE, ICON_TEXTURE_SIZE });
+			sf::RenderTexture &icon = it->second;
+			icon.setView(iconView);
+			icon.clear(sf::Color::Transparent);
+
+			// Componente "di scena" solo per il disegno: posizione all'origine
+			// (centro di iconView) e rotazione nulla; componentLink/name non
+			// contano, questa istanza non verrà mai collegata al circuito.
+			// waveForm=dcWaveForm e switchClosed=false scelgono, per i pochi tipi
+			// a cui si applicano, la posa più riconoscibile a icona piccola
+			// (il "+/-" del generatore, la lama aperta dello switch/deviatore).
+			ComponentView preview(0, Vec2(0.0f, 0.0f), 0.0f, "", entry.type);
+			preview.DrawSymbol(icon, sf::Color::White, WaveFormType::dcWaveForm, false);
+			icon.display();
+		}
+}
+
+void CircuitLab::UI::DrawComponentPalette()
+{
+	if (!ImGui::CollapsingHeader("Componenti", ImGuiTreeNodeFlags_DefaultOpen))
+		return;
+
+	ImGui::TextWrapped("Trascina un simbolo sul circuito, oppure clicca per piazzarlo al centro della vista.");
+
+	constexpr float ICON_SIZE = 40.0f;
+	constexpr int ICONS_PER_ROW = 4;
+
+	for (const auto &category : ComponentPalette())
+	{
+		ImGui::SeparatorText(category.name);
+		int column = 0;
+		for (const auto &entry : category.entries)
+		{
+			if (column > 0)
+				ImGui::SameLine();
+
+			// entry.type distingue i pulsanti nello stack ID di ImGui: senza
+			// PushID tutti userebbero lo stesso id letterale ("##icon") e ImGui
+			// li tratterebbe come lo stesso elemento.
+			ImGui::PushID(static_cast<int>(entry.type));
+			const sf::RenderTexture &icon = m_paletteIcons.at(entry.type);
+			bool clicked = ImGui::ImageButton("##icon", icon, { ICON_SIZE, ICON_SIZE });
+
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", entry.label);
+
+			// Il click (rilascio senza trascinare) piazza subito il componente;
+			// se invece si trascina, BeginDragDropSource intercetta il gesto e il
+			// drop viene gestito da DrawCanvasDropTarget quando il mouse è
+			// rilasciato sopra il canvas. Le due cose non si sovrappongono: un
+			// vero trascinamento non fa mai scattare il click.
+			if (ImGui::BeginDragDropSource())
+			{
+				ImGui::SetDragDropPayload(COMPONENT_DRAG_PAYLOAD, &entry.type, sizeof(ComponentType));
+				ImGui::Image(icon, sf::Vector2f{ ICON_SIZE, ICON_SIZE });
+				ImGui::Text("%s", entry.label);
+				ImGui::EndDragDropSource();
+			}
+			ImGui::PopID();
+
+			if (clicked)
+			{
+				sf::Vector2f center = m_view.getCenter();
+				PlaceNewComponent(entry.type, sf::Vector2i(
+					static_cast<int>(std::lround(center.x)),
+					static_cast<int>(std::lround(center.y))));
+			}
+
+			column = (column + 1) % ICONS_PER_ROW;
+		}
+	}
+}
+
+void CircuitLab::UI::DrawCanvasDropTarget()
+{
+	// GetDragDropPayload() (a differenza di BeginDragDropTarget) si può
+	// interrogare da qualunque punto, senza un item associato: la usiamo per
+	// sapere SE mostrare l'overlay, prima ancora di disegnarlo. Così, fuori da
+	// un drag dalla palette, questa finestra non viene creata affatto e il
+	// canvas sottostante continua a ricevere i normali eventi SFML (selezione,
+	// trascinamento nodi, pan, ...) esattamente come prima di questa funzione.
+	const ImGuiPayload *peek = ImGui::GetDragDropPayload();
+	if (!peek || !peek->IsDataType(COMPONENT_DRAG_PAYLOAD))
+		return;
+
+	ImGui::SetNextWindowPos({ 0.0f, 0.0f });
+	ImGui::SetNextWindowSize({ static_cast<float>(m_width - PANEL_WIDTH), static_cast<float>(m_heigth) });
+	ImGui::Begin("##CanvasDropTarget", nullptr,
+		ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground |
+		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus |
+		ImGuiWindowFlags_NoNav);
+
+	ImGui::InvisibleButton("##CanvasDropArea", ImGui::GetContentRegionAvail());
+	if (ImGui::BeginDragDropTarget())
+	{
+		if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(COMPONENT_DRAG_PAYLOAD))
+		{
+			ComponentType type = *static_cast<const ComponentType *>(payload->Data);
+			PlaceNewComponent(type, WorldPos(sf::Mouse::getPosition(m_window)));
+		}
+		ImGui::EndDragDropTarget();
+	}
+
+	ImGui::End();
+}
+
 void CircuitLab::UI::DrawImageGuiPanel()
 {
 	ImGui::SetNextWindowPos({ static_cast<float>(m_width - PANEL_WIDTH), 0.0f });
 	ImGui::SetNextWindowSize({ PANEL_WIDTH, static_cast<float>(m_heigth) });
 	// --- Pannello ImGui ---
 	ImGui::Begin("CircuitLab - Test", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+
+	DrawComponentPalette();
+	ImGui::Separator();
 
 	if (ImGui::Button("Start Simulation"))
 		m_onSetSimulationStatus(SimulationStatus::running);
@@ -2030,6 +2188,12 @@ CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &t
 	if (!ImGui::SFML::Init(m_window))
 		throw std::runtime_error("Impossibile inizializzare ImGui-SFML");
 
+	// Sotto questa soglia il canvas (larghezza finestra - PANEL_WIDTH) potrebbe
+	// diventare troppo stretto o, ridimensionando ancora, sottrarre PANEL_WIDTH
+	// da un m_width che lo è già meno (unsigned: andrebbe in underflow). Vedi
+	// HandleResize.
+	m_window.setMinimumSize(sf::Vector2u{ static_cast<unsigned int>(PANEL_WIDTH) + 200u, 200u });
+
 	ImPlot::CreateContext();
 
 	if (!m_font.openFromFile("JetBrainsMono-Regular.ttf"))
@@ -2042,12 +2206,31 @@ CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &t
 
 	m_linkViewIdCount = 0;
 	m_nodeViewCount = 0;
+
+	BuildPaletteIcons();
 }
 
 sf::Vector2i CircuitLab::UI::WorldPos(sf::Vector2i pixelPos) const
 {
 	sf::Vector2f world = m_window.mapPixelToCoords(pixelPos, m_view);
 	return sf::Vector2i(static_cast<int>(std::lround(world.x)), static_cast<int>(std::lround(world.y)));
+}
+
+// Chiamato quando l'utente ridimensiona la finestra trascinandone il bordo
+// (vedi HandleEvents, sf::Event::Resized). Il pannello resta largo PANEL_WIDTH
+// in pixel; il canvas prende tutto lo spazio restante e ne mostra di più (o di
+// meno), non lo stessa porzione ingrandita: si aggiorna la SIZE della vista (in
+// unità mondo, secondo lo zoom corrente) esattamente come fa ResetZoom, ma
+// senza toccare centro o zoom, così la parte di circuito già inquadrata resta
+// dov'era. m_window.setMinimumSize (vedi costruttore) garantisce che
+// m_width - PANEL_WIDTH non vada mai sotto zero.
+void CircuitLab::UI::HandleResize(unsigned int newWidth, unsigned int newHeight)
+{
+	m_width = newWidth;
+	m_heigth = newHeight;
+
+	m_view.setSize(sf::Vector2f(static_cast<float>(m_width - PANEL_WIDTH), static_cast<float>(m_heigth)) / m_zoom);
+	m_view.setViewport(sf::FloatRect({ 0.f, 0.f }, { static_cast<float>(m_width - PANEL_WIDTH) / m_width, 1.f }));
 }
 
 void CircuitLab::UI::ResetZoom()
@@ -2348,6 +2531,7 @@ void CircuitLab::UI::Render()
 	ImGui::SFML::Update(m_window, dt);
 
 	DrawImageGuiPanel();
+	DrawCanvasDropTarget();
 
 	// --- Rendering canvas ---
 	m_window.clear(BACKGROUND_COLOR);

@@ -43,18 +43,22 @@ namespace {
 	// ComponentDesign), trasformati con la stessa posizione/rotazione del
 	// componente. "type" è LineStrip per un percorso continuo (es. lo zigzag)
 	// o Lines per segmenti indipendenti a coppie di punti (es. i due lead).
-	void DrawLocalSegments(sf::RenderWindow &window, const sf::RenderStates &states,
+	void DrawLocalSegments(sf::RenderTarget &target, const sf::RenderStates &states,
 		std::initializer_list<sf::Vector2f> points, sf::PrimitiveType type, sf::Color color)
 	{
 		sf::VertexArray va(type, points.size());
 		std::size_t i = 0;
 		for (const auto &p : points)
 			va[i++] = sf::Vertex{ p, color };
-		window.draw(va, states);
+		target.draw(va, states);
 	}
 }
 
-void CircuitLab::ComponentView::DrawSymbol(sf::RenderWindow &window, sf::Color color, WaveFormType waveForm, bool switchClosed) const
+// target è sf::RenderTarget (non sf::RenderWindow) apposta: sia il canvas
+// (sf::RenderWindow) sia l'anteprima della palette (sf::RenderTexture, vedi
+// UI::BuildPaletteIcons) derivano da RenderTarget e possono disegnare lo
+// stesso simbolo senza duplicare questa funzione.
+void CircuitLab::ComponentView::DrawSymbol(sf::RenderTarget &target, sf::Color color, WaveFormType waveForm, bool switchClosed) const
 {
 	// Trasforma le coordinate locali (definite come gli offset dei terminali:
 	// origine al centro, terminali a y=-20/+20) nella posizione e rotazione
@@ -67,7 +71,7 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderWindow &window, sf::Color c
 
 	auto draw = [&](std::initializer_list<sf::Vector2f> points, sf::PrimitiveType type)
 	{
-		DrawLocalSegments(window, states, points, type, color);
+		DrawLocalSegments(target, states, points, type, color);
 	};
 
 	switch (GetComponentType())
@@ -123,7 +127,7 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderWindow &window, sf::Color c
 		sf::VertexArray coil(sf::PrimitiveType::LineStrip, coilPoints.size());
 		for (std::size_t i = 0; i < coilPoints.size(); i++)
 			coil[i] = sf::Vertex{ coilPoints[i], color };
-		window.draw(coil, states);
+		target.draw(coil, states);
 		break;
 	}
 
@@ -140,7 +144,7 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderWindow &window, sf::Color c
 		circle.setFillColor(sf::Color::Transparent);
 		circle.setOutlineColor(color);
 		circle.setOutlineThickness(1.0f);
-		window.draw(circle);
+		target.draw(circle);
 
 		if (waveForm == WaveFormType::sineWaveForm)
 		{
@@ -159,7 +163,7 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderWindow &window, sf::Color c
 			sf::VertexArray sine(sf::PrimitiveType::LineStrip, points.size());
 			for (std::size_t i = 0; i < points.size(); i++)
 				sine[i] = sf::Vertex{ points[i], color };
-			window.draw(sine, states);
+			target.draw(sine, states);
 		}
 		else if (waveForm == WaveFormType::squareWaveForm)
 		{
@@ -228,7 +232,7 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderWindow &window, sf::Color c
 			sf::VertexArray coil(sf::PrimitiveType::LineStrip, coilPoints.size());
 			for (std::size_t i = 0; i < coilPoints.size(); i++)
 				coil[i] = sf::Vertex{ coilPoints[i], color };
-			window.draw(coil, states);
+			target.draw(coil, states);
 		};
 		drawCoil(-20.0f, 1.0f);  // primario: gobbe verso il nucleo (a destra)
 		drawCoil(20.0f, -1.0f);  // secondario: gobbe verso il nucleo (a sinistra)
@@ -241,7 +245,7 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderWindow &window, sf::Color c
 			dot.setOrigin({ 2.0f, 2.0f });
 			dot.setPosition({ x, y });
 			dot.setFillColor(color);
-			window.draw(dot, states);
+			target.draw(dot, states);
 		};
 		drawDot(-14.0f, -13.0f);
 		drawDot(14.0f, -13.0f);
