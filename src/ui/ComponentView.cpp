@@ -15,6 +15,8 @@ const std::map<CircuitLab::ComponentType, CircuitLab::ComponentDesign> CircuitLa
 	{ CircuitLab::ComponentType::diode,          { 20, 40, 4, { {0, -20}, {0, 20} }, -1 } },
 	// 4 terminali: 0/1 = primario +/-, 2/3 = secondario +/- (vedi Transformer.h)
 	{ CircuitLab::ComponentType::transformer,    { 44, 44, 4, { {-20, -20}, {-20, 20}, {20, -20}, {20, 20} }, -1 } },
+	// 3 terminali: 0 = comune (in basso), 1/2 = via 1/via 2 (in alto a sx/dx)
+	{ CircuitLab::ComponentType::changeoverSwitch, { 30, 40, 4, { {0, 20}, {-15, -20}, {15, -20} }, -1 } },
 };
 
 CircuitLab::ComponentView::ComponentView(int componentLink, const Vec2 &position,
@@ -245,6 +247,18 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderWindow &window, sf::Color c
 		drawDot(14.0f, -13.0f);
 		break;
 	}
+
+	case ComponentType::changeoverSwitch:
+		// Comune (terminale 0, in basso) verso il perno al centro; le due vie
+		// (terminali 1/2, in alto a sx/dx) verso i rispettivi contatti. La "lama"
+		// va sempre dal perno a UN contatto (mai aperta come lo Switch: il
+		// deviatore è sempre chiuso su una delle due vie). switchClosed==true
+		// indica la via 2 attiva (vedi ChangeoverSwitch::IsSwitchClosed).
+		draw({ {0,20}, {0,12} }, sf::PrimitiveType::Lines);
+		draw({ {-15,-20}, {-15,-12} }, sf::PrimitiveType::Lines);
+		draw({ {15,-20}, {15,-12} }, sf::PrimitiveType::Lines);
+		draw({ {0,12}, switchClosed ? sf::Vector2f{15,-12} : sf::Vector2f{-15,-12} }, sf::PrimitiveType::Lines);
+		break;
 
 	default:
 		break;

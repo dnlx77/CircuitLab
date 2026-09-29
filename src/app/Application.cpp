@@ -11,6 +11,7 @@
 #include "Components/Switch.h"
 #include "Components/Diode.h"
 #include "Components/Transformer.h"
+#include "Components/ChangeoverSwitch.h"
 #include "Common/SimulationOutput.h"
 #include "UI/Ui.h"
 #include "Common/Logger.h"
@@ -32,6 +33,7 @@ namespace {
 //   - switch:        chiuso di default
 //   - diode:         Is = 1e-14 A, n = 1 (silicio generico)
 //   - transformer:   L1 = L2 = 1 mH, k = 0.999 (accoppiamento 1:1 quasi ideale)
+//   - changeoverSwitch: comune sulla via 1 di default
 std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type)
 {
 	switch (type) {
@@ -43,6 +45,7 @@ std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(Co
 	case ComponentType::switchComponent:	return std::make_unique<Switch>(true);
 	case ComponentType::diode:				return std::make_unique<Diode>();
 	case ComponentType::transformer:		return std::make_unique<Transformer>();
+	case ComponentType::changeoverSwitch:	return std::make_unique<ChangeoverSwitch>(false);
 	default:								return nullptr;
 	}
 }
@@ -704,6 +707,31 @@ void CircuitLab::Application::Simulate()
 			branchCurrent[{termList[2], termList[3], comp->GetId()}] = secondaryCurrent;
 
 			transformer->UpdateWindingState(vPrimary, vSecondary);
+		}
+		else if (comp->GetType() == ComponentType::changeoverSwitch)
+		{
+			// 3 terminali: 0 = comune, 1/2 = vie. Stesso schema dello switch (Geq*(v1-v2),
+			// nessuna dipendenza dal tempo) applicato a due rami che condividono il
+			// comune. componentCurrent tiene la corrente totale al comune (somma dei
+			// due rami: quello inattivo vale ~0, quindi equivale alla corrente della
+			// via attiva); branchCurrent ha una voce per ciascuna via.
+			std::vector<int> termList = comp->GetTerminalNodeIds();
+			auto voltageAt = [&](int idx) -> double
+			{
+				if (termList[idx] <= 0)
+					return 0.0;
+				return m_simulationResult[m_circuit->GetIndexFromNodes(termList[idx])];
+			};
+			double vCommon = voltageAt(0);
+			double vVia1 = voltageAt(1);
+			double vVia2 = voltageAt(2);
+
+			auto *devSwitch = static_cast<ChangeoverSwitch *>(comp.get());
+			double currentVia1 = devSwitch->GetConductanceVia1() * (vCommon - vVia1);
+			double currentVia2 = devSwitch->GetConductanceVia2() * (vCommon - vVia2);
+			componentCurrent[comp->GetId()] = currentVia1 + currentVia2;
+			branchCurrent[{termList[0], termList[1], comp->GetId()}] = currentVia1;
+			branchCurrent[{termList[0], termList[2], comp->GetId()}] = currentVia2;
 		}
 	}
 

@@ -29,8 +29,18 @@ namespace {
 		case CircuitLab::ComponentType::switchComponent:  return "S";
 		case CircuitLab::ComponentType::diode:            return "D";
 		case CircuitLab::ComponentType::transformer:      return "T";
+		case CircuitLab::ComponentType::changeoverSwitch: return "Y";
 		default:                                          return "";
 		}
+	}
+
+	// Vero per i componenti il cui stato si cambia con click/tasto invece che
+	// editando un valore numerico (Switch: aperto/chiuso; deviatore: via 1/via 2).
+	// Entrambi implementano Component::ToggleSwitch/IsSwitchClosed, riusati identici.
+	bool IsToggleableByClick(CircuitLab::ComponentType type)
+	{
+		return type == CircuitLab::ComponentType::switchComponent ||
+			type == CircuitLab::ComponentType::changeoverSwitch;
 	}
 
 	// Unità di misura di una proprietà di componente ("" se adimensionale o non
@@ -475,6 +485,12 @@ void CircuitLab::UI::HandleEvents()
 						AddViewComponent(id, "Transformer", ComponentType::transformer, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
 						SnapComponentToGrid(m_componentViewList.back());
 					}
+					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Y))
+					{
+						int id = m_onCircuitChange(ComponentType::changeoverSwitch);
+						AddViewComponent(id, "Changeover switch", ComponentType::changeoverSwitch, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
+						SnapComponentToGrid(m_componentViewList.back());
+					}
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::N))
 					{
 						// A differenza degli altri tasti, non passa da m_onCircuitChange/Circuit:
@@ -502,12 +518,13 @@ void CircuitLab::UI::HandleEvents()
 				{
 					CheckClick(pos, m_selectedComponent);
 
-					// Un interruttore si apre/chiude cliccandoci sopra (il tasto sinistro
-					// qui seleziona soltanto — il drag usa il tasto destro, vedi sotto —
-					// quindi il click non fa altro che "selezionare", e possiamo far
-					// scattare il toggle sulla stessa azione senza conflitti).
+					// Un interruttore (o un deviatore) si apre/chiude, o cambia via,
+					// cliccandoci sopra (il tasto sinistro qui seleziona soltanto — il
+					// drag usa il tasto destro, vedi sotto — quindi il click non fa
+					// altro che "selezionare", e possiamo far scattare il toggle sulla
+					// stessa azione senza conflitti).
 					if (m_selectedComponent.state == SelectionState::componentSelected &&
-						m_onGetComponentTypeById(m_selectedComponent.compId) == ComponentType::switchComponent)
+						IsToggleableByClick(m_onGetComponentTypeById(m_selectedComponent.compId)))
 					{
 						m_onToggleSwitch(m_selectedComponent.compId);
 					}
@@ -778,10 +795,11 @@ void CircuitLab::UI::HandleEvents()
 			}
 
 			// Alternativa da tastiera al click per aprire/chiudere un interruttore
-			// selezionato, comoda per toggle ripetuti senza dover ricliccare ogni volta.
+			// (o cambiare via a un deviatore) selezionato, comoda per toggle
+			// ripetuti senza dover ricliccare ogni volta.
 			if (m_selectedComponent.state == SelectionState::componentSelected &&
 				keyboardEvent->code == sf::Keyboard::Key::Space &&
-				m_onGetComponentTypeById(m_selectedComponent.compId) == ComponentType::switchComponent)
+				IsToggleableByClick(m_onGetComponentTypeById(m_selectedComponent.compId)))
 			{
 				m_onToggleSwitch(m_selectedComponent.compId);
 			}
@@ -988,7 +1006,10 @@ void CircuitLab::UI::DrawComponents()
 			? m_onGetWaveFormType(comp.GetComponentLink())
 			: WaveFormType::none;
 
-		bool switchClosed = (comp.GetComponentType() == ComponentType::switchComponent && m_onIsSwitchClosed)
+		// Riusato anche dal deviatore: per lui indica "via 2 attiva" invece di
+		// "chiuso" (vedi ChangeoverSwitch::IsSwitchClosed), ma il default (true)
+		// per gli altri tipi è comunque irrilevante, esattamente come per Switch.
+		bool switchClosed = (IsToggleableByClick(comp.GetComponentType()) && m_onIsSwitchClosed)
 			? m_onIsSwitchClosed(comp.GetComponentLink())
 			: true;
 
@@ -1760,6 +1781,26 @@ void CircuitLab::UI::CreateLinkViewCurrentList()
 			continue;
 
 		std::vector<int> termList = m_onGetCompTerminalId(lv.compIdA);
+
+		// Il deviatore ha 3 terminali che NON si raggruppano a coppie disgiunte
+		// (0,1)/(2,3): il comune (0) è condiviso dai due rami via1/via2, quindi va
+		// gestito a parte. Il tap sul comune raccoglie la somma dei due rami (accumulo
+		// KCL sul nodo interno: quello inattivo vale ~0), ognuna delle due vie ha
+		// invece la propria corrente di ramo — stesso segno "term pari = -current"
+		// del caso generico sotto, applicato via per via.
+		if (m_onGetComponentTypeById(lv.compIdA) == ComponentType::changeoverSwitch)
+		{
+			double currentVia1 = m_simulationOutput.currentBranch[{termList[0], termList[1], lv.compIdA}];
+			double currentVia2 = m_simulationOutput.currentBranch[{termList[0], termList[2], lv.compIdA}];
+			if (lv.termIndexA == 0)
+				m_linkViewCurrentList[lv.id] = -(currentVia1 + currentVia2);
+			else if (lv.termIndexA == 1)
+				m_linkViewCurrentList[lv.id] = currentVia1;
+			else
+				m_linkViewCurrentList[lv.id] = currentVia2;
+			continue;
+		}
+
 		// I terminali sono raggruppati a coppie (0,1), (2,3), ...: ogni coppia è un
 		// "ramo" con corrente propria e indipendente dalle altre (es. primario e
 		// secondario di un trasformatore). Il tap di termIndexA usa la sua coppia,
