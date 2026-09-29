@@ -68,7 +68,11 @@ namespace CircuitLab {
 		draggingComponent,
 		draggingNodeView,
 		linkSelected,
-		nodeViewSelected
+		nodeViewSelected,
+		// Trascinamento in blocco di un gruppo di componenti selezionato con il
+		// rettangolo (vedi UI::m_selectedComponentIds); compId identifica quale
+		// componente del gruppo fa da "ancora" per calcolare lo spostamento.
+		draggingSelection
 	};
 
 	// Tiene traccia del componente (o terminale) attualmente selezionato.

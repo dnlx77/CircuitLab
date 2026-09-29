@@ -470,6 +470,40 @@ void CircuitLab::UI::UpdateNodeViewLinkIds(int nodeViewId, std::vector<int> link
 		}
 }
 
+void CircuitLab::UI::DeleteComponent(int id)
+{
+	// Rimuove la vista del componente
+	m_componentViewList.erase(
+		std::remove_if(m_componentViewList.begin(), m_componentViewList.end(),
+			[id](const ComponentView &cw) {
+				return cw.GetComponentLink() == id;
+			}),
+		m_componentViewList.end()
+	);
+
+	// Se è un Ground, si ricordano i terminali collegati con lui (nel disegno)
+	// prima di toglierlo: quelli che restano uniti tra loro senza nessun'altra
+	// massa vanno staccati dallo 0 nel Circuit.
+	std::vector<TerminalRef> groundGroup;
+	if (m_onGetComponentTypeById(id) == ComponentType::ground)
+		for (int term = 0; term < 2; term++)
+		{
+			int nvId = m_graph.NodeViewIdOfTerminal(id, term);
+			if (nvId == -1)
+				continue;
+			for (const auto &terminal : m_graph.TerminalsInGroup(nvId))
+				if (terminal.first != id)
+					groundGroup.push_back(terminal);
+		}
+
+	// Toglie i fili e i NodeView del componente; i terminali degli altri
+	// componenti rimasti senza più fili tornano liberi anche nel Circuit.
+	FreeTerminals(m_graph.RemoveComponent(id));
+	DetachSurvivingGroupsFromGround(groundGroup);
+
+	m_onDeleteComponent(id);
+}
+
 void CircuitLab::UI::PlaceNewComponent(ComponentType type, sf::Vector2i pos)
 {
 	int id = m_onCircuitChange(type);
@@ -500,7 +534,7 @@ void CircuitLab::UI::HandleEvents()
 			sf::Vector2i pixelPos = mouseEvent->position;
 			auto pos = WorldPos(pixelPos);
 
-			if (mouseEvent->button == sf::Mouse::Button::Left && (m_selectedComponent.state != SelectionState::draggingComponent && m_selectedComponent.state != SelectionState::draggingNodeView))
+			if (mouseEvent->button == sf::Mouse::Button::Left && (m_selectedComponent.state != SelectionState::draggingComponent && m_selectedComponent.state != SelectionState::draggingNodeView && m_selectedComponent.state != SelectionState::draggingSelection))
 			{
 				// Aggiunta componenti con tasto modificatore + click
 				bool placedNode = false;
@@ -549,6 +583,13 @@ void CircuitLab::UI::HandleEvents()
 				// sotto che gestisce il secondo click.
 				if (!placedNode && m_selectedComponent.state != SelectionState::terminalSelected && m_selectedComponent.state != SelectionState::linkSelected && m_selectedComponent.state != SelectionState::nodeViewSelected && !ImGui::GetIO().WantCaptureMouse)
 				{
+					// Un click "fresco" (non il secondo di un collegamento) abbandona
+					// sempre la selezione multipla precedente: se cade su spazio vuoto,
+					// deseleziona (comportamento di sempre); se diventa un trascinamento
+					// vero, il rilascio qui sotto la ripopola con quella nuova.
+					m_selectedComponentIds.clear();
+					m_selectedNodeViewIds.clear();
+
 					CheckClick(pos, m_selectedComponent);
 
 					// Un interruttore (o un deviatore) si apre/chiude, o cambia via,
@@ -560,6 +601,17 @@ void CircuitLab::UI::HandleEvents()
 						IsToggleableByClick(m_onGetComponentTypeById(m_selectedComponent.compId)))
 					{
 						m_onToggleSwitch(m_selectedComponent.compId);
+					}
+					else if (m_selectedComponent.state == SelectionState::none)
+					{
+						// Click su spazio vuoto: potrebbe diventare un trascinamento a
+						// rettangolo (selezione multipla). Si comincia a tracciarlo già da
+						// qui; se al rilascio il rettangolo è troppo piccolo per essere un
+						// vero trascinamento, non selezionerà nulla (identico a un semplice
+						// click, che deve solo deselezionare — vedi sopra).
+						m_selectingRect = true;
+						m_selectionRectStart = sf::Vector2f(static_cast<float>(pos.x), static_cast<float>(pos.y));
+						m_selectionRectCurrent = m_selectionRectStart;
 					}
 				}
 				else if (!placedNode && !ImGui::GetIO().WantCaptureMouse &&
@@ -604,11 +656,53 @@ void CircuitLab::UI::HandleEvents()
 				bool ctrlHeld = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) ||
 					sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl);
 
-				if (ctrlHeld && m_selectedComponent.state == SelectionState::linkSelected)
+				// Il click è caduto su un componente o un NodeView libero che fa già
+				// parte della selezione multipla (rettangolo)? Allora si trascina
+				// l'intero gruppo, non solo lui: vedi il ramo draggingSelection qui
+				// sotto e in MouseMoved. m_selectedComponent.compId/nodeViewId (uno
+				// dei due resta -1) identifica quale dei due è l'"ancora" del gruppo.
+				bool clickedInSelection =
+					(!m_selectedComponentIds.empty() &&
+						(m_selectedComponent.state == SelectionState::componentSelected ||
+							m_selectedComponent.state == SelectionState::terminalSelected) &&
+						std::find(m_selectedComponentIds.begin(), m_selectedComponentIds.end(), m_selectedComponent.compId) != m_selectedComponentIds.end()) ||
+					(!m_selectedNodeViewIds.empty() &&
+						m_selectedComponent.state == SelectionState::nodeViewSelected &&
+						std::find(m_selectedNodeViewIds.begin(), m_selectedNodeViewIds.end(), m_selectedComponent.nodeViewId) != m_selectedNodeViewIds.end());
+
+				if (clickedInSelection)
+				{
+					// L'ancora (il componente o il NodeView sotto il click) fa da
+					// riferimento: in MouseMoved lo spostamento si calcola su di lei e
+					// si applica identico a tutto il resto del gruppo, per mantenerne
+					// la disposizione relativa.
+					if (m_selectedComponent.compId != -1)
+					{
+						for (auto const &comp : m_componentViewList)
+							if (comp.GetComponentLink() == m_selectedComponent.compId)
+							{
+								m_compClickOffset.x = pos.x - comp.GetPosition().x;
+								m_compClickOffset.y = pos.y - comp.GetPosition().y;
+							}
+					}
+					else
+					{
+						for (auto const &nv : m_nodeViewList)
+							if (nv.id == m_selectedComponent.nodeViewId)
+							{
+								m_compClickOffset.x = pos.x - nv.position.x;
+								m_compClickOffset.y = pos.y - nv.position.y;
+							}
+					}
+					m_selectedComponent.state = SelectionState::draggingSelection;
+				}
+				else if (ctrlHeld && m_selectedComponent.state == SelectionState::linkSelected)
 				{
 					// Split: Ctrl+drag destro su un filo lo stacca dal suo NodeView
 					// in un nuovo hub (stesso nodo elettrico, nessuna chiamata al
 					// Circuit), e inizia subito a trascinarlo come un nodo normale.
+					m_selectedComponentIds.clear();
+					m_selectedNodeViewIds.clear();
 					int newNodeViewId = m_graph.InsertNodeOnBusEdge(m_selectedComponent.linkId, m_selectedComponent.clickPos);
 					if (newNodeViewId != -1)
 					{
@@ -629,6 +723,10 @@ void CircuitLab::UI::HandleEvents()
 				else if (m_selectedComponent.state == SelectionState::componentSelected ||
 					m_selectedComponent.state == SelectionState::terminalSelected)
 				{
+					// Un componente fuori dal gruppo selezionato abbandona la selezione
+					// multipla (stessa logica del click sinistro, vedi sopra).
+					m_selectedComponentIds.clear();
+					m_selectedNodeViewIds.clear();
 					for (auto const &comp : m_componentViewList)
 						if (comp.GetComponentLink() == m_selectedComponent.compId)
 						{
@@ -639,6 +737,8 @@ void CircuitLab::UI::HandleEvents()
 				}
 				else if (m_selectedComponent.state == SelectionState::nodeViewSelected)
 				{
+					m_selectedComponentIds.clear();
+					m_selectedNodeViewIds.clear();
 					for (auto const &nv : m_nodeViewList)
 						if (nv.id == m_selectedComponent.nodeViewId)
 						{
@@ -664,6 +764,9 @@ void CircuitLab::UI::HandleEvents()
 			auto pos = WorldPos(mouseMovedEvent->position);
 			Vec2 newPos;
 
+			if (m_selectingRect)
+				m_selectionRectCurrent = sf::Vector2f(static_cast<float>(pos.x), static_cast<float>(pos.y));
+
 			// Il trascinamento resta confinato alla porzione di mondo oggi visibile
 			// (prima coincideva con [0, larghezza canvas] x [0, altezza]).
 			const sf::Vector2f viewHalf = m_view.getSize() / 2.0f;
@@ -683,6 +786,65 @@ void CircuitLab::UI::HandleEvents()
 					}
 
 				UpdateLinksForComponent(m_selectedComponent.compId);
+			}
+			else if (m_selectedComponent.state == SelectionState::draggingSelection)
+			{
+				newPos.x = std::clamp(pos.x - m_compClickOffset.x, viewMin.x, viewMax.x);
+				newPos.y = std::clamp(pos.y - m_compClickOffset.y, viewMin.y, viewMax.y);
+
+				// Si sposta l'intero gruppo di UNA distanza sola (delta), non un
+				// componente/nodo alla volta ciascuno con il proprio snap: quest'ultimo
+				// romperebbe le distanze relative tra loro, agganciando ciascuno alla
+				// griglia più vicina indipendentemente dagli altri. Il delta si ricava
+				// dallo spostamento dell'"ancora" sotto il click, che può essere un
+				// componente o un NodeView libero (vedi il ramo Right/clickedInSelection
+				// sopra: solo uno dei due id è valorizzato).
+				sf::Vector2f anchorPos;
+				if (m_selectedComponent.compId != -1)
+				{
+					for (const auto &cw : m_componentViewList)
+						if (cw.GetComponentLink() == m_selectedComponent.compId)
+							anchorPos = { cw.GetPosition().x, cw.GetPosition().y };
+				}
+				else
+				{
+					for (const auto &nv : m_nodeViewList)
+						if (nv.id == m_selectedComponent.nodeViewId)
+							anchorPos = nv.position;
+				}
+
+				const sf::Vector2f snappedAnchor = SnapToGrid(sf::Vector2f(newPos.x, newPos.y));
+				const sf::Vector2f delta(snappedAnchor.x - anchorPos.x, snappedAnchor.y - anchorPos.y);
+
+				for (auto &cw : m_componentViewList)
+				{
+					if (std::find(m_selectedComponentIds.begin(), m_selectedComponentIds.end(), cw.GetComponentLink()) == m_selectedComponentIds.end())
+						continue;
+
+					cw.SetPosition(Vec2(cw.GetPosition().x + delta.x, cw.GetPosition().y + delta.y));
+					UpdateLinksForComponent(cw.GetComponentLink());
+				}
+
+				// Gli altri NodeView del gruppo (liberi, o ancorati il cui componente
+				// NON è anche lui nel gruppo) si spostano allo stesso modo. Un
+				// ancorato il cui componente è anch'esso selezionato va invece
+				// SALTATO: lo ha già spostato il loop sopra (via UpdateLinksForComponent
+				// -> MoveTerminal), e rifarlo qui lo sposterebbe due volte. Un
+				// ancorato "orfano" dal gruppo si stacca dal terminale esattamente
+				// come nel trascinamento singolo: il filo verso il terminale diventa visibile.
+				for (const auto &nv : m_nodeViewList)
+				{
+					if (std::find(m_selectedNodeViewIds.begin(), m_selectedNodeViewIds.end(), nv.id) == m_selectedNodeViewIds.end())
+						continue;
+
+					bool followsSelectedComponent = nv.attached && nv.anchorCompId != -1 &&
+						std::find(m_selectedComponentIds.begin(), m_selectedComponentIds.end(), nv.anchorCompId) != m_selectedComponentIds.end();
+					if (followsSelectedComponent)
+						continue;
+
+					m_graph.DetachIfAnchored(nv.id);
+					UpdateLinksForNodeView(nv.id, sf::Vector2f(nv.position.x + delta.x, nv.position.y + delta.y));
+				}
 			}
 			else if (m_selectedComponent.state == SelectionState::draggingNodeView)
 			{
@@ -743,44 +905,65 @@ void CircuitLab::UI::HandleEvents()
 			}
 			else if (mouseReleasedEvent->button == sf::Mouse::Button::Middle)
 				m_panning = false;
-		}
-		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete) && (m_selectedComponent.state != SelectionState::draggingComponent && m_selectedComponent.state != SelectionState::draggingNodeView))
-		{
-			// Eliminazione con tasto Delete
-			if (m_selectedComponent.state == SelectionState::componentSelected)
+			else if (mouseReleasedEvent->button == sf::Mouse::Button::Left && m_selectingRect)
 			{
-				int id = m_selectedComponent.compId;
+				m_selectingRect = false;
 
-				// Rimuove la vista del componente
-				m_componentViewList.erase(
-					std::remove_if(m_componentViewList.begin(), m_componentViewList.end(),
-						[id](const ComponentView &cw) {
-							return cw.GetComponentLink() == id;
-						}),
-					m_componentViewList.end()
-				);
+				const sf::Vector2f rectMin(std::min(m_selectionRectStart.x, m_selectionRectCurrent.x), std::min(m_selectionRectStart.y, m_selectionRectCurrent.y));
+				const sf::Vector2f rectMax(std::max(m_selectionRectStart.x, m_selectionRectCurrent.x), std::max(m_selectionRectStart.y, m_selectionRectCurrent.y));
 
-				// Se è un Ground, si ricordano i terminali collegati con lui (nel
-				// disegno) prima di toglierlo: quelli che restano uniti tra loro senza
-				// nessun'altra massa vanno staccati dallo 0 nel Circuit.
-				std::vector<TerminalRef> groundGroup;
-				if (m_onGetComponentTypeById(id) == ComponentType::ground)
-					for (int term = 0; term < 2; term++)
+				// Sotto questa soglia (in unità mondo, come NODE_DRAG_THRESHOLD) non è
+				// un vero trascinamento ma il tremolio di un semplice click: niente da
+				// selezionare (il click ha già deselezionato tutto, vedi sopra).
+				const float threshold = NODE_DRAG_THRESHOLD / m_zoom;
+				if (rectMax.x - rectMin.x >= threshold || rectMax.y - rectMin.y >= threshold)
+				{
+					// Un componente è "dentro" il rettangolo se il suo centro lo è:
+					// più semplice e robusto di un test sul rettangolo ruotato del
+					// corpo, e sufficiente per selezionare a mano libera un gruppo.
+					for (const auto &cw : m_componentViewList)
 					{
-						int nvId = m_graph.NodeViewIdOfTerminal(id, term);
-						if (nvId == -1)
-							continue;
-						for (const auto &terminal : m_graph.TerminalsInGroup(nvId))
-							if (terminal.first != id)
-								groundGroup.push_back(terminal);
+						const Vec2 &p = cw.GetPosition();
+						if (p.x >= rectMin.x && p.x <= rectMax.x && p.y >= rectMin.y && p.y <= rectMax.y)
+							m_selectedComponentIds.push_back(cw.GetComponentLink());
 					}
 
-				// Toglie i fili e i NodeView del componente; i terminali degli altri
-				// componenti rimasti senza più fili tornano liberi anche nel Circuit.
-				FreeTerminals(m_graph.RemoveComponent(id));
-				DetachSurvivingGroupsFromGround(groundGroup);
+					// Qualunque NodeView, ancorato o libero: un pallino visibile dentro il
+					// rettangolo si aspetta di essere selezionato, indipendentemente dal
+					// fatto che segua già un terminale. Il trascinamento (vedi
+					// draggingSelection in MouseMoved) distingue i due casi da solo, per
+					// non spostare due volte un nodo il cui componente è anch'esso nel gruppo.
+					for (const auto &nv : m_nodeViewList)
+					{
+						if (nv.position.x >= rectMin.x && nv.position.x <= rectMax.x && nv.position.y >= rectMin.y && nv.position.y <= rectMax.y)
+							m_selectedNodeViewIds.push_back(nv.id);
+					}
+				}
+			}
+		}
+		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete) && (m_selectedComponent.state != SelectionState::draggingComponent && m_selectedComponent.state != SelectionState::draggingNodeView && m_selectedComponent.state != SelectionState::draggingSelection))
+		{
+			// Eliminazione con tasto Delete
+			if (!m_selectedComponentIds.empty() || !m_selectedNodeViewIds.empty())
+			{
+				// Cancella l'intero gruppo selezionato (componenti e NodeView liberi):
+				// stessa procedura del singolo elemento qui sotto, una volta per
+				// ciascuno (vedi DeleteComponent e il ramo nodeViewSelected).
+				for (int id : m_selectedComponentIds)
+					DeleteComponent(id);
+				for (int id : m_selectedNodeViewIds)
+					FreeTerminals(m_graph.RemoveFreeNodeView(id));
+				m_selectedComponentIds.clear();
+				m_selectedNodeViewIds.clear();
 
-				m_onDeleteComponent(id);
+				m_selectedComponent.state = SelectionState::none;
+				m_selectedComponent.compId = -1;
+				m_selectedComponent.terminalIndex = -1;
+				m_selectedComponent.nodeViewId = -1;
+			}
+			else if (m_selectedComponent.state == SelectionState::componentSelected)
+			{
+				DeleteComponent(m_selectedComponent.compId);
 
 				// Reset selezione
 				m_selectedComponent.state = SelectionState::none;
@@ -1154,10 +1337,14 @@ void CircuitLab::UI::DrawComponents()
 	{
 		ComponentDesign des = comp.GetComponetDesign();
 
-		// Selezionato = corpo (non terminale) del componente corrente
-		bool isSelected = comp.GetComponentLink() == m_selectedComponent.compId &&
-			m_selectedComponent.terminalIndex == -1 &&
-			m_selectedComponent.state == SelectionState::componentSelected;
+		// Selezionato = corpo (non terminale) del componente corrente, oppure
+		// parte del gruppo scelto col rettangolo (resta evidenziato anche durante
+		// il trascinamento in blocco, che non tocca m_selectedComponentIds).
+		bool isMultiSelected = std::find(m_selectedComponentIds.begin(), m_selectedComponentIds.end(), comp.GetComponentLink()) != m_selectedComponentIds.end();
+		bool isSelected = isMultiSelected ||
+			(comp.GetComponentLink() == m_selectedComponent.compId &&
+				m_selectedComponent.terminalIndex == -1 &&
+				m_selectedComponent.state == SelectionState::componentSelected);
 		sf::Color symbolColor = isSelected ? sf::Color::Yellow : sf::Color::White;
 
 		WaveFormType waveForm = (comp.GetComponentType() == ComponentType::voltageGenerator && m_onGetWaveFormType)
@@ -1276,8 +1463,11 @@ void CircuitLab::UI::DrawNodes()
 		node.setOrigin({ NODE_RADIUS, NODE_RADIUS });
 		node.setPosition(nv.position);
 
-		// Outline giallo se questo nodo è selezionato
-		if (nv.id == m_selectedComponent.nodeViewId && m_selectedComponent.state == SelectionState::nodeViewSelected)
+		// Outline giallo se questo nodo è selezionato, singolarmente o come parte
+		// del gruppo (resta evidenziato anche durante il trascinamento in blocco,
+		// che non tocca m_selectedNodeViewIds).
+		bool isMultiSelected = std::find(m_selectedNodeViewIds.begin(), m_selectedNodeViewIds.end(), nv.id) != m_selectedNodeViewIds.end();
+		if (isMultiSelected || (nv.id == m_selectedComponent.nodeViewId && m_selectedComponent.state == SelectionState::nodeViewSelected))
 		{
 			node.setOutlineColor(sf::Color::Yellow);
 			node.setOutlineThickness(OUTLINE_THICKNESS);
@@ -2302,6 +2492,22 @@ void CircuitLab::UI::DrawGrid()
 	m_window.draw(lines);
 }
 
+void CircuitLab::UI::DrawSelectionRect()
+{
+	if (!m_selectingRect)
+		return;
+
+	const sf::Vector2f rectMin(std::min(m_selectionRectStart.x, m_selectionRectCurrent.x), std::min(m_selectionRectStart.y, m_selectionRectCurrent.y));
+	const sf::Vector2f rectMax(std::max(m_selectionRectStart.x, m_selectionRectCurrent.x), std::max(m_selectionRectStart.y, m_selectionRectCurrent.y));
+
+	sf::RectangleShape rect(rectMax - rectMin);
+	rect.setPosition(rectMin);
+	rect.setFillColor(sf::Color(100, 150, 255, 40));
+	rect.setOutlineColor(sf::Color(100, 150, 255, 200));
+	rect.setOutlineThickness(1.0f / m_zoom);
+	m_window.draw(rect);
+}
+
 // Shutdown di ImGui-SFML alla distruzione della UI
 CircuitLab::UI::~UI()
 {
@@ -2522,6 +2728,10 @@ void CircuitLab::UI::Clear()
 	m_selectedComponent.clickPos = sf::Vector2f(0.0f, 0.0f);
 	m_linkViewIdCount = 0;
 	m_nodeViewCount = 0;
+
+	m_selectedComponentIds.clear();
+	m_selectedNodeViewIds.clear();
+	m_selectingRect = false;
 }
 
 void CircuitLab::UI::Render()
@@ -2553,6 +2763,8 @@ void CircuitLab::UI::Render()
 		UpdateParticles(dt.asSeconds());
 
 	DrawWires();
+
+	DrawSelectionRect();
 
 	m_window.setView(sf::View(sf::FloatRect({ 0.0f, 0.0f }, { static_cast<float>(m_width), static_cast<float>(m_heigth) })));
 

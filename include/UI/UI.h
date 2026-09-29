@@ -185,6 +185,19 @@ namespace CircuitLab {
 
 		sf::Vector2f m_compClickOffset;
 
+		// Selezione multipla (rettangolo di gomma, tasto sinistro trascinato da
+		// spazio vuoto): gli ID dei componenti e dei NodeView LIBERI (non i
+		// pallini ancorati a un terminale, che seguono già il loro componente da
+		// soli) attualmente selezionati in blocco, trascinabili insieme
+		// (SelectionState::draggingSelection, vedi HandleEvents) e cancellabili
+		// insieme (tasto Delete). Indipendente da m_selectedComponent, che resta
+		// lo stato della selezione SINGOLA.
+		std::vector<int> m_selectedComponentIds;
+		std::vector<int> m_selectedNodeViewIds;
+		bool m_selectingRect = false;             // true mentre si sta trascinando il rettangolo
+		sf::Vector2f m_selectionRectStart;         // angolo del rettangolo dove è iniziato il trascinamento (coordinate mondo)
+		sf::Vector2f m_selectionRectCurrent;       // angolo opposto, aggiornato ad ogni MouseMoved (coordinate mondo)
+
 		// Icone pre-renderizzate (una per tipo di componente della palette, vedi
 		// DrawComponentPalette) su una piccola RenderTexture: il simbolo è statico
 		// (nessuna posa dipende dallo stato di un'istanza reale), quindi si
@@ -271,6 +284,17 @@ namespace CircuitLab {
 
 		// Disegna le linee della griglia sull'area di mondo visibile
 		void DrawGrid();
+
+		// Disegna il rettangolo di selezione multipla mentre lo si sta trascinando
+		// (vedi m_selectingRect), in coordinate mondo come il resto del canvas.
+		void DrawSelectionRect();
+
+		// Rimuove il componente id dal canvas e dal circuito: vista, fili/NodeView
+		// collegati (con la cascata di pulizia già gestita da WireGraph) e il
+		// componente stesso nel Circuit. Estratto dalla gestione del tasto Delete
+		// per poterlo applicare una volta per ogni componente di un gruppo
+		// selezionato, non solo alla selezione singola.
+		void DeleteComponent(int id);
 
 		// Disegna il pannello laterale ImGui (proprietà componente selezionato, oscilloscopio, save/load)
 		void DrawImageGuiPanel();
