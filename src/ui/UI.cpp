@@ -506,6 +506,8 @@ void CircuitLab::UI::DeleteComponent(int id)
 
 void CircuitLab::UI::PlaceNewComponent(ComponentType type, sf::Vector2i pos)
 {
+	if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+
 	int id = m_onCircuitChange(type);
 	AddViewComponent(id, ComponentDisplayName(type), type, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
 	SnapComponentToGrid(m_componentViewList.back());
@@ -600,6 +602,7 @@ void CircuitLab::UI::HandleEvents()
 					if (m_selectedComponent.state == SelectionState::componentSelected &&
 						IsToggleableByClick(m_onGetComponentTypeById(m_selectedComponent.compId)))
 					{
+						if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
 						m_onToggleSwitch(m_selectedComponent.compId);
 					}
 					else if (m_selectedComponent.state == SelectionState::none)
@@ -672,6 +675,8 @@ void CircuitLab::UI::HandleEvents()
 
 				if (clickedInSelection)
 				{
+					if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+
 					// L'ancora (il componente o il NodeView sotto il click) fa da
 					// riferimento: in MouseMoved lo spostamento si calcola su di lei e
 					// si applica identico a tutto il resto del gruppo, per mantenerne
@@ -701,6 +706,7 @@ void CircuitLab::UI::HandleEvents()
 					// Split: Ctrl+drag destro su un filo lo stacca dal suo NodeView
 					// in un nuovo hub (stesso nodo elettrico, nessuna chiamata al
 					// Circuit), e inizia subito a trascinarlo come un nodo normale.
+					if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
 					m_selectedComponentIds.clear();
 					m_selectedNodeViewIds.clear();
 					int newNodeViewId = m_graph.InsertNodeOnBusEdge(m_selectedComponent.linkId, m_selectedComponent.clickPos);
@@ -725,6 +731,7 @@ void CircuitLab::UI::HandleEvents()
 				{
 					// Un componente fuori dal gruppo selezionato abbandona la selezione
 					// multipla (stessa logica del click sinistro, vedi sopra).
+					if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
 					m_selectedComponentIds.clear();
 					m_selectedNodeViewIds.clear();
 					for (auto const &comp : m_componentViewList)
@@ -737,6 +744,7 @@ void CircuitLab::UI::HandleEvents()
 				}
 				else if (m_selectedComponent.state == SelectionState::nodeViewSelected)
 				{
+					if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
 					m_selectedComponentIds.clear();
 					m_selectedNodeViewIds.clear();
 					for (auto const &nv : m_nodeViewList)
@@ -943,9 +951,16 @@ void CircuitLab::UI::HandleEvents()
 		}
 		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete) && (m_selectedComponent.state != SelectionState::draggingComponent && m_selectedComponent.state != SelectionState::draggingNodeView && m_selectedComponent.state != SelectionState::draggingSelection))
 		{
-			// Eliminazione con tasto Delete
+			// Eliminazione con tasto Delete. Il tasto è controllato con isKeyPressed
+			// (vero ogni frame finché resta premuto, non solo alla pressione): ogni
+			// ramo qui sotto svuota la selezione che ha appena cancellato, quindi ai
+			// frame successivi nessuna condizione combacia più e non succede altro
+			// finché non si seleziona di nuovo qualcosa — l'undo va quindi spinto
+			// SOLO quando il ramo sta davvero per cancellare, non ad ogni frame.
 			if (!m_selectedComponentIds.empty() || !m_selectedNodeViewIds.empty())
 			{
+				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+
 				// Cancella l'intero gruppo selezionato (componenti e NodeView liberi):
 				// stessa procedura del singolo elemento qui sotto, una volta per
 				// ciascuno (vedi DeleteComponent e il ramo nodeViewSelected).
@@ -963,6 +978,7 @@ void CircuitLab::UI::HandleEvents()
 			}
 			else if (m_selectedComponent.state == SelectionState::componentSelected)
 			{
+				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
 				DeleteComponent(m_selectedComponent.compId);
 
 				// Reset selezione
@@ -979,13 +995,18 @@ void CircuitLab::UI::HandleEvents()
 				// filo): il filo torna un unico tratto.
 				int passThrough = m_graph.PassThroughNodeOfEdge(m_selectedComponent.linkId);
 				if (passThrough != -1)
+				{
+					if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
 					FreeTerminals(m_graph.RemoveFreeNodeView(passThrough));
+				}
 
 				m_selectedComponent.state = SelectionState::none;
 				m_selectedComponent.linkId = -1;
 			}
 			else if (m_selectedComponent.state == SelectionState::nodeViewSelected)
 			{
+				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+
 				// Si cancellano solo i nodi liberi (i loro vicini restano collegati tra
 				// loro). Il NodeView di un terminale sparisce insieme al suo componente.
 				FreeTerminals(m_graph.RemoveFreeNodeView(m_selectedComponent.nodeViewId));
@@ -998,6 +1019,8 @@ void CircuitLab::UI::HandleEvents()
 		{
 			if (m_selectedComponent.state == SelectionState::componentSelected && keyboardEvent->code == sf::Keyboard::Key::Q)
 			{
+				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+
 				for (auto &cw : m_componentViewList)
 					if (cw.GetComponentLink() == m_selectedComponent.compId)
 					{
@@ -1017,8 +1040,20 @@ void CircuitLab::UI::HandleEvents()
 				keyboardEvent->code == sf::Keyboard::Key::Space &&
 				IsToggleableByClick(m_onGetComponentTypeById(m_selectedComponent.compId)))
 			{
+				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
 				m_onToggleSwitch(m_selectedComponent.compId);
 			}
+
+			// Annulla/ripeti da tastiera, convenzione universale: Ctrl+Z annulla,
+			// Ctrl+Y (o Ctrl+Shift+Z, alternativa comune su alcuni editor) ripete.
+			bool ctrlHeld = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) ||
+				sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl);
+			bool shiftHeld = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) ||
+				sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
+			if (ctrlHeld && keyboardEvent->code == sf::Keyboard::Key::Z && !shiftHeld && m_onUndo)
+				m_onUndo();
+			else if (ctrlHeld && ((keyboardEvent->code == sf::Keyboard::Key::Z && shiftHeld) || keyboardEvent->code == sf::Keyboard::Key::Y) && m_onRedo)
+				m_onRedo();
 		}
 	}
 }
@@ -1188,6 +1223,25 @@ void CircuitLab::UI::DrawImageGuiPanel()
 		m_onLoad(pathBuffer);
 
 	ImGui::Separator();
+
+	bool canUndo = m_onCanUndo && m_onCanUndo();
+	bool canRedo = m_onCanRedo && m_onCanRedo();
+
+	ImGui::BeginDisabled(!canUndo);
+	if (ImGui::Button("Undo"))
+		m_onUndo();
+	ImGui::EndDisabled();
+
+	ImGui::SameLine();
+	ImGui::BeginDisabled(!canRedo);
+	if (ImGui::Button("Redo"))
+		m_onRedo();
+	ImGui::EndDisabled();
+
+	ImGui::SameLine();
+	ImGui::TextDisabled("(Ctrl+Z / Ctrl+Y)");
+
+	ImGui::Separator();
 	if (ImGui::Button(m_showOscilloscope ? "Hide Oscilloscope" : "Show Oscilloscope"))
 		m_showOscilloscope = !m_showOscilloscope;
 	ImGui::Separator();
@@ -1268,6 +1322,8 @@ void CircuitLab::UI::DrawImageGuiPanel()
 
 				if (edited)
 				{
+					if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+
 					Vec2 newPos;
 					newPos.x = posX;
 					newPos.y = posY;
@@ -1288,6 +1344,7 @@ void CircuitLab::UI::DrawImageGuiPanel()
 			ImGui::InputDouble(label.c_str(), &value, 0.0, 0.0, "%.6g");
 			if (ImGui::IsItemDeactivatedAfterEdit())
 			{
+				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
 				values.at(key) = value;
 				m_onSetComponentValues(m_selectedComponent.compId, values);
 			}
@@ -1318,7 +1375,10 @@ void CircuitLab::UI::DrawImageGuiPanel()
 					currentIndex = i;
 
 			if (ImGui::Combo("Waveform", &currentIndex, waveFormNames, waveFormCount))
+			{
+				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
 				m_onSetWaveFormType(m_selectedComponent.compId, waveFormValues[currentIndex]);
+			}
 		}
 
 	}
@@ -2599,6 +2659,14 @@ void CircuitLab::UI::DetachSurvivingGroupsFromGround(const std::vector<TerminalR
 
 void CircuitLab::UI::ConnectSelections(const SelecetedComponent &first, const SelecetedComponent &second)
 {
+	// Spinto qui, prima di ogni controllo di validità, perché la funzione ha
+	// due percorsi di mutazione indipendenti più sotto (il collegamento nel
+	// Circuit via m_onCreateLink, e la topologia visiva via resolve()/
+	// AddBusEdge) e un singolo punto sicuro per entrambi deve precederli tutti.
+	// Un secondo click che finisce rifiutato (stesso elemento, nodi già uniti,
+	// ...) spinge comunque una voce che si annulla su sé stessa: innocuo.
+	if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+
 	// NodeView che rappresenta il gruppo (il nodo elettrico) di un elemento
 	// selezionato, -1 se non ne ha ancora uno (un terminale mai collegato) o
 	// se l'elemento non esiste più.

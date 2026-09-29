@@ -1,6 +1,8 @@
 #pragma once
 #include <memory>
 #include <mutex>
+#include <deque>
+#include <nlohmann/json.hpp>
 #include "Core/Circuit.h"
 #include "Core/Solver.h"
 #include "Common/ComponentType.h"
@@ -50,6 +52,19 @@ namespace CircuitLab {
 		std::vector<Color> m_channelPalette;
 		int m_nextChannelColorIndex = 0;
 
+		// Undo/redo a snapshot: ogni voce è l'intero stato (componenti, link,
+		// viste) serializzato da IOManager::Serialize, lo stesso formato usato
+		// per salvare su file. Più semplice e robusto di un comando per ogni tipo
+		// di modifica (aggiungi, sposta, ruota, collega, cancella, modifica
+		// valore...): un solo punto di cattura/ripristino per tutti, a costo di
+		// più memoria per singolo passo — trascurabile per circuiti di queste
+		// dimensioni. UI chiama PushUndoSnapshot() PRIMA di ogni gesto utente che
+		// muta lo stato (vedi UI::m_onPushUndoSnapshot), mai dopo: è lì che serve
+		// lo stato PRECEDENTE alla modifica.
+		std::deque<nlohmann::json> m_undoStack;
+		std::deque<nlohmann::json> m_redoStack;
+		static constexpr size_t MAX_UNDO_STEPS = 100;
+
 		static constexpr double BATCH_TARGET_TIME = 0.010; // 10ms virtuali per batch
 		static constexpr int MAX_STEPS_PER_BATCH = 5000;   // anti-spirale della morte
 
@@ -74,6 +89,12 @@ namespace CircuitLab {
 		void SimulationLoop();
 		void RenderLoop();
 
+		// Resetta circuito e UI (stesso lavoro di New()) SENZA toccare le pile di
+		// undo/redo: usato da New() stesso e, separatamente, da Undo/Redo, che
+		// devono poter ricostruire lo stato senza svuotare le pile che stanno
+		// proprio maneggiando.
+		void ClearState();
+
 	public:
 		Application();
 		~Application();
@@ -97,6 +118,23 @@ namespace CircuitLab {
 
 		// Resetta il circuito e la UI allo stato iniziale (canvas vuoto)
 		void New();
+
+		// Cattura lo stato attuale in cima a m_undoStack e svuota m_redoStack
+		// (un nuovo gesto invalida i "ripeti" precedenti, come in qualunque
+		// editor). Chiamata dalla UI, tramite callback, PRIMA di ogni gesto che
+		// muta lo stato — mai dopo, altrimenti si catturerebbe già la modifica.
+		void PushUndoSnapshot();
+
+		// Annulla l'ultima modifica: sposta lo stato attuale su m_redoStack e
+		// ricostruisce quello in cima a m_undoStack. No-op se m_undoStack è vuoto.
+		void Undo();
+
+		// Ripete l'ultima modifica annullata: simmetrico di Undo, tra m_redoStack
+		// e m_undoStack. No-op se m_redoStack è vuoto.
+		void Redo();
+
+		bool CanUndo() const { return !m_undoStack.empty(); }
+		bool CanRedo() const { return !m_redoStack.empty(); }
 
 		// Avvia il loop principale dell'applicazione: lancia il thread di simulazione
 		// e gestisce il thread di rendering, che a sua volta delega a UI la gestione

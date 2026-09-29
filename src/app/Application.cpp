@@ -356,6 +356,12 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			return m_circuit->GetComponentById(compId)->IsSwitchClosed();
 		});
 
+	m_ui->SetOnPushUndoSnapshot([this]() { PushUndoSnapshot(); });
+	m_ui->SetOnUndo([this]() { Undo(); });
+	m_ui->SetOnRedo([this]() { Redo(); });
+	m_ui->SetOnCanUndo([this]() -> bool { return CanUndo(); });
+	m_ui->SetOnCanRedo([this]() -> bool { return CanRedo(); });
+
 	m_ui->SetOnGetComponentTypeById([this](int compId)->ComponentType
 		{
 			std::lock_guard<std::mutex> lock(m_circuitMutex);
@@ -878,13 +884,87 @@ void CircuitLab::Application::AddChannel(ProbeType type, int idA, int idB, int c
 	m_channels.push_back(std::move(channel));
 }
 
-void CircuitLab::Application::New()
+void CircuitLab::Application::ClearState()
 {
 	{
 		std::lock_guard<std::mutex> lock(m_circuitMutex);
 		m_circuit->Clear();
 	}
 	m_ui->Clear();
+}
+
+void CircuitLab::Application::New()
+{
+	ClearState();
+
+	// Un documento nuovo (o un altro file caricato, che passa da qui via
+	// m_onNew) non ha più senso rispetto alla cronologia di annulla/ripeti del
+	// documento precedente.
+	m_undoStack.clear();
+	m_redoStack.clear();
+}
+
+void CircuitLab::Application::PushUndoSnapshot()
+{
+	nlohmann::json snapshot;
+	{
+		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		snapshot = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList(), m_ui->GetNodeViewList());
+	}
+
+	m_undoStack.push_back(std::move(snapshot));
+	if (m_undoStack.size() > MAX_UNDO_STEPS)
+		m_undoStack.pop_front();
+
+	// Un nuovo gesto rende non ripetibili le modifiche annullate finora, come
+	// in qualunque editor: si annulla, si cambia idea e si fa qualcos'altro, i
+	// vecchi "ripeti" non hanno più senso (porterebbero a uno stato che non
+	// segue più da quello attuale).
+	m_redoStack.clear();
+}
+
+void CircuitLab::Application::Undo()
+{
+	if (m_undoStack.empty())
+		return;
+
+	nlohmann::json current;
+	{
+		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		current = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList(), m_ui->GetNodeViewList());
+	}
+	m_redoStack.push_back(std::move(current));
+	if (m_redoStack.size() > MAX_UNDO_STEPS)
+		m_redoStack.pop_front();
+
+	nlohmann::json snapshot = std::move(m_undoStack.back());
+	m_undoStack.pop_back();
+
+	// ClearState(), non New(): quest'ultimo svuoterebbe anche le due pile che
+	// si sta proprio maneggiando.
+	ClearState();
+	m_ioManager->Deserialize(snapshot);
+}
+
+void CircuitLab::Application::Redo()
+{
+	if (m_redoStack.empty())
+		return;
+
+	nlohmann::json current;
+	{
+		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		current = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList(), m_ui->GetNodeViewList());
+	}
+	m_undoStack.push_back(std::move(current));
+	if (m_undoStack.size() > MAX_UNDO_STEPS)
+		m_undoStack.pop_front();
+
+	nlohmann::json snapshot = std::move(m_redoStack.back());
+	m_redoStack.pop_back();
+
+	ClearState();
+	m_ioManager->Deserialize(snapshot);
 }
 
 // Delega il loop principale alla UI

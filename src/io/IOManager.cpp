@@ -3,7 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 
-void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circuit &circ, const std::vector<ComponentView> &compsView, const std::vector<LinkView> &linksView, const std::vector<NodeView> &nodesView)
+nlohmann::json CircuitLab::IOManager::Serialize(const Circuit &circ, const std::vector<ComponentView> &compsView, const std::vector<LinkView> &linksView, const std::vector<NodeView> &nodesView) const
 {
 	nlohmann::json j;
 	j["components"] = nlohmann::json::array();
@@ -82,6 +82,13 @@ void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circui
 	// (un hub per collegamento) e vengono convertiti al caricamento.
 	j["nodeModel"] = 2;
 
+	return j;
+}
+
+void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circuit &circ, const std::vector<ComponentView> &compsView, const std::vector<LinkView> &linksView, const std::vector<NodeView> &nodesView)
+{
+	nlohmann::json j = Serialize(circ, compsView, linksView, nodesView);
+
 	std::ofstream o(filePath);
 	if (!o.is_open())
 	{
@@ -91,25 +98,11 @@ void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circui
 	o << j.dump(4) << std::endl;
 }
 
-
-void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
+void CircuitLab::IOManager::Deserialize(const nlohmann::json &j)
 {
-	std::ifstream i(filePath);
-	if (!i.is_open())
-	{
-		LOG_ERROR("Errore nell'apertura del file " << filePath);
-		return;
-	}
-
-	nlohmann::json j;
-	i >> j;
-
-	// Resetta il circuito e la UI prima di ricaricare
-	m_onNew();
-
-	// Mappe savedId -> newId: gli ID nel file JSON sono quelli del momento
-	// in cui il circuito è stato salvato. Alla ricarica, gli oggetti ricevono
-	// nuovi ID progressivi. Queste mappe traducono i riferimenti salvati.
+	// Mappe savedId -> newId: gli ID nel JSON sono quelli del momento in cui è
+	// stato costruito. Alla ricostruzione, gli oggetti ricevono nuovi ID
+	// progressivi. Queste mappe traducono i riferimenti salvati.
 	// Nota: nonostante il prefisso "m_", sono variabili locali, non membri della classe.
 	std::map<int, int> loadVsRealNodeMap;
 	std::map<int, int> loadVsRealNodeViewMap;
@@ -199,4 +192,22 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 	// lo si converte in un NodeView per terminale con fili come tratti di bus.
 	if (!j.contains("nodeModel") && m_onConvertLegacyNodeViews)
 		m_onConvertLegacyNodeViews();
+}
+
+void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
+{
+	std::ifstream i(filePath);
+	if (!i.is_open())
+	{
+		LOG_ERROR("Errore nell'apertura del file " << filePath);
+		return;
+	}
+
+	nlohmann::json j;
+	i >> j;
+
+	// Resetta il circuito e la UI prima di ricaricare
+	m_onNew();
+
+	Deserialize(j);
 }

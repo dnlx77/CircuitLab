@@ -62,14 +62,26 @@ namespace CircuitLab {
 		fnComponentLoadData m_onComponentLoadData;
 
 	public:
+		// Costruisce in memoria lo stesso JSON che SaveToFile scrive su disco
+		// (componenti, link, viste). Usata sia da SaveToFile sia dall'undo/redo di
+		// Application, che tiene gli snapshot in RAM invece che su file.
+		nlohmann::json Serialize(const Circuit &circ, const std::vector<ComponentView> &compsView, const std::vector<LinkView> &linksView, const std::vector<NodeView> &nodesView) const;
+
+		// Ricostruisce il circuito e la UI da un JSON già in memoria (stesso formato
+		// di Serialize/LoadFromFile), tramite le callback. Non chiama m_onNew: chi
+		// chiama deve aver già azzerato lo stato precedente (LoadFromFile lo fa da
+		// sé; Application::Undo/Redo chiamano New() esplicitamente prima, per poter
+		// distinguere "reset per caricare un file" da "reset per un annulla/ripeti").
+		// Gestisce il remapping degli ID: quelli nel JSON non corrispondono
+		// necessariamente a quelli assegnati a runtime, quindi viene mantenuta
+		// una mappa savedId -> newId per tradurre i riferimenti nei link.
+		void Deserialize(const nlohmann::json &j);
+
 		// Serializza l'intero stato del circuito (componenti, link, viste) in un file JSON.
 		// Il file viene creato o sovrascritto al percorso indicato da filePath.
 		void SaveToFile(const std::string &filePath, const Circuit &circ, const std::vector<ComponentView> &compsView, const std::vector<LinkView> &linksView, const std::vector<NodeView> &nodesView);
 
 		// Deserializza un file JSON e ricostruisce il circuito e la UI tramite le callback.
-		// Gestisce il remapping degli ID: gli ID salvati nel file non corrispondono
-		// necessariamente a quelli assegnati a runtime, quindi viene mantenuta
-		// una mappa savedId -> newId per tradurre i riferimenti nei link.
 		void LoadFromFile(const std::string &filePath);
 
 		// Setter per le callback - chiamati da Application nel costruttore

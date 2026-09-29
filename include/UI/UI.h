@@ -59,6 +59,17 @@ namespace CircuitLab {
 		using fnGetSimulationTime = std::function<double()>;
 		using fnGetDecimationFactor = std::function<int()>;
 		using fnGetMaxFrequency = std::function<double()>;
+
+		// Undo/redo (vedi Application::PushUndoSnapshot/Undo/Redo): la UI chiama
+		// fnPushUndoSnapshot PRIMA di ogni gesto che muta lo stato (piazzare,
+		// cancellare, spostare, ruotare, collegare, cambiare un valore...), mai
+		// dopo. fnCanUndo/fnCanRedo servono solo a disabilitare i pulsanti nel
+		// pannello quando non c'è nulla da annullare/ripetere.
+		using fnPushUndoSnapshot = std::function<void()>;
+		using fnUndo = std::function<void()>;
+		using fnRedo = std::function<void()>;
+		using fnCanUndo = std::function<bool()>;
+		using fnCanRedo = std::function<bool()>;
 		
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
@@ -239,6 +250,11 @@ namespace CircuitLab {
 		fnGetSimulationTime m_onGetSimulationTime;
 		fnGetDecimationFactor m_onGetDecimationFactor;
 		fnGetMaxFrequency m_onGetMaxFrequency;
+		fnPushUndoSnapshot m_onPushUndoSnapshot;
+		fnUndo m_onUndo;
+		fnRedo m_onRedo;
+		fnCanUndo m_onCanUndo;
+		fnCanRedo m_onCanRedo;
 
 		// Determina quale componente o terminale è stato cliccato nella posizione pos.
 		// Aggiorna selComp con il risultato.
@@ -401,6 +417,11 @@ namespace CircuitLab {
 		void SetOnGetSimulationTime(const fnGetSimulationTime &func) { m_onGetSimulationTime = func; }
 		void SetOnGetDecimationFactor(const fnGetDecimationFactor &func) { m_onGetDecimationFactor = func; }
 		void SetOnGetMaxFrequency(const fnGetMaxFrequency &func) { m_onGetMaxFrequency = func; }
+		void SetOnPushUndoSnapshot(const fnPushUndoSnapshot &func) { m_onPushUndoSnapshot = func; }
+		void SetOnUndo(const fnUndo &func) { m_onUndo = func; }
+		void SetOnRedo(const fnRedo &func) { m_onRedo = func; }
+		void SetOnCanUndo(const fnCanUndo &func) { m_onCanUndo = func; }
+		void SetOnCanRedo(const fnCanRedo &func) { m_onCanRedo = func; }
 
 		// Aggiunge la vista grafica di un componente al canvas
 		void AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation);
