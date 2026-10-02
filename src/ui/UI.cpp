@@ -30,6 +30,7 @@ namespace {
 		case CircuitLab::ComponentType::diode:            return "D";
 		case CircuitLab::ComponentType::transformer:      return "T";
 		case CircuitLab::ComponentType::changeoverSwitch: return "Y";
+		case CircuitLab::ComponentType::transistor:       return "Q";
 		default:                                          return "";
 		}
 	}
@@ -59,6 +60,7 @@ namespace {
 		case CircuitLab::ComponentType::diode:            return "Diode";
 		case CircuitLab::ComponentType::transformer:      return "Transformer";
 		case CircuitLab::ComponentType::changeoverSwitch: return "Changeover switch";
+		case CircuitLab::ComponentType::transistor:       return "Transistor";
 		default:                                          return "Component";
 		}
 	}
@@ -87,6 +89,7 @@ namespace {
 			} },
 			{ "Semiconduttori", {
 				{ ComponentType::diode, "Diodo (D)" },
+				{ ComponentType::transistor, "Transistor (J)" },
 			} },
 			{ "Accoppiati", {
 				{ ComponentType::transformer, "Trasformatore (T)" },
@@ -560,6 +563,8 @@ void CircuitLab::UI::HandleEvents()
 						PlaceNewComponent(ComponentType::transformer, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Y))
 						PlaceNewComponent(ComponentType::changeoverSwitch, pos);
+					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J))
+						PlaceNewComponent(ComponentType::transistor, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::N))
 					{
 						// A differenza degli altri tasti, non passa da m_onCircuitChange/Circuit:
@@ -1207,6 +1212,29 @@ void CircuitLab::UI::DrawImageGuiPanel()
 
 	if (ImGui::Combo("Timestep", &m_hSimIndex, timestepNames, timestepCount))
 		m_onSetHSim(m_hSimIndex);
+
+	const char *speedNames[] = {
+		"1x", "2x", "5x", "10x", "20x", "50x", "100x", "Massima"
+	};
+	constexpr int speedCount = static_cast<int>(std::size(speedNames));
+
+	if (ImGui::Combo("Velocita' simulazione", &m_simSpeedIndex, speedNames, speedCount))
+		m_onSetSimSpeed(m_simSpeedIndex);
+
+	// Velocità effettiva misurata: quella richiesta è un tetto, non una
+	// garanzia — se il calcolo di uno step costa troppo (circuito pesante,
+	// timestep piccolo, build Debug) la simulazione resta più lenta.
+	const double simNow = m_onGetSimulationTime();
+	const double wallNow = ImGui::GetTime();
+	if (wallNow - m_speedSampleWall >= 0.5)
+	{
+		// Tempo simulato azzerato nel frattempo (Load, New, cambio timestep): campione scartato
+		if (simNow >= m_speedSampleSim)
+			m_measuredSpeed = (simNow - m_speedSampleSim) / (wallNow - m_speedSampleWall);
+		m_speedSampleWall = wallNow;
+		m_speedSampleSim = simNow;
+	}
+	ImGui::Text("Tempo simulato: %s  (%.1fx)", FormatEngineering(simNow, "s").c_str(), m_measuredSpeed);
 
 	ImGui::Separator();
 
@@ -1970,8 +1998,14 @@ void CircuitLab::UI::DrawOscilloscope()
 
 			if (!sweepMode)
 			{
-				// xstart: il primo campione si trova a tMax - count*xscale
-				double xstart = tMax - (count * xscale);
+				// Ogni campione va disegnato al suo istante reale (ricavato da
+				// lastSampleTime, copiato insieme ai dati), non appoggiando l'ultimo
+				// al bordo destro della finestra: con il trigger tMax è allineato al
+				// periodo e resta indietro rispetto all'ultimo campione di una quantità
+				// che cambia ad ogni frame. Appoggiandovi la traccia, questa saltava di
+				// fase ad ogni frame (più onde sovrapposte), tanto più quanto più
+				// tempo simulato passava fra due frame.
+				const double xstart = channel.lastSampleTime - (count - 1) * xscale;
 				ImPlot::PlotLine(plotLabel.c_str(),
 					samples.data(),
 					count,
@@ -2059,7 +2093,7 @@ void CircuitLab::UI::DrawOscilloscope()
 				}
 				else
 				{
-					const double xstart = tMax - (count * xscale);
+					const double xstart = channel.lastSampleTime - (count - 1) * xscale;
 					first = static_cast<int>(std::ceil((limits.X.Min - xstart) / xscale));
 					last = static_cast<int>(std::floor((limits.X.Max - xstart) / xscale));
 					first = std::clamp(first, 0, count - 1);
@@ -2142,6 +2176,7 @@ std::string_view CircuitLab::UI::ComponentValueToString(CircuitLab::ComponentVal
 	case ComponentValue::primaryInductance: return "Primary inductance (L1)";
 	case ComponentValue::secondaryInductance: return "Secondary inductance (L2)";
 	case ComponentValue::couplingCoefficient: return "Coupling (k)";
+	case ComponentValue::forwardCurrentGain: return "Forward gain (BF)";
 	default:                         return "Unknown";
 	}
 }
@@ -2206,6 +2241,26 @@ void CircuitLab::UI::CreateLinkViewCurrentList()
 				m_linkViewCurrentList[lv.id] = currentVia1;
 			else
 				m_linkViewCurrentList[lv.id] = currentVia2;
+			continue;
+		}
+
+		// Il transistor ha 3 terminali (base, collettore, emettitore) con una
+		// corrente ciascuno DEL TUTTO indipendente dagli altri due (IB, IC, IE,
+		// vedi Transistor::Currents e il ramo dedicato in Application::Simulate,
+		// che le salva con un secondo campo sentinella invece della coppia di
+		// nodi): a differenza del deviatore non c'è un "comune" su cui accumulare,
+		// quindi il tap di ciascun terminale è semplicemente l'opposto della sua
+		// corrente (già "verso il componente" per costruzione).
+		if (m_onGetComponentTypeById(lv.compIdA) == ComponentType::transistor)
+		{
+			double iInto;
+			if (lv.termIndexA == 0)
+				iInto = m_simulationOutput.currentBranch[{termList[0], -1000, lv.compIdA}];
+			else if (lv.termIndexA == 1)
+				iInto = m_simulationOutput.currentBranch[{termList[1], -1001, lv.compIdA}];
+			else
+				iInto = m_simulationOutput.currentBranch[{termList[2], -1002, lv.compIdA}];
+			m_linkViewCurrentList[lv.id] = -iInto;
 			continue;
 		}
 
@@ -2433,10 +2488,16 @@ CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &t
 	m_window{ sf::VideoMode({ m_width, m_heigth }), m_title },
 	m_showOscilloscope{ false },
 	m_hSimIndex{ 3 },
+	m_simSpeedIndex{ 0 },
 	m_windowTime{ 1.0 }
 {
 	if (!ImGui::SFML::Init(m_window))
 		throw std::runtime_error("Impossibile inizializzare ImGui-SFML");
+
+	// Senza limite il rendering girava a migliaia di FPS: un core sprecato e,
+	// peggio, migliaia di acquisizioni al secondo del mutex del circuito in
+	// concorrenza col thread di simulazione, che ne veniva rallentato.
+	m_window.setFramerateLimit(60);
 
 	// Sotto questa soglia il canvas (larghezza finestra - PANEL_WIDTH) potrebbe
 	// diventare troppo stretto o, ridimensionando ancora, sottrarre PANEL_WIDTH

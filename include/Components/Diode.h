@@ -84,6 +84,8 @@ namespace CircuitLab {
 		// convergita la soluzione, per fili e oscilloscopio)
 		double Current(double vd) const;
 
+		void ResetDynamicState() override { m_lastVd = 0.0; m_lastG = 0.0; m_lastIeq = 0.0; }
+
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;
 		std::map<ComponentValue, double> GetValues() const override;

@@ -47,6 +47,8 @@ namespace CircuitLab {
 		double GetConductance() const { return m_conductance; }
 		double GetPreviousCurrent() const { return m_previousCurrent; }
 
+		void ResetDynamicState() override { m_previousCurrent = 0.0; }
+
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;
 		std::map<ComponentValue, double> GetValues() const override;

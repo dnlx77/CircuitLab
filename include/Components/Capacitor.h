@@ -44,6 +44,8 @@ namespace CircuitLab {
 		// Tensione memorizzata al passo precedente (per il calcolo della corrente in Application).
 		double GetPreviousVoltage() const { return m_previousVoltage; }
 
+		void ResetDynamicState() override { m_previousVoltage = 0.0; }
+
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;
 		std::map<ComponentValue, double> GetValues() const override;

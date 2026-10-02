@@ -39,6 +39,7 @@ std::string CircuitLab::Component::ComponentTypeName(ComponentType type)
 	case ComponentType::diode:				return "D";
 	case ComponentType::transformer:		return "T";
 	case ComponentType::changeoverSwitch:	return "Y";
+	case ComponentType::transistor:		return "Q";
 	default:								return "?";
 
 	}

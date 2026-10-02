@@ -17,6 +17,7 @@ namespace CircuitLab {
 		diode,         // Diodo a giunzione (non lineare, modello di Shockley)
 		transformer,   // Trasformatore (induttori accoppiati, 4 terminali)
 		changeoverSwitch, // Deviatore: comune + due vie, sempre chiuso su una delle due (3 terminali)
+		transistor,    // Transistor bipolare NPN (non lineare, modello di Ebers-Moll semplificato, 3 terminali)
 	};
 
 	NLOHMANN_JSON_SERIALIZE_ENUM(ComponentType, {
@@ -29,6 +30,7 @@ namespace CircuitLab {
 		{ ComponentType::diode, "Diode" },
 		{ ComponentType::transformer, "Transformer" },
 		{ ComponentType::changeoverSwitch, "ChangeoverSwitch" },
+		{ ComponentType::transistor, "Transistor" },
 	})
 
 	enum class WaveFormType {

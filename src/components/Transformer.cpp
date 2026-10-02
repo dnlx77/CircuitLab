@@ -112,6 +112,12 @@ void CircuitLab::Transformer::SaveSpecificData(nlohmann::json &j) const
 	j["primaryInductance"] = m_l1;
 	j["secondaryInductance"] = m_l2;
 	j["coupling"] = m_k;
+	// Correnti dei due avvolgimenti allo step precedente — stesso motivo di
+	// Inductor::m_previousCurrent: senza salvarle, un salva/ricarica o un
+	// annulla/ripeti (che riusa lo stesso formato, vedi Application::PushUndoSnapshot)
+	// azzererebbe di colpo il trasformatore.
+	j["i1Prev"] = m_i1Prev;
+	j["i2Prev"] = m_i2Prev;
 }
 
 void CircuitLab::Transformer::LoadSpecificData(const nlohmann::json &j)
@@ -119,6 +125,9 @@ void CircuitLab::Transformer::LoadSpecificData(const nlohmann::json &j)
 	m_l1 = j["primaryInductance"];
 	m_l2 = j["secondaryInductance"];
 	m_k = j["coupling"];
+	// Assenti nei file salvati prima di questi campi: si assume a riposo (0A).
+	m_i1Prev = j.value("i1Prev", 0.0);
+	m_i2Prev = j.value("i2Prev", 0.0);
 }
 
 std::map<CircuitLab::ComponentValue, double> CircuitLab::Transformer::GetValues() const

@@ -131,6 +131,19 @@ namespace CircuitLab {
 		// del passo precedente per il modello companion). Default: no-op.
 		virtual void UpdateState(double v1, double v2) { (void)v1; (void)v2; }
 
+		// Azzera lo stato dinamico accumulato durante la simulazione (tensione/
+		// corrente del passo precedente per condensatori/induttori/trasformatore,
+		// punto di linearizzazione per diodo/transistor) — NON i valori impostati
+		// dall'utente (resistenza, capacità, Is, BF...), quelli restano. Chiamato
+		// da Circuit::ResetDynamicState quando cambia il timestep di simulazione
+		// (vedi Application::SetOnSetHSim): un passo molto diverso da quello con
+		// cui quello stato è stato calcolato può produrre uno step fisicamente
+		// legittimo ma numericamente estremo (es. Geq=C/h con h improvvisamente
+		// enorme o minuscolo), che poi si porta dietro per molti passi anche
+		// tornando al timestep originale. Default: no-op (componenti senza
+		// memoria, come Resistor, non hanno nulla da azzerare).
+		virtual void ResetDynamicState() {}
+
 		// Inverte lo stato aperto/chiuso. Solo lo Switch lo sovrascrive;
 		// per tutti gli altri componenti è un no-op (non ha senso "aprirli").
 		virtual void ToggleSwitch() {}

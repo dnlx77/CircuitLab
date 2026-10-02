@@ -57,11 +57,19 @@ void CircuitLab::Capacitor::UpdateState(double v1, double v2)
 void CircuitLab::Capacitor::SaveSpecificData(nlohmann::json &j) const
 {
 	j["value"] = m_capacitance;
+	// Tensione memorizzata (v(t-h)): senza salvarla, un salva/ricarica (o un
+	// annulla/ripeti, che riusa lo stesso formato per gli snapshot, vedi
+	// Application::PushUndoSnapshot) scaricherebbe di colpo ogni condensatore
+	// a 0V, cambiando il comportamento del circuito rispetto a un attimo prima.
+	j["previousVoltage"] = m_previousVoltage;
 }
 
 void CircuitLab::Capacitor::LoadSpecificData(const nlohmann::json &j)
 {
 	m_capacitance = j["value"];
+	// Assente nei file salvati prima di questo campo: si assume scarico (0V),
+	// lo stesso stato con cui un condensatore viene creato da zero.
+	m_previousVoltage = j.value("previousVoltage", 0.0);
 }
 
 std::map<CircuitLab::ComponentValue, double> CircuitLab::Capacitor::GetValues() const

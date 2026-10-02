@@ -54,6 +54,7 @@ namespace CircuitLab {
 		using fnRemoveChannel = std::function<void(int)>;
 		using fnGetHSim = std::function<double()>;
 		using fnSetHSim = std::function<void(int)>;
+		using fnSetSimSpeed = std::function<void(int)>;
 		using fnSetWindowTime = std::function<void(double)>;
 		using fnAutoSync = std::function<void()>;
 		using fnGetSimulationTime = std::function<double()>;
@@ -134,6 +135,12 @@ namespace CircuitLab {
 		double m_windowTime;
 
 		int m_hSimIndex;
+		int m_simSpeedIndex;
+
+		// Misura della velocità effettiva (tempo simulato / tempo reale) mostrata nel pannello
+		double m_speedSampleWall = 0.0;
+		double m_speedSampleSim = 0.0;
+		double m_measuredSpeed = 0.0;
 
 		int m_oscProbeType = 0;    // indice nel combo ProbeType
 		int m_oscIdA = 0;
@@ -245,6 +252,7 @@ namespace CircuitLab {
 		fnRemoveChannel m_onRemoveChannel;
 		fnGetHSim m_onGetHSim;
 		fnSetHSim m_onSetHSim;
+		fnSetSimSpeed m_onSetSimSpeed;
 		fnSetWindowTime m_onSetWindowTime;
 		fnAutoSync m_onAutoSync;
 		fnGetSimulationTime m_onGetSimulationTime;
@@ -412,6 +420,7 @@ namespace CircuitLab {
 		void SetOnRemoveChannel(const fnRemoveChannel &func) { m_onRemoveChannel = func; }
 		void SetOnGetHSim(const fnGetHSim &func) { m_onGetHSim = func; }
 		void SetOnSetHSim(const fnSetHSim &func) { m_onSetHSim = func; }
+		void SetOnSetSimSpeed(const fnSetSimSpeed &func) { m_onSetSimSpeed = func; }
 		void SetOnSetWindowTime(const fnSetWindowTime &func) { m_onSetWindowTime = func; }
 		void SetOnAutoSync(const fnAutoSync &func) { m_onAutoSync = func; }
 		void SetOnGetSimulationTime(const fnGetSimulationTime &func) { m_onGetSimulationTime = func; }

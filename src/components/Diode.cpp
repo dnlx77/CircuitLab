@@ -140,12 +140,19 @@ void CircuitLab::Diode::SaveSpecificData(nlohmann::json &j) const
 {
 	j["saturationCurrent"] = m_saturationCurrent;
 	j["emissionCoefficient"] = m_emissionCoefficient;
+	// Tensione dell'ultima linearizzazione: solo il riferimento del limitatore
+	// pnjlim (vedi LimitVoltage), non indispensabile alla correttezza (Newton
+	// riparte comunque da x=0 dopo un salva/ricarica o un annulla/ripeti), ma
+	// senza salvarla si perde il punto di partenza "caldo" della prossima
+	// iterazione — stessa idea di Capacitor::m_previousVoltage.
+	j["lastVd"] = m_lastVd;
 }
 
 void CircuitLab::Diode::LoadSpecificData(const nlohmann::json &j)
 {
 	m_saturationCurrent = j["saturationCurrent"];
 	m_emissionCoefficient = j["emissionCoefficient"];
+	m_lastVd = j.value("lastVd", 0.0);
 }
 
 std::map<CircuitLab::ComponentValue, double> CircuitLab::Diode::GetValues() const

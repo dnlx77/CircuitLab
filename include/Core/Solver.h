@@ -23,6 +23,11 @@ namespace CircuitLab {
 		Eigen::VectorXd m_colScale;
 		bool m_isMatrixInvertible;
 
+		// Spazio di lavoro di Factorize, tenuto fra una chiamata e l'altra per non
+		// riallocarlo ad ogni iterazione di Newton
+		Eigen::MatrixXd m_scaled;
+		Eigen::VectorXd m_dr, m_dc;
+
 	public:
 		Solver();
 		// Risolve il sistema A*x = b usando la decomposizione QR con pivot,

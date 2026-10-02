@@ -64,11 +64,17 @@ void CircuitLab::Inductor::UpdateState(double v1, double v2)
 void CircuitLab::Inductor::SaveSpecificData(nlohmann::json &j) const
 {
 	j["value"] = m_inductance;
+	// Corrente memorizzata (i(t-h)) — stesso motivo di Capacitor::m_previousVoltage:
+	// senza salvarla, ogni induttore si azzererebbe di colpo a un
+	// salva/ricarica o un annulla/ripeti.
+	j["previousCurrent"] = m_previousCurrent;
 }
 
 void CircuitLab::Inductor::LoadSpecificData(const nlohmann::json &j)
 {
 	m_inductance = j["value"];
+	// Assente nei file salvati prima di questo campo: si assume a riposo (0A).
+	m_previousCurrent = j.value("previousCurrent", 0.0);
 }
 
 std::map<CircuitLab::ComponentValue, double> CircuitLab::Inductor::GetValues() const

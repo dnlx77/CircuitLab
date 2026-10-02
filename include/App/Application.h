@@ -29,6 +29,10 @@ namespace CircuitLab {
 		sf::Clock m_deltaClock;
 		std::atomic<double> m_simulationTime;
 		double m_hSim;
+		// Moltiplicatore della velocità del tempo simulato (vedi SPEED_VALUES
+		// in Application.cpp e SimulationLoop). Atomico: scritto dal thread di
+		// rendering (SetOnSetSimSpeed), letto dal thread di simulazione.
+		std::atomic<double> m_simSpeed{ 1.0 };
 		double m_windowTime;
 		int m_decimationFactor;
 		int m_sampleCounter;
@@ -65,12 +69,36 @@ namespace CircuitLab {
 		std::deque<nlohmann::json> m_redoStack;
 		static constexpr size_t MAX_UNDO_STEPS = 100;
 
-		static constexpr double BATCH_TARGET_TIME = 0.010; // 10ms virtuali per batch
-		static constexpr int MAX_STEPS_PER_BATCH = 5000;   // anti-spirale della morte
+		static constexpr int MAX_STEPS_PER_BATCH = 5000;     // anti-spirale della morte
+		static constexpr double MAX_BATCH_WALL_TIME = 0.008; // s reali max per batch (il rendering aspetta al più questo)
+		static constexpr double MAX_PACING_LAG = 0.25;       // s reali di ritardo oltre cui il debito si abbandona
 
 		// Newton-Raphson per i circuiti con componenti non lineari (es. diodo)
 		// (il criterio di convergenza è del singolo componente: Component::HasConverged)
 		static constexpr int MAX_NEWTON_ITERATIONS = 50;
+
+		// Smorzamento ADATTIVO del passo di Newton (vedi SolveNonlinearStep):
+		// parte a passo pieno e si riduce solo quando rileva un'oscillazione,
+		// per poi rilassarsi di nuovo. Un componente a più giunzioni accoppiate
+		// (il transistor: base-emettitore e base-collettore si influenzano a
+		// vicenda tramite gm/go, vedi Transistor::StampNonlinear) può restare in
+		// un ciclo limite — il collettore oscilla fra due valori vicini senza
+		// mai stabilizzarsi — proprio nella stretta zona di transizione
+		// accensione/interdizione, dove pnjlim (LimitVoltage) non interviene
+		// perché nessuna delle due tensioni supera mai la sua soglia.
+		// Uno smorzamento FISSO non basta: abbastanza forte da rompere
+		// quell'oscillazione (serviva <= 0.2, verificato sperimentalmente) è
+		// anche troppo lento per i casi ben comportati (un caso che convergeva
+		// in 7 iterazioni a passo pieno ne richiedeva più di 150 a passo fisso
+		// 0.2, oltre MAX_NEWTON_ITERATIONS). Lo smorzamento adattivo invece
+		// resta a passo pieno finché la direzione dello spostamento è coerente
+		// con l'iterazione precedente, e lo riduce SOLO quando la direzione si
+		// inverte (il segno dell'oscillazione) — verificato su 60000 step
+		// dell'esatto caso che oscillava: zero fallimenti, nessun rallentamento
+		// per i casi semplici.
+		static constexpr double NEWTON_DAMPING_MIN = 0.1;
+		static constexpr double NEWTON_DAMPING_SHRINK = 0.5; // fattore di riduzione quando la direzione si inverte
+		static constexpr double NEWTON_DAMPING_GROW = 1.5;   // fattore di recupero verso il passo pieno
 
 		// Factory method: crea il componente corretto in base al tipo richiesto dalla UI,
 		// con valori di default (es. resistenza 1kΩ, generatore DC 0V) — non prende un
@@ -85,6 +113,18 @@ namespace CircuitLab {
 		// converged dice se le iterazioni sono arrivate a convergenza.
 		// Va chiamato con m_circuitMutex già acquisito (da Simulate).
 		std::optional<Eigen::VectorXd> SolveNonlinearStep(bool &converged);
+
+		// Come Simulate(), ma con m_circuitMutex già acquisito dal chiamante
+		// (SimulationLoop lo tiene per tutto un batch di step). Con publish=false
+		// non costruisce l'output per il rendering (solo quanto serve
+		// all'oscilloscopio negli step campionati). Restituisce true se il back
+		// buffer contiene un output completo da pubblicare (publish, o un errore).
+		bool SimulateLocked(bool publish);
+
+		// Esito dei controlli di topologia (vuoto, solo massa, terminale
+		// scollegato), ricalcolato da SimulateLocked solo quando il circuito è dirty
+		SimulationResult m_topologyCheck = SimulationResult::success;
+		bool m_topologyChecked = false;
 
 		void SimulationLoop();
 		void RenderLoop();

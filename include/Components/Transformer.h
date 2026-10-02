@@ -72,6 +72,8 @@ namespace CircuitLab {
 		// avvolgimenti, non due nodi qualsiasi.
 		void UpdateWindingState(double vPrimary, double vSecondary);
 
+		void ResetDynamicState() override { m_i1Prev = 0.0; m_i2Prev = 0.0; }
+
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;
 		std::map<ComponentValue, double> GetValues() const override;

@@ -85,6 +85,7 @@ namespace CircuitLab {
 
 		// Segnala che il circuito è stato modificato e va ricalcolato
 		void InvalidateCircuit() { m_isDirty = true; }
+		bool IsDirty() const { return m_isDirty; }
 
 		// Imposta il passo di simulazione usato dallo Stamp statico (StampMatrix).
 		// Invalida il circuito se il valore cambia, perché la conduttanza equivalente
@@ -134,6 +135,11 @@ namespace CircuitLab {
 		void PrintCircuit();
 
 		void Clear();
+
+		// Azzera lo stato dinamico di ogni componente (vedi Component::ResetDynamicState)
+		// senza toccare topologia o valori — usato quando cambia il timestep di
+		// simulazione (vedi Application::SetOnSetHSim).
+		void ResetDynamicState();
 
 		// Restituisce la lista dei nodeId dei terminali del componente dato
 		std::vector<int> GetNodesIdFromComponentId(int compId) const;

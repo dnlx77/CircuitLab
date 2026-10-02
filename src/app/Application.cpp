@@ -1,5 +1,6 @@
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <SFML/System/Sleep.hpp>
 
 #include "App/Application.h"
 #include "Core/Solver.h"
@@ -12,6 +13,7 @@
 #include "Components/Diode.h"
 #include "Components/Transformer.h"
 #include "Components/ChangeoverSwitch.h"
+#include "Components/Transistor.h"
 #include "Common/SimulationOutput.h"
 #include "UI/Ui.h"
 #include "Common/Logger.h"
@@ -21,6 +23,16 @@ namespace {
 		1.0, 0.1, 0.01, 0.001,
 		0.0001, 0.00001, 0.000001, 0.0000001, 0.00000001, 0.000000001, 0.0000000001, 0.00000000001, 0.000000000001,
 	};
+
+	// Moltiplicatore della velocità con cui il tempo simulato avanza rispetto
+	// al tempo reale (vedi SimulationLoop): 1.0 = tempo reale (il ritmo di
+	// default, utile per leggere l'oscilloscopio come uno strumento vero).
+	// L'ultimo valore (<= 0) è un segnale di "velocità massima": nessuna
+	// pausa tra un batch e l'altro, il tempo simulato avanza alla velocità
+	// con cui la CPU riesce a calcolare — utile per raggiungere in fretta un
+	// transitorio lungo (es. l'assestamento di un filtro passa-alto RC con
+	// costante di tempo di alcuni secondi) senza aspettare in tempo reale.
+	constexpr double SPEED_VALUES[] = { 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, -1.0 };
 }
 
 // Crea il componente appropriato in base al tipo richiesto.
@@ -34,6 +46,7 @@ namespace {
 //   - diode:         Is = 1e-14 A, n = 1 (silicio generico)
 //   - transformer:   L1 = L2 = 1 mH, k = 0.999 (accoppiamento 1:1 quasi ideale)
 //   - changeoverSwitch: comune sulla via 1 di default
+//   - transistor:    Is = 1e-14 A, BF = 100 (NPN generico)
 std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type)
 {
 	switch (type) {
@@ -46,6 +59,7 @@ std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(Co
 	case ComponentType::diode:				return std::make_unique<Diode>();
 	case ComponentType::transformer:		return std::make_unique<Transformer>();
 	case ComponentType::changeoverSwitch:	return std::make_unique<ChangeoverSwitch>(false);
+	case ComponentType::transistor:		return std::make_unique<Transistor>();
 	default:								return nullptr;
 	}
 }
@@ -65,6 +79,14 @@ std::optional<Eigen::VectorXd> CircuitLab::Application::SolveNonlinearStep(bool 
 		? m_simulationResult
 		: Eigen::VectorXd::Zero(linearB.size());
 
+	// Stato dello smorzamento adattivo (vedi NEWTON_DAMPING_MIN/SHRINK/GROW):
+	// prevDelta è l'ultimo spostamento EFFETTIVAMENTE applicato (già scalato
+	// per lo smorzamento corrente), per confrontarne la direzione con quello
+	// proposto alla prossima iterazione.
+	Eigen::VectorXd prevDelta;
+	bool havePrevDelta = false;
+	double damping = 1.0;
+
 	for (int iter = 0; iter < MAX_NEWTON_ITERATIONS; iter++)
 	{
 		Eigen::MatrixXd A = linearA;
@@ -78,7 +100,22 @@ std::optional<Eigen::VectorXd> CircuitLab::Application::SolveNonlinearStep(bool 
 		if (!next.has_value())
 			return std::nullopt;
 
-		x = *next;
+		// Smorzamento adattivo: se lo spostamento proposto va nella direzione
+		// OPPOSTA al precedente (prodotto scalare negativo — il segno di
+		// un'oscillazione), lo si riduce; se è coerente, ci si rilassa verso il
+		// passo pieno. Parte a passo pieno, quindi non rallenta i casi già ben
+		// comportati (vedi il commento su NEWTON_DAMPING_MIN in Application.h).
+		Eigen::VectorXd delta = *next - x;
+		if (havePrevDelta)
+		{
+			if (delta.dot(prevDelta) < 0.0)
+				damping = std::max(NEWTON_DAMPING_MIN, damping * NEWTON_DAMPING_SHRINK);
+			else
+				damping = std::min(1.0, damping * NEWTON_DAMPING_GROW);
+		}
+		x += damping * delta;
+		prevDelta = damping * delta;
+		havePrevDelta = true;
 
 		// Convergenza (come SPICE): nessun componente ha dovuto limitare la
 		// tensione in questa iterazione (un valore limitato non è la vera
@@ -100,46 +137,104 @@ std::optional<Eigen::VectorXd> CircuitLab::Application::SolveNonlinearStep(bool 
 
 void CircuitLab::Application::SimulationLoop()
 {
+	using Clock = std::chrono::steady_clock;
+
+	// Pacing ad "accumulatore": invece di dormire dopo ogni batch il tempo che
+	// quel batch "dovrebbe" durare (su Windows sleep ha una granularità di
+	// ~15 ms, quindi le pause brevi duravano molto più del previsto e a 1x si
+	// arrivava solo a ~0.6x), si fissa un'ancora (istante reale, tempo
+	// simulato) e ad ogni giro si calcola quanto tempo simulato è "dovuto"
+	// rispetto all'ancora: un ritardo accumulato viene recuperato al giro
+	// dopo, invece di perdersi.
+	bool anchored = false;
+	Clock::time_point anchorWall;
+	double anchorSim = 0.0;
+	double anchorSpeed = 0.0;
+
 	while (m_isRunning)
 	{
-		if (m_simStatus == SimulationStatus::running)
+		if (m_simStatus != SimulationStatus::running)
 		{
-			int requiredSteps = std::max(1,
-				static_cast<int>(BATCH_TARGET_TIME / m_hSim));
-			int actualSteps = std::min(requiredSteps, MAX_STEPS_PER_BATCH);
+			anchored = false;
+			sf::sleep(sf::milliseconds(10));
+			continue;
+		}
 
-			auto batchStart = std::chrono::steady_clock::now();
+		const double speed = m_simSpeed;
+		const double h = m_hSim;
+		const auto now = Clock::now();
 
-			// Esegui il batch — Simulate() solo calcola e scrive nel back buffer,
-			// non swappa né notifica (lo fa questo metodo una sola volta, sotto,
-			// a fine batch). Esce subito se Simulate() ferma la simulazione
-			// (es. circuito non valido), invece di continuare a ricontrollare
-			// per il resto del batch.
-			for (int i = 0; i < actualSteps && m_simStatus == SimulationStatus::running; i++)
-				Simulate();
+		// Si riancora alla partenza, quando cambia la velocità e quando il tempo
+		// simulato viene azzerato da fuori (Load, New, cambio timestep...).
+		if (!anchored || speed != anchorSpeed || m_simulationTime < anchorSim)
+		{
+			anchorWall = now;
+			anchorSim = m_simulationTime;
+			anchorSpeed = speed;
+			anchored = true;
+		}
+
+		int steps = MAX_STEPS_PER_BATCH;
+		if (speed > 0.0)
+		{
+			double wall = std::chrono::duration<double>(now - anchorWall).count();
+			double owed = anchorSim + wall * speed - m_simulationTime;
+
+			// Se il calcolo non riesce a stare al passo con la velocità chiesta, il
+			// debito crescerebbe senza limite e, appena il circuito diventa più
+			// leggero, la simulazione "correrebbe" per recuperarlo. Oltre
+			// MAX_PACING_LAG secondi reali di ritardo lo si lascia perdere.
+			if (owed > speed * MAX_PACING_LAG)
+			{
+				anchorWall = now;
+				anchorSim = m_simulationTime;
+				owed = 0.0;
+			}
+			steps = std::min(MAX_STEPS_PER_BATCH, static_cast<int>(owed / h));
+		}
+
+		if (steps > 0)
+		{
+			// Il mutex del circuito è tenuto per tutto il batch (non per singolo
+			// step): meno lock/unlock, e soprattutto il thread di rendering non
+			// deve "rubarlo" fra uno step e l'altro — col lock per step, su un mutex
+			// non equo, a velocità massima il rendering restava quasi sempre a
+			// bocca asciutta (interfaccia a ~2 FPS). Il batch è limitato in tempo
+			// reale (MAX_BATCH_WALL_TIME) e seguito sempre da una pausa, in cui
+			// il rendering trova il mutex libero.
+			// Solo l'ultimo step del batch costruisce l'output completo per il
+			// rendering (vedi SimulateLocked). Se il batch si interrompe prima (es.
+			// pausa dall'interfaccia) il back buffer resta incompleto e non si
+			// pubblica: il rendering continua a mostrare l'ultimo output completo.
+			const auto batchStart = Clock::now();
+			bool outputComplete = false;
+			{
+				std::lock_guard<std::mutex> lock(m_circuitMutex);
+				for (int i = 0; i < steps; i++)
+				{
+					const bool last = i == steps - 1 || ((i & 63) == 63 &&
+						std::chrono::duration<double>(Clock::now() - batchStart).count() > MAX_BATCH_WALL_TIME);
+					outputComplete = SimulateLocked(last);
+					if (last || m_simStatus != SimulationStatus::running)
+						break;
+				}
+			}
 
 			// Swap e notifica UNA SOLA VOLTA alla fine del batch
+			if (outputComplete)
 			{
-				std::lock_guard<std::mutex> lock(m_swapMutex);
-				std::swap(m_backIndex, m_frontIndex);
+				{
+					std::lock_guard<std::mutex> lock(m_swapMutex);
+					std::swap(m_backIndex, m_frontIndex);
+				}
+				m_newOutputReady = true;
 			}
-			m_newOutputReady = true;
-
-			auto batchEnd = std::chrono::steady_clock::now();
-			double elapsed = std::chrono::duration<double>(
-				batchEnd - batchStart).count();
-
-			// Sleep basato sul tempo virtuale simulato
-			double virtualTimeSimulated = actualSteps * m_hSim;
-			double remaining = virtualTimeSimulated - elapsed;
-			if (remaining > 0.0)
-				std::this_thread::sleep_for(
-					std::chrono::duration<double>(remaining));
 		}
-		else
-		{
-			std::this_thread::sleep_for(std::chrono::milliseconds(10));
-		}
+
+		// sf::sleep (non std::this_thread::sleep_for): su Windows alza la
+		// risoluzione del timer di sistema per la durata della pausa, così 1 ms
+		// dura davvero ~1 ms e non ~15.
+		sf::sleep(sf::milliseconds(1));
 	}
 }
 
@@ -318,7 +413,61 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 
 	m_ui->SetOnLoad([this](const std::string &path)
 		{
+			// Il caricamento non è un'unica operazione atomica sul circuito:
+			// IOManager chiama New() e poi ricostruisce componenti e collegamenti
+			// uno alla volta, ognuno con il proprio lock su m_circuitMutex (non
+			// uno solo per tutto il caricamento — vedi IOManager::Deserialize).
+			// Se la simulazione è in corso, il thread di simulazione può
+			// intrufolarsi tra una chiamata e l'altra e vedere il circuito a
+			// metà ricostruzione (es. terminali ancora scollegati subito dopo
+			// Clear()): Simulate() lo rileva come HasFloatingTerminal() e ferma
+			// silenziosamente la simulazione (m_simStatus = stopped), lasciando
+			// il pannello dei risultati bloccato sull'ultimo valore calcolato
+			// prima del blocco. Per evitarlo si ferma la simulazione PRIMA di
+			// iniziare il caricamento — aspettando, riprendendo brevemente
+			// m_circuitMutex, che un passo eventualmente già in corso finisca —
+			// e si ripristina lo stato precedente solo a caricamento completato.
+			SimulationStatus previousStatus = m_simStatus;
+			m_simStatus = SimulationStatus::stopped;
+			{
+				std::lock_guard<std::mutex> lock(m_circuitMutex);
+			}
+
 			m_ioManager->LoadFromFile(path);
+
+			// A differenza di Undo/Redo (che devono ripristinare lo stato ESATTO
+			// di un istante fa, dinamica compresa — vedi Undo/Redo più sotto, che
+			// non passano da qui ma chiamano Deserialize direttamente), caricare
+			// un file da disco è concettualmente iniziare un esperimento pulito
+			// con quella topologia: si azzera lo stato dinamico appena caricato
+			// (tensione dei condensatori, punto di linearizzazione di
+			// diodo/transistor...), anche se il file lo conteneva (es. perché
+			// salvato mentre la simulazione era in corso, o da un'altra sessione).
+			{
+				std::lock_guard<std::mutex> lock(m_circuitMutex);
+				m_circuit->ResetDynamicState();
+			}
+
+			// Calcola subito un punto di funzionamento del circuito appena
+			// caricato, invece di lasciare il pannello Risultato/Correnti con
+			// l'output di PRIMA del caricamento — o, alla primissima apertura
+			// dell'app (nessuna simulazione mai partita), con un
+			// SimulationOutput mai scritto (che UI::DrawImageGuiPanel legge
+			// comunque, mostrando un risultato "vuoto" invece che i valori
+			// veri). Un solo passo, pubblicato come farebbe normalmente un
+			// batch (swap + notifica): RenderLoop lo raccoglie al giro
+			// successivo, quasi istantaneo. Il tempo virtuale avanzato da
+			// questo passo viene poi azzerato per non sfalsare l'inizio di
+			// una simulazione continua successiva.
+			Simulate();
+			{
+				std::lock_guard<std::mutex> lock(m_swapMutex);
+				std::swap(m_backIndex, m_frontIndex);
+			}
+			m_newOutputReady = true;
+			m_simulationTime = 0.0;
+
+			m_simStatus = previousStatus;
 		});
 
 	m_ui->SetOnNew([this]()
@@ -423,8 +572,31 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			{
 				std::lock_guard<std::mutex> lock(m_circuitMutex);
 				m_circuit->SetTimestep(m_hSim);
+
+				// Un timestep molto diverso da quello con cui lo stato dinamico
+				// attuale (tensione dei condensatori, punto di linearizzazione del
+				// transistor/diodo...) è stato calcolato può produrre, per un solo
+				// step, un risultato numericamente estremo ma "legittimo" secondo
+				// le equazioni di QUEL passo — che poi resta lì per molti step
+				// anche tornando al timestep originale (il modello companion parte
+				// sempre da dove l'ultimo step lo ha lasciato). Si azzera qui,
+				// come un mini "New" che non tocca però topologia o valori.
+				m_circuit->ResetDynamicState();
+				m_simulationResult = Eigen::VectorXd();
+
+				// Vedi il commento su m_simulationTime in ClearState(): con un
+				// timestep enorme anche solo qualche step fa crescere parecchio il
+				// tempo simulato, e sin(2*pi*f*t) perde precisione per t grande —
+				// tornare a un timestep piccolo non basta se il "tempo" stesso è
+				// rimasto quello. Si riparte da t=0 ad ogni cambio di timestep.
+				m_simulationTime = 0.0;
 			}
 			UpdateDecimationFactor();
+		});
+
+	m_ui->SetOnSetSimSpeed([this](int index)
+		{
+			m_simSpeed = SPEED_VALUES[index];
 		});
 
 	m_ui->SetOnSetWindowTime([this](double windowTime)
@@ -468,45 +640,50 @@ CircuitLab::Application::~Application() = default;
 // con i nomi delle variabili (tensioni Vn e correnti nei rami).
 void CircuitLab::Application::Simulate()
 {
-	// LOG
-	//m_circuit->PrintCircuit();
-
-	SimulationOutput &output = m_buffers[m_backIndex];
-	output = SimulationOutput{};
-
 	// Protegge l'intero step contro modifiche concorrenti al circuito dal thread
 	// di rendering (aggiunta/rimozione componenti, collegamenti, cambio valori...).
 	std::lock_guard<std::mutex> lock(m_circuitMutex);
+	SimulateLocked(true);
+}
+
+bool CircuitLab::Application::SimulateLocked(bool publish)
+{
+	SimulationOutput &output = m_buffers[m_backIndex];
+	output = SimulationOutput{};
 
 	// Questi controlli sono difensivi: m_circuit non dovrebbe mai essere nullptr
 	// dato che viene creato nel costruttore, ma è buona pratica verificarlo
 	if (m_circuit == nullptr)
 	{
 		output.simRes = SimulationResult::no_circuit;
-		return;
+		return true;
 	}
 
-	if (m_circuit->IsCircuitEmpty())
+	// I controlli di validità dipendono solo dalla topologia: si rifanno solo
+	// quando il circuito è cambiato (dirty), non ad ogni step.
+	if (m_circuit->IsDirty() || !m_topologyChecked)
 	{
-		output.simRes = SimulationResult::empty_circuit;
-		return;
+		if (m_circuit->IsCircuitEmpty())
+			m_topologyCheck = SimulationResult::empty_circuit;
+		else if (m_circuit->CircuitHasOnlyGround())
+			m_topologyCheck = SimulationResult::only_ground_circuit;
+		else if (m_circuit->HasFloatingTerminal())
+			m_topologyCheck = SimulationResult::disconnected_terminal;
+		else
+			m_topologyCheck = SimulationResult::success;
+		m_topologyChecked = true;
 	}
 
-	if (m_circuit->CircuitHasOnlyGround())
+	if (m_topologyCheck != SimulationResult::success)
 	{
-		output.simRes = SimulationResult::only_ground_circuit;
-		return;
-	}
-
-	if (m_circuit->HasFloatingTerminal())
-	{
+		output.simRes = m_topologyCheck;
 		// Circuito non valido (es. un componente è rimasto scollegato dopo
 		// un edit): interrompe la simulazione invece di continuare a calcolare
 		// risultati privi di senso. Il prossimo "Start" rifarà lo stesso controllo
 		// e si fermerà di nuovo finché il circuito non viene ricollegato.
-		output.simRes = SimulationResult::disconnected_terminal;
-		m_simStatus = SimulationStatus::stopped;
-		return;
+		if (m_topologyCheck == SimulationResult::disconnected_terminal)
+			m_simStatus = SimulationStatus::stopped;
+		return true;
 	}
 
 	StampContext ctx;
@@ -525,7 +702,7 @@ void CircuitLab::Application::Simulate()
 		if (result.has_value() && !converged)
 		{
 			output.simRes = SimulationResult::no_convergence;
-			return;
+			return true;
 		}
 	}
 	else
@@ -534,10 +711,18 @@ void CircuitLab::Application::Simulate()
 	if (!result.has_value())
 	{
 		output.simRes = SimulationResult::solve_error;
-		return;
+		return true;
 	}
 
 	m_simulationResult = result.value();
+
+	// L'output completo (nomi, mappe delle correnti) serve solo allo step che
+	// verrà pubblicato al rendering e a quelli campionati dall'oscilloscopio:
+	// costruirlo ad ogni step era una parte rilevante del costo per step. Lo
+	// stato dei componenti (condensatori, induttori...) si aggiorna invece sempre.
+	m_sampleCounter++;
+	const bool sampleNow = m_sampleCounter >= m_decimationFactor;
+	const bool needOutput = publish || sampleNow;
 
 	// Costruisce il vettore di output associando ogni indice della soluzione
 	// al nome della variabile corrispondente:
@@ -548,14 +733,15 @@ void CircuitLab::Application::Simulate()
 	std::map<std::tuple<int, int, int>, double> branchCurrent;
 	std::unordered_map<int, double> nodeToVoltage;
 	nodeToVoltage[0] = 0.0;
-	for (int i = 0; i < m_simulationResult.size(); i++)
+	for (int i = 0; needOutput && i < m_simulationResult.size(); i++)
 	{
 		int vNode = m_circuit->GetNodesFromIndex(i);
 		int iNode = m_circuit->GetCurrentFromIndex(i);
 
 		if (vNode != -1)
 		{
-			outVec.emplace_back("V" + std::to_string(vNode), m_simulationResult[i]);
+			if (publish)
+				outVec.emplace_back("V" + std::to_string(vNode), m_simulationResult[i]);
 			nodeToVoltage[vNode] = m_simulationResult[i];
 		}
 
@@ -563,14 +749,17 @@ void CircuitLab::Application::Simulate()
 		{
 			// Costruisce la stringa "I(Vn_m)" usando i nodeId dei terminali della sorgente
 			std::vector<int> terminalsId = m_circuit->GetNodesIdFromComponentId(iNode);
-			std::string compString;
-			for (int j = 0; j < terminalsId.size(); j++)
+			if (publish)
 			{
-				compString += std::to_string(terminalsId[j]);
-				if (j < terminalsId.size() - 1)
-					compString += "_";
+				std::string compString;
+				for (int j = 0; j < terminalsId.size(); j++)
+				{
+					compString += std::to_string(terminalsId[j]);
+					if (j < terminalsId.size() - 1)
+						compString += "_";
+				}
+				outVec.emplace_back("I(V" + compString + ")", m_simulationResult[i]);
 			}
-			outVec.emplace_back("I(V" + compString + ")", m_simulationResult[i]);
 			componentCurrent[iNode] = m_simulationResult[i];
 			branchCurrent[{terminalsId[0], terminalsId[1], iNode}] = m_simulationResult[i];
 		}
@@ -580,6 +769,13 @@ void CircuitLab::Application::Simulate()
 	double v1, v2;
 	for (auto &comp : compList)
 	{
+		// Senza output da costruire servono solo i componenti con stato da
+		// aggiornare a fine step (condensatore, induttore, trasformatore)
+		const ComponentType type = comp->GetType();
+		if (!needOutput && type != ComponentType::capacitor
+			&& type != ComponentType::inductor && type != ComponentType::transformer)
+			continue;
+
 		if (comp->GetType() == ComponentType::resistor)
 		{
 			std::vector<int> termList = comp->GetTerminalNodeIds();
@@ -739,18 +935,48 @@ void CircuitLab::Application::Simulate()
 			branchCurrent[{termList[0], termList[1], comp->GetId()}] = currentVia1;
 			branchCurrent[{termList[0], termList[2], comp->GetId()}] = currentVia2;
 		}
+		else if (comp->GetType() == ComponentType::transistor)
+		{
+			// 3 terminali: 0 = base, 1 = collettore, 2 = emettitore, ciascuno con
+			// una corrente PROPRIA (Transistor::Currents) — a differenza del
+			// deviatore, qui non c'è un terminale "comune" che accumula le altre:
+			// le tre correnti sono indipendenti, quindi non si prestano alla
+			// convenzione a coppie (nodoA, nodoB) usata per i rami degli altri
+			// componenti. Si usa perciò un secondo campo sentinella (-1000-indice,
+			// mai un nodeId valido) solo per rendere unica la chiave per terminale;
+			// il ramo dedicato in UI::CreateLinkViewCurrentList lo sa e la
+			// interroga così, invece di passare dal percorso generico a coppie.
+			// componentCurrent tiene la corrente di collettore (il probe più
+			// comune per un transistor nell'oscilloscopio).
+			std::vector<int> termList = comp->GetTerminalNodeIds();
+			auto voltageAt = [&](int idx) -> double
+			{
+				if (termList[idx] <= 0)
+					return 0.0;
+				return m_simulationResult[m_circuit->GetIndexFromNodes(termList[idx])];
+			};
+			double vBase = voltageAt(0);
+			double vColl = voltageAt(1);
+			double vEmit = voltageAt(2);
+
+			auto *transistor = static_cast<Transistor *>(comp.get());
+			auto currents = transistor->Currents(vBase - vEmit, vBase - vColl);
+			componentCurrent[comp->GetId()] = currents.ic;
+			branchCurrent[{termList[0], -1000, comp->GetId()}] = currents.ib;
+			branchCurrent[{termList[1], -1001, comp->GetId()}] = currents.ic;
+			branchCurrent[{termList[2], -1002, comp->GetId()}] = currents.ie;
+		}
 	}
 
 	output.simRes = SimulationResult::success;
-	output.res = outVec;
-	output.currentComp = componentCurrent;
-	output.currentBranch = branchCurrent;
-	output.nodeVoltages = nodeToVoltage;
+	output.res = std::move(outVec);
+	output.currentComp = std::move(componentCurrent);
+	output.currentBranch = std::move(branchCurrent);
+	output.nodeVoltages = std::move(nodeToVoltage);
 
 	m_simulationTime += m_hSim;
 
-	m_sampleCounter++;
-	if (m_sampleCounter >= m_decimationFactor)
+	if (sampleNow)
 	{
 		m_sampleCounter = 0;
 		SampleChannels(output);
@@ -760,12 +986,23 @@ void CircuitLab::Application::Simulate()
 	// Ad ogni chiamata successiva nello stesso batch, sovrascrive lo stesso back buffer
 	// (m_backIndex non cambia), finché SimulationLoop() non fa lo swap una sola volta
 	// a fine batch, pubblicando così solo l'ultimo stato calcolato al thread di rendering.
+	return publish;
 }
 
 void CircuitLab::Application::UpdateDecimationFactor()
 {
+	// Il trigger dell'oscilloscopio (UI::DrawOscilloscope) allinea la finestra al
+	// periodo, quindi può finire fino a un periodo prima dell'ultimo campione: i
+	// campioni tenuti devono coprire la finestra più un periodo, o il bordo
+	// sinistro resterebbe vuoto.
+	double fMax;
+	{
+		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		fMax = m_circuit->GetMaxFrequency();
+	}
+	const double span = m_windowTime + (fMax > 0.0 ? 1.0 / fMax : 0.0);
 	m_decimationFactor = std::max(1,
-		static_cast<int>(std::ceil(m_windowTime /
+		static_cast<int>(std::ceil(span /
 			(OscilloscopeChannel::MAX_SAMPLES * m_hSim))));
 
 	m_sampleCounter = 0;
@@ -889,8 +1126,46 @@ void CircuitLab::Application::ClearState()
 	{
 		std::lock_guard<std::mutex> lock(m_circuitMutex);
 		m_circuit->Clear();
+
+		// SolveNonlinearStep riusa m_simulationResult come punto di partenza di
+		// Newton quando la sua dimensione combacia con quella del nuovo sistema
+		// (vedi lì) — un caso frequente qui, perché un annulla/ripeti ricostruisce
+		// tipicamente la STESSA topologia (stesso numero di nodi/sorgenti) di
+		// prima. Senza azzerarlo, Newton ripartirebbe da tensioni di un istante
+		// prima dell'annulla mentre ogni componente con memoria (condensatori,
+		// induttori, il transistor) è già stato ricostruito da zero: un punto di
+		// partenza incoerente che può far fallire la convergenza, specialmente
+		// se il "vecchio" x è molto lontano dal nuovo punto di lavoro (es. si è
+		// nel frattempo azzerato un generatore). Azzerarlo forza il prossimo
+		// step a ripartire da x=0, sempre coerente con lo stato appena ricostruito.
+		m_simulationResult = Eigen::VectorXd();
+
+		// m_simulationTime non veniva MAI azzerato qui (solo nel costruttore):
+		// cresceva per tutta la durata della sessione dell'app, anche attraverso
+		// New/Load/annulla/ripeti. Con un timestep enorme (es. 1 s) bastano
+		// pochi step per farlo salire di parecchio; tornare a un timestep
+		// piccolo non lo riporta indietro, e l'argomento sempre più grande
+		// passato a sin() (vedi VoltageGenerator, per le forme d'onda AC) perde
+		// precisione fino a produrre valori praticamente casuali da uno step
+		// all'altro — esattamente il "si rompe e non si aggiusta più, serve
+		// riavviare l'app" segnalato. Si azzera qui, così anche New/Load lo
+		// riportano a un punto noto.
+		m_simulationTime = 0.0;
 	}
 	m_ui->Clear();
+
+	// I canali dell'oscilloscopio puntano a id di componenti/nodi del circuito
+	// appena azzerato (vedi SampleChannels: idA/idB/compId). Un nuovo circuito
+	// (o lo stesso ricostruito da un annulla/ripeti) riparte con id da 1, quasi
+	// certamente diversi: senza svuotare i canali restano in lista puntando ad
+	// "altro" — non a un crash (SampleChannels controlla .count() prima di
+	// leggere, quindi mostrano solo una traccia piatta a zero), ma a voci
+	// del circuito precedente che continuano a comparire nell'oscilloscopio.
+	{
+		std::lock_guard<std::mutex> lock(m_channelsMutex);
+		m_channels.clear();
+		m_nextChannelColorIndex = 0;
+	}
 }
 
 void CircuitLab::Application::New()

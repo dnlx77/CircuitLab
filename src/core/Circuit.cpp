@@ -72,7 +72,7 @@ void CircuitLab::Circuit::ComputeMatrix()
 void CircuitLab::Circuit::ComputeVector(const StampContext &ctx)
 {
 	assert(!m_isDirty && "ComputerVector called before ComputeMatrix");
-	m_circuitVector = Eigen::VectorXd::Zero(m_circuitMatrix.rows());
+	m_circuitVector.setZero(m_circuitMatrix.rows());
 
 	for (const auto &comp : m_components)
 		comp->StampVector(m_circuitVector, m_nodesMap, m_voltageSourceMap, ctx);
@@ -204,6 +204,13 @@ void CircuitLab::Circuit::Clear()
 	m_components.clear();
 	m_links.clear();
 	Component::Reset();
+}
+
+void CircuitLab::Circuit::ResetDynamicState()
+{
+	for (auto &comp : m_components)
+		comp->ResetDynamicState();
+	m_isDirty = true; // la matrice cachata può dipendere dallo stato appena azzerato (StampMatrix)
 }
 
 // Restituisce la lista dei nodeId dei terminali del componente con l'ID dato
