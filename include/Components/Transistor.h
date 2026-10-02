@@ -3,9 +3,16 @@
 
 namespace CircuitLab {
 
-	// Modella un transistor bipolare NPN con il modello di Ebers-Moll
+	// Modella un transistor bipolare NPN o PNP con il modello di Ebers-Moll
 	// semplificato (senza effetto Early, senza resistenze ohmiche parassite —
-	// lo stesso livello di dettaglio del Diodo, generalizzato a due giunzioni):
+	// lo stesso livello di dettaglio del Diodo, generalizzato a due giunzioni).
+	//
+	// Un PNP è un NPN con tutte le tensioni e le correnti cambiate di segno:
+	// le equazioni sotto valgono per un NPN, e per un PNP si applicano alle
+	// tensioni "specchiate" (m_polarity = -1: VBE = V(emettitore) - V(base)...)
+	// con le correnti ai terminali di segno opposto. Le conduttanze del
+	// modello linearizzato (gpi, gmu, gm, go) risultano identiche nei due casi,
+	// cambiano solo le correnti equivalenti (IBeq, ICeq).
 	//
 	//   VBE = V(base) - V(emettitore),   VBC = V(base) - V(collettore)
 	//   IF = Is*(exp(VBE/Vt) - 1)          corrente "di iniezione" diretta (giunzione B-E)
@@ -49,10 +56,14 @@ namespace CircuitLab {
 
 		double m_saturationCurrent; // Is, comune alle due giunzioni (Ampere)
 		double m_forwardBeta;       // BF (hFE), adimensionale
+		double m_polarity;          // +1 NPN, -1 PNP (vedi la spiegazione in cima alla classe)
 
 		// Punto di linearizzazione dell'ultima chiamata a StampNonlinear: serve
 		// sia al limitatore di tensione (come Diode::m_lastVd) sia a
 		// HasConverged, che vi confronta la corrente vera con quella predetta.
+		// m_lastVbe/m_lastVbc sono nel riferimento "NPN equivalente" (già
+		// moltiplicate per m_polarity); IBeq/ICeq invece sono le correnti
+		// equivalenti REALI ai terminali, nello stesso verso delle tensioni vere.
 		double m_lastVbe, m_lastVbc;
 		double m_lastGpi, m_lastGmu, m_lastGm, m_lastGo;
 		double m_lastIBeq, m_lastICeq;
@@ -69,7 +80,7 @@ namespace CircuitLab {
 		// — vedi Transformer::BranchCurrents).
 		struct TerminalCurrents { double ib, ic, ie; };
 
-		Transistor(double saturationCurrent = 1e-14, double forwardBeta = 100.0);
+		Transistor(double saturationCurrent = 1e-14, double forwardBeta = 100.0, bool pnp = false);
 
 		// Nessun contributo statico: tutto il transistor è nella parte non lineare
 		void StampMatrix(Eigen::MatrixXd &A,
@@ -97,8 +108,9 @@ namespace CircuitLab {
 		bool HasConverged(const std::map<int, int> &nodeMap, const Eigen::VectorXd &x) const override;
 
 		// Correnti reali (non linearizzate) ai tre terminali per una data
-		// (VBE, VBC) — usata da Application una volta convergita la soluzione,
-		// per fili e oscilloscopio (stesso ruolo di Diode::Current).
+		// (VBE, VBC) = (V(base)-V(emettitore), V(base)-V(collettore)) VERE, cioè
+		// non specchiate per il PNP — usata da Application una volta convergita
+		// la soluzione, per fili e oscilloscopio (stesso ruolo di Diode::Current).
 		TerminalCurrents Currents(double vbe, double vbc) const;
 
 		void ResetDynamicState() override

@@ -514,7 +514,34 @@ void CircuitLab::Circuit::DetachFromGround(const std::vector<std::pair<int, int>
 // restavano sullo stesso nodo.
 void CircuitLab::Circuit::RemoveComponent(int compId)
 {
-	if (!GetComponentById(compId)) return;
+	Component *removed = GetComponentById(compId);
+	if (!removed) return;
+
+	// I nodeId dei terminali rimasti restano com'erano, ma m_links è ciò che si
+	// salva su file (e che undo/redo e Load rieseguono per ricostruire i nodi):
+	// se due terminali erano uniti SOLO perché entrambi collegati a un terminale
+	// del componente eliminato (es. A-X e X-B, con X che sparisce), togliendo i
+	// link di X resterebbero nel circuito vivo sullo stesso nodo ma non più nel
+	// file, e al ricaricamento sarebbero scollegati. Per ogni terminale di X si
+	// uniscono quindi direttamente fra loro quelli a cui era collegato.
+	const int removedTerminals = static_cast<int>(removed->GetTerminals().size());
+	for (int t = 0; t < removedTerminals; t++)
+	{
+		std::vector<std::pair<int, int>> neighbors;
+		for (const Link &l : m_links)
+		{
+			if (l.compId1 == compId && l.termIndex1 == t)
+				neighbors.emplace_back(l.compId2, l.termIndex2);
+			else if (l.compId2 == compId && l.termIndex2 == t)
+				neighbors.emplace_back(l.compId1, l.termIndex1);
+		}
+		for (size_t i = 1; i < neighbors.size(); i++)
+		{
+			Link keep{ neighbors[0].first, neighbors[0].second, neighbors[i].first, neighbors[i].second };
+			if (keep.compId1 != keep.compId2 && !IsDuplicate(keep))
+				m_links.emplace_back(keep);
+		}
+	}
 
 	// Rimuove il componente dalla lista
 	m_components.erase(

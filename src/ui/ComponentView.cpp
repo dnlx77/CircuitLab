@@ -20,6 +20,8 @@ const std::map<CircuitLab::ComponentType, CircuitLab::ComponentDesign> CircuitLa
 	// 3 terminali: 0 = base (a sinistra), 1 = collettore (in alto a destra),
 	// 2 = emettitore (in basso a destra) — vedi Transistor.h
 	{ CircuitLab::ComponentType::transistor,     { 40, 44, 4, { {-20, 0}, {18, -20}, {18, 20} }, -1 } },
+	// Come l'NPN: stessa geometria e terminali, cambia solo il verso della freccia (vedi DrawSymbol)
+	{ CircuitLab::ComponentType::transistorPnp,  { 40, 44, 4, { {-20, 0}, {18, -20}, {18, 20} }, -1 } },
 };
 
 CircuitLab::ComponentView::ComponentView(int componentLink, const Vec2 &position,
@@ -268,20 +270,24 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderTarget &target, sf::Color c
 		break;
 
 	case ComponentType::transistor:
-		// Simbolo IEC/ANSI di un BJT NPN: lead di base orizzontale (terminale 0)
+	case ComponentType::transistorPnp:
+		// Simbolo IEC/ANSI di un BJT: lead di base orizzontale (terminale 0)
 		// verso una barra verticale, da cui partono in diagonale i lead di
 		// collettore (terminale 1, in alto) ed emettitore (terminale 2, in
 		// basso). La freccia piena sul lead dell'emettitore, vicino al
-		// terminale e rivolta verso l'esterno, è la convenzione che distingue
-		// NPN (corrente convenzionale uscente dall'emettitore) da PNP (non
-		// modellato, vedi Transistor.h) — i tre vertici sono calcolati lungo
-		// la direzione esatta del lead (non a occhio), per restare allineata
-		// qualunque cosa cambi nelle coordinate qui sopra.
+		// terminale, è la convenzione che distingue NPN (rivolta verso
+		// l'esterno: corrente convenzionale uscente dall'emettitore) da PNP
+		// (rivolta verso la barra di base: corrente entrante) — i vertici sono
+		// calcolati lungo la direzione esatta del lead (non a occhio), per
+		// restare allineata qualunque cosa cambi nelle coordinate qui sopra.
 		draw({ {-20,0}, {-6,0} }, sf::PrimitiveType::Lines);
 		draw({ {-6,-14}, {-6,14} }, sf::PrimitiveType::Lines);
 		draw({ {-6,-8}, {18,-20} }, sf::PrimitiveType::Lines);
 		draw({ {-6,8}, {18,20} }, sf::PrimitiveType::Lines);
-		draw({ {7.6f,18.7f}, {10.8f,12.5f}, {15.5f,18.7f} }, sf::PrimitiveType::Triangles);
+		if (GetComponentType() == ComponentType::transistor)
+			draw({ {7.6f,18.7f}, {10.8f,12.5f}, {15.5f,18.7f} }, sf::PrimitiveType::Triangles);
+		else
+			draw({ {9.2f,15.6f}, {13.9f,21.86f}, {17.03f,15.6f} }, sf::PrimitiveType::Triangles);
 		break;
 
 	default:

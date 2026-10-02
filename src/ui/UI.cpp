@@ -31,6 +31,7 @@ namespace {
 		case CircuitLab::ComponentType::transformer:      return "T";
 		case CircuitLab::ComponentType::changeoverSwitch: return "Y";
 		case CircuitLab::ComponentType::transistor:       return "Q";
+		case CircuitLab::ComponentType::transistorPnp:    return "Q";
 		default:                                          return "";
 		}
 	}
@@ -61,6 +62,7 @@ namespace {
 		case CircuitLab::ComponentType::transformer:      return "Transformer";
 		case CircuitLab::ComponentType::changeoverSwitch: return "Changeover switch";
 		case CircuitLab::ComponentType::transistor:       return "Transistor";
+		case CircuitLab::ComponentType::transistorPnp:    return "Transistor PNP";
 		default:                                          return "Component";
 		}
 	}
@@ -89,7 +91,8 @@ namespace {
 			} },
 			{ "Semiconduttori", {
 				{ ComponentType::diode, "Diodo (D)" },
-				{ ComponentType::transistor, "Transistor (J)" },
+				{ ComponentType::transistor, "Transistor NPN (J)" },
+				{ ComponentType::transistorPnp, "Transistor PNP (K)" },
 			} },
 			{ "Accoppiati", {
 				{ ComponentType::transformer, "Trasformatore (T)" },
@@ -394,8 +397,20 @@ sf::Vector2f CircuitLab::UI::GetRotatedTerminalPos(const ComponentView &cw, int 
 	float cosAngle = static_cast<float>(std::cos(cw.GetRotation() * std::numbers::pi / 180.0));
 	float sinAngle = static_cast<float>(std::sin(cw.GetRotation() * std::numbers::pi / 180.0));
 
-	float x = static_cast<float>(des.terminalOffset[termIndex].x);
-	float y = static_cast<float>(des.terminalOffset[termIndex].y + (des.terminalOffset[termIndex].y >= 0 ? 1 : -1) * des.terminalRadius);
+	// Il terminale si sposta di un raggio verso l'esterno lungo l'asse in cui il
+	// suo lead è più lontano dal centro: in verticale per i terminali sopra/sotto
+	// (resistore, collettore ed emettitore del transistor...), in orizzontale per
+	// quelli laterali (base del transistor, a y = 0: spostarla in verticale la
+	// faceva uscire dall'asse del suo lead). A parità di distanza (trasformatore)
+	// resta in verticale, come prima.
+	const int offX = des.terminalOffset[termIndex].x;
+	const int offY = des.terminalOffset[termIndex].y;
+	float x = static_cast<float>(offX);
+	float y = static_cast<float>(offY);
+	if (std::abs(offX) > std::abs(offY))
+		x += (offX >= 0 ? 1 : -1) * static_cast<float>(des.terminalRadius);
+	else
+		y += (offY >= 0 ? 1 : -1) * static_cast<float>(des.terminalRadius);
 	float x1 = x * cosAngle - y * sinAngle;
 	float y1 = x * sinAngle + y * cosAngle;
 
@@ -565,6 +580,8 @@ void CircuitLab::UI::HandleEvents()
 						PlaceNewComponent(ComponentType::changeoverSwitch, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J))
 						PlaceNewComponent(ComponentType::transistor, pos);
+					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K))
+						PlaceNewComponent(ComponentType::transistorPnp, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::N))
 					{
 						// A differenza degli altri tasti, non passa da m_onCircuitChange/Circuit:
@@ -1776,12 +1793,14 @@ void CircuitLab::UI::DrawOscilloscope()
 		return ImGui::CalcTextSize(label).x + style.FramePadding.x * 2.0f;
 	};
 
-	const char *modeNames[] = { "Scorrimento", "Sweep" };
+	const char *modeNames[] = { "Scorrimento", "Sweep", "X-Y" };
 	ImGui::SetNextItemWidth(105.0f);
 	ImGui::Combo("##mode", &m_oscMode, modeNames, static_cast<int>(std::size(modeNames)));
 	if (ImGui::IsItemHovered())
 		ImGui::SetTooltip("Scorrimento: la traccia cammina nel tempo.\n"
-			"Sweep: finestra fissa, la traccia riparte da sinistra e si ridisegna sopra la precedente.");
+			"Sweep: finestra fissa, la traccia riparte da sinistra e si ridisegna sopra la precedente.\n"
+			"X-Y: il primo canale attivo e' l'asse X, il secondo l'asse Y (es. ingresso/uscita\n"
+			"di un trigger di Schmitt per vedere l'isteresi). La finestra e' quanta storia si disegna.");
 
 	sameLineIfFits(checkboxWidth("Freeze"));
 	ImGui::Checkbox("Freeze", &m_oscFrozen);
@@ -1893,8 +1912,9 @@ void CircuitLab::UI::DrawOscilloscope()
 
 	// Altezza riservata alla tabella delle misure (se attiva): il grafico prende
 	// tutto il resto della finestra, con un minimo per restare leggibile.
+	const bool xyMode = (m_oscMode == OSC_MODE_XY);
 	float measuresHeight = 0.0f;
-	if (m_oscShowMeasures)
+	if (m_oscShowMeasures && !xyMode)
 	{
 		const int rows = std::max(1, activeCount) + 1; // + riga di intestazione
 		measuresHeight = rows * (ImGui::GetTextLineHeight() + style.CellPadding.y * 2.0f) + style.ItemSpacing.y;
@@ -1920,8 +1940,61 @@ void CircuitLab::UI::DrawOscilloscope()
 		}
 	}
 
+	if (xyMode)
+	{
+		// Canali attivi (l'attivo si legge dalla lista live, i dati dallo snapshot,
+		// come per gli altri modi)
+		std::vector<int> activeIdx;
+		for (int i = 0; i < static_cast<int>(m_frozenChannels.size()) && i < static_cast<int>(channels.size()); i++)
+			if (channels[i].active && !m_frozenChannels[i].samples.empty())
+				activeIdx.push_back(i);
+
+		if (activeIdx.size() < 2)
+		{
+			ImGui::TextDisabled("X-Y: servono due canali attivi (il primo e' l'asse X, il secondo l'asse Y).");
+		}
+		else if (!removedChannel && ImPlot::BeginPlot("##oscilloscopeXY", ImVec2(-1, plotHeight), ImPlotFlags_NoLegend))
+		{
+			const OscilloscopeChannel &chX = m_frozenChannels[activeIdx[0]];
+			const OscilloscopeChannel &chY = m_frozenChannels[activeIdx[1]];
+			auto unitOf = [](const OscilloscopeChannel &ch)
+			{
+				return (ch.type == ProbeType::nodeVoltage || ch.type == ProbeType::differentialVoltage) ? "V" : "A";
+			};
+			const std::string xName = chX.label + " (" + unitOf(chX) + ")";
+			const std::string yName = chY.label + " (" + unitOf(chY) + ")";
+
+			// Entrambi gli assi seguono i dati (Auto Y vale per tutti e due)
+			const ImPlotAxisFlags fitFlags = m_oscAutoY ? (ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit) : ImPlotAxisFlags_None;
+			ImPlot::SetupAxes(xName.c_str(), yName.c_str(), fitFlags, fitFlags);
+
+			AxisNotation xNotation{ 0, unitOf(chX) }, yNotation{ 0, unitOf(chY) };
+			if (m_oscNotation != OSC_NOTATION_AUTO)
+			{
+				xNotation.notation = yNotation.notation = (m_oscNotation == OSC_NOTATION_SCIENTIFIC) ? 1 : 2;
+				ImPlot::SetupAxisFormat(ImAxis_X1, FormatAxisTick, &xNotation);
+				ImPlot::SetupAxisFormat(ImAxis_Y1, FormatAxisTick, &yNotation);
+			}
+			ImPlot::SetupAxisLimits(ImAxis_X1, -15, 15, ImPlotCond_Once);
+			ImPlot::SetupAxisLimits(ImAxis_Y1, -15, 15, ImPlotCond_Once);
+
+			// Gli ultimi campioni dei due canali, allineati dalla fine: vengono
+			// scritti insieme da SampleChannels, quindi l'ultimo è lo stesso istante
+			// anche se un canale è stato aggiunto più tardi dell'altro.
+			const int windowSamples = std::max(1, static_cast<int>(std::floor(m_windowTime / xscale)) + 1);
+			const int n = std::min({ static_cast<int>(chX.samples.size()), static_cast<int>(chY.samples.size()), windowSamples });
+			std::vector<double> xs(chX.samples.end() - n, chX.samples.end());
+			std::vector<double> ys(chY.samples.end() - n, chY.samples.end());
+
+			ImPlotSpec spec;
+			spec.LineColor = ImVec4(chY.channelColor.r, chY.channelColor.g, chY.channelColor.b, 1.0f);
+			ImPlot::PlotLine("##xy", xs.data(), ys.data(), n, spec);
+			ImPlot::EndPlot();
+		}
+	}
+
 	// Legenda già mostrata sopra: quella interna di ImPlot sarebbe un doppione.
-	if (!removedChannel && ImPlot::BeginPlot("##oscilloscope", ImVec2(-1, plotHeight), ImPlotFlags_NoLegend))
+	if (!xyMode && !removedChannel && ImPlot::BeginPlot("##oscilloscope", ImVec2(-1, plotHeight), ImPlotFlags_NoLegend))
 	{
 		// Auto Y: l'asse segue i dati visibili (RangeFit = solo quelli nella finestra X)
 		const ImPlotAxisFlags yFlags = m_oscAutoY ? (ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_RangeFit) : ImPlotAxisFlags_None;
@@ -2127,8 +2200,8 @@ void CircuitLab::UI::DrawOscilloscope()
 		ImPlot::EndPlot();
 	}
 
-	// --- Tabella delle misure ---
-	if (m_oscShowMeasures)
+	// --- Tabella delle misure (in X-Y non ha senso: non c'è un asse dei tempi) ---
+	if (m_oscShowMeasures && !xyMode)
 	{
 		if (ImGui::BeginTable("##measures", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
 		{
@@ -2251,7 +2324,8 @@ void CircuitLab::UI::CreateLinkViewCurrentList()
 		// nodi): a differenza del deviatore non c'è un "comune" su cui accumulare,
 		// quindi il tap di ciascun terminale è semplicemente l'opposto della sua
 		// corrente (già "verso il componente" per costruzione).
-		if (m_onGetComponentTypeById(lv.compIdA) == ComponentType::transistor)
+		const ComponentType linkCompType = m_onGetComponentTypeById(lv.compIdA);
+		if (linkCompType == ComponentType::transistor || linkCompType == ComponentType::transistorPnp)
 		{
 			double iInto;
 			if (lv.termIndexA == 0)
@@ -2674,6 +2748,17 @@ int CircuitLab::UI::AddBusLinkView(int sourceNodeViewId, int targetNodeViewId)
 
 int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position, bool manual, int anchorCompId, int anchorTermIndex, bool attached)
 {
+	// Un NodeView agganciato sta per definizione sul suo terminale: lo si
+	// riallinea alla posizione attuale invece di fidarsi di quella salvata, che
+	// nei file vecchi può essere quella di quando il terminale era disegnato
+	// altrove (vedi GetRotatedTerminalPos). Le viste dei componenti sono già state
+	// create a questo punto del caricamento (IOManager::Deserialize, passo 2).
+	if (attached && anchorCompId != -1)
+	{
+		const std::vector<sf::Vector2f> terminals = GetTerminalPositionbyCompId(anchorCompId);
+		if (anchorTermIndex >= 0 && anchorTermIndex < static_cast<int>(terminals.size()))
+			position = terminals[anchorTermIndex];
+	}
 	return m_graph.AddNodeView(nodeId, position, manual, anchorCompId, anchorTermIndex, attached);
 }
 

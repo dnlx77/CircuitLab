@@ -18,6 +18,7 @@ namespace CircuitLab {
 		transformer,   // Trasformatore (induttori accoppiati, 4 terminali)
 		changeoverSwitch, // Deviatore: comune + due vie, sempre chiuso su una delle due (3 terminali)
 		transistor,    // Transistor bipolare NPN (non lineare, modello di Ebers-Moll semplificato, 3 terminali)
+		transistorPnp, // Transistor bipolare PNP: stessa classe e stesso modello dell'NPN, con polarità invertita
 	};
 
 	NLOHMANN_JSON_SERIALIZE_ENUM(ComponentType, {
@@ -31,6 +32,7 @@ namespace CircuitLab {
 		{ ComponentType::transformer, "Transformer" },
 		{ ComponentType::changeoverSwitch, "ChangeoverSwitch" },
 		{ ComponentType::transistor, "Transistor" },
+		{ ComponentType::transistorPnp, "TransistorPnp" },
 	})
 
 	enum class WaveFormType {

@@ -4,10 +4,11 @@
 #include "Components/Transistor.h"
 #include "Common/ComponentType.h"
 
-CircuitLab::Transistor::Transistor(double saturationCurrent, double forwardBeta) :
-	Component(3, ComponentType::transistor),
+CircuitLab::Transistor::Transistor(double saturationCurrent, double forwardBeta, bool pnp) :
+	Component(3, pnp ? ComponentType::transistorPnp : ComponentType::transistor),
 	m_saturationCurrent(saturationCurrent),
 	m_forwardBeta(forwardBeta),
+	m_polarity(pnp ? -1.0 : 1.0),
 	m_lastVbe(0.0), m_lastVbc(0.0),
 	m_lastGpi(0.0), m_lastGmu(0.0), m_lastGm(0.0), m_lastGo(0.0),
 	m_lastIBeq(0.0), m_lastICeq(0.0)
@@ -81,8 +82,9 @@ bool CircuitLab::Transistor::StampNonlinear(Eigen::MatrixXd &A,
 	const double vt = THERMAL_VOLTAGE;
 	const double vCrit = vt * std::log(vt / (std::sqrt(2.0) * m_saturationCurrent));
 
-	const double vbeRaw = vBase - vEmit;
-	const double vbcRaw = vBase - vColl;
+	// Tensioni nel riferimento "NPN equivalente" (specchiate per un PNP)
+	const double vbeRaw = m_polarity * (vBase - vEmit);
+	const double vbcRaw = m_polarity * (vBase - vColl);
 	const double vbe = LimitVoltage(vbeRaw, m_lastVbe, vt, vCrit);
 	const double vbc = LimitVoltage(vbcRaw, m_lastVbc, vt, vCrit);
 	const bool limited = (vbe != vbeRaw) || (vbc != vbcRaw);
@@ -103,8 +105,11 @@ bool CircuitLab::Transistor::StampNonlinear(Eigen::MatrixXd &A,
 
 	const double iB0 = iF / m_forwardBeta + iR / REVERSE_BETA;
 	const double iC0 = (iF - iR) - iR / REVERSE_BETA;
-	const double iBeq = iB0 - gpi * vbe - gmu * vbc;
-	const double iCeq = iC0 - gm * vbe - go * vbc;
+	// Correnti equivalenti REALI ai terminali: per un PNP sono l'opposto di quelle
+	// dell'NPN specchiato (le conduttanze invece sono uguali, perché
+	// derivando rispetto alle tensioni vere i due segni si compensano).
+	const double iBeq = m_polarity * (iB0 - gpi * vbe - gmu * vbc);
+	const double iCeq = m_polarity * (iC0 - gm * vbe - go * vbc);
 	const double iEeq = -(iBeq + iCeq); // le tre correnti equivalenti sommano a zero (KCL)
 
 	m_lastGpi = gpi; m_lastGmu = gmu; m_lastGm = gm; m_lastGo = go;
@@ -172,11 +177,13 @@ bool CircuitLab::Transistor::HasConverged(const std::map<int, int> &nodeMap, con
 CircuitLab::Transistor::TerminalCurrents CircuitLab::Transistor::Currents(double vbe, double vbc) const
 {
 	// Solo le correnti di giunzione: GMIN è un artificio numerico (vedi Diode::Current).
-	const double iF = m_saturationCurrent * (std::exp(std::min(vbe / THERMAL_VOLTAGE, MAX_EXPONENT)) - 1.0);
-	const double iR = m_saturationCurrent * (std::exp(std::min(vbc / THERMAL_VOLTAGE, MAX_EXPONENT)) - 1.0);
+	// Si calcola nel riferimento NPN equivalente e si riporta il segno ai
+	// terminali veri.
+	const double iF = m_saturationCurrent * (std::exp(std::min(m_polarity * vbe / THERMAL_VOLTAGE, MAX_EXPONENT)) - 1.0);
+	const double iR = m_saturationCurrent * (std::exp(std::min(m_polarity * vbc / THERMAL_VOLTAGE, MAX_EXPONENT)) - 1.0);
 
-	const double ib = iF / m_forwardBeta + iR / REVERSE_BETA;
-	const double ic = (iF - iR) - iR / REVERSE_BETA;
+	const double ib = m_polarity * (iF / m_forwardBeta + iR / REVERSE_BETA);
+	const double ic = m_polarity * ((iF - iR) - iR / REVERSE_BETA);
 	const double ie = -(ib + ic);
 	return { ib, ic, ie };
 }

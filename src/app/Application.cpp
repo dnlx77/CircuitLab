@@ -4,6 +4,7 @@
 
 #include "App/Application.h"
 #include "Core/Solver.h"
+#include "Core/NonlinearSolve.h"
 #include "Components/Resistor.h"
 #include "Components/VoltageGenerator.h"
 #include "Components/Ground.h"
@@ -46,7 +47,7 @@ namespace {
 //   - diode:         Is = 1e-14 A, n = 1 (silicio generico)
 //   - transformer:   L1 = L2 = 1 mH, k = 0.999 (accoppiamento 1:1 quasi ideale)
 //   - changeoverSwitch: comune sulla via 1 di default
-//   - transistor:    Is = 1e-14 A, BF = 100 (NPN generico)
+//   - transistor:    Is = 1e-14 A, BF = 100 (NPN generico; transistorPnp: stessi valori, PNP)
 std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type)
 {
 	switch (type) {
@@ -60,79 +61,9 @@ std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(Co
 	case ComponentType::transformer:		return std::make_unique<Transformer>();
 	case ComponentType::changeoverSwitch:	return std::make_unique<ChangeoverSwitch>(false);
 	case ComponentType::transistor:		return std::make_unique<Transistor>();
+	case ComponentType::transistorPnp:	return std::make_unique<Transistor>(1e-14, 100.0, true);
 	default:								return nullptr;
 	}
-}
-
-// Newton-Raphson per un singolo step temporale. Il punto di partenza è la
-// soluzione dello step precedente (le tensioni cambiano poco da uno step
-// all'altro, quindi di solito bastano 2-4 iterazioni); se la dimensione non
-// coincide (circuito modificato dall'ultimo step) si riparte da zero.
-std::optional<Eigen::VectorXd> CircuitLab::Application::SolveNonlinearStep(bool &converged)
-{
-	converged = false;
-
-	const Eigen::MatrixXd &linearA = m_circuit->GetCircuitMatrix();
-	const Eigen::VectorXd &linearB = m_circuit->GetCircuitVector();
-
-	Eigen::VectorXd x = (m_simulationResult.size() == linearB.size())
-		? m_simulationResult
-		: Eigen::VectorXd::Zero(linearB.size());
-
-	// Stato dello smorzamento adattivo (vedi NEWTON_DAMPING_MIN/SHRINK/GROW):
-	// prevDelta è l'ultimo spostamento EFFETTIVAMENTE applicato (già scalato
-	// per lo smorzamento corrente), per confrontarne la direzione con quello
-	// proposto alla prossima iterazione.
-	Eigen::VectorXd prevDelta;
-	bool havePrevDelta = false;
-	double damping = 1.0;
-
-	for (int iter = 0; iter < MAX_NEWTON_ITERATIONS; iter++)
-	{
-		Eigen::MatrixXd A = linearA;
-		Eigen::VectorXd b = linearB;
-		bool limited = m_circuit->StampNonlinear(A, b, x);
-
-		// A cambia ad ogni iterazione: la fattorizzazione cachata da
-		// Circuit::ComputeMatrix (matrice statica) non è più valida qui.
-		m_solver->Factorize(A);
-		auto next = m_solver->SolveCircuit(b);
-		if (!next.has_value())
-			return std::nullopt;
-
-		// Smorzamento adattivo: se lo spostamento proposto va nella direzione
-		// OPPOSTA al precedente (prodotto scalare negativo — il segno di
-		// un'oscillazione), lo si riduce; se è coerente, ci si rilassa verso il
-		// passo pieno. Parte a passo pieno, quindi non rallenta i casi già ben
-		// comportati (vedi il commento su NEWTON_DAMPING_MIN in Application.h).
-		Eigen::VectorXd delta = *next - x;
-		if (havePrevDelta)
-		{
-			if (delta.dot(prevDelta) < 0.0)
-				damping = std::max(NEWTON_DAMPING_MIN, damping * NEWTON_DAMPING_SHRINK);
-			else
-				damping = std::min(1.0, damping * NEWTON_DAMPING_GROW);
-		}
-		x += damping * delta;
-		prevDelta = damping * delta;
-		havePrevDelta = true;
-
-		// Convergenza (come SPICE): nessun componente ha dovuto limitare la
-		// tensione in questa iterazione (un valore limitato non è la vera
-		// soluzione, solo un passo intermedio) E la corrente predetta dal modello
-		// linearizzato coincide con quella reale nel nuovo punto. Non si confronta
-		// invece x con l'iterazione precedente: per i nodi quasi isolati (tutti i
-		// diodi spenti + un condensatore grande, con Geq = C/h enorme) la
-		// soluzione lineare ha rumore di arrotondamento maggiore di qualunque
-		// tolleranza ragionevole, e il ciclo non convergerebbe mai.
-		if (!limited && m_circuit->NonlinearConverged(x))
-		{
-			converged = true;
-			break;
-		}
-	}
-
-	return x;
 }
 
 void CircuitLab::Application::SimulationLoop()
@@ -697,7 +628,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 	if (m_circuit->HasNonlinearComponents())
 	{
 		bool converged = false;
-		result = SolveNonlinearStep(converged);
+		result = CircuitLab::SolveNonlinearStep(*m_circuit, *m_solver, m_simulationResult, converged);
 
 		if (result.has_value() && !converged)
 		{
@@ -935,7 +866,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			branchCurrent[{termList[0], termList[1], comp->GetId()}] = currentVia1;
 			branchCurrent[{termList[0], termList[2], comp->GetId()}] = currentVia2;
 		}
-		else if (comp->GetType() == ComponentType::transistor)
+		else if (comp->GetType() == ComponentType::transistor || comp->GetType() == ComponentType::transistorPnp)
 		{
 			// 3 terminali: 0 = base, 1 = collettore, 2 = emettitore, ciascuno con
 			// una corrente PROPRIA (Transistor::Currents) — a differenza del

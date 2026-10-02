@@ -122,6 +122,9 @@
     <ClCompile Include="..\src\core\Solver.cpp">
       <Filter>src\Core</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\core\NonlinearSolve.cpp">
+      <Filter>src\Core</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\app\Application.cpp">
       <Filter>src\App</Filter>
     </ClCompile>
@@ -203,6 +206,9 @@
       <Filter>Include\Core</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Core\Solver.h">
+      <Filter>Include\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Core\NonlinearSolve.h">
       <Filter>Include\Core</Filter>
     </ClInclude>
     <ClInclude Include="..\include\App\Application.h">

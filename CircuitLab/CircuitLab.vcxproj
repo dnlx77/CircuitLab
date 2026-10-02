@@ -186,6 +186,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClCompile Include="..\src\components\WaveForm.cpp" />
     <ClCompile Include="..\src\core\Circuit.cpp" />
     <ClCompile Include="..\src\core\Solver.cpp" />
+    <ClCompile Include="..\src\core\NonlinearSolve.cpp" />
     <ClCompile Include="..\src\io\IOManager.cpp" />
     <ClCompile Include="..\src\ui\ComponentView.cpp" />
     <ClCompile Include="..\src\ui\UI.cpp" />
@@ -218,6 +219,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClInclude Include="..\include\Components\WaveForm.h" />
     <ClInclude Include="..\include\Core\Circuit.h" />
     <ClInclude Include="..\include\Core\Solver.h" />
+    <ClInclude Include="..\include\Core\NonlinearSolve.h" />
     <ClInclude Include="..\include\Core\Vector2.h" />
     <ClInclude Include="..\include\IO\IOManager.h" />
     <ClInclude Include="..\include\UI\ComponentView.h" />

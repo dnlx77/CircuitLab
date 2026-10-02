@@ -169,6 +169,10 @@ namespace CircuitLab {
 		//    periodico si ripresenta sempre nella stessa posizione.
 		static constexpr int OSC_MODE_ROLLING = 0;
 		static constexpr int OSC_MODE_SWEEP = 1;
+		// X-Y: il primo canale attivo è l'asse X e il secondo l'asse Y (niente asse dei
+		// tempi), per vedere cose come l'isteresi di un trigger di Schmitt (ingresso
+		// sull'asse X, uscita sull'asse Y) o le figure di Lissajous.
+		static constexpr int OSC_MODE_XY = 2;
 		int m_oscMode = OSC_MODE_ROLLING;
 
 		// Formato dei numeri sugli assi dell'oscilloscopio (scelto dall'utente)
