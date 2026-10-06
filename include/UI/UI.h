@@ -135,6 +135,11 @@ namespace CircuitLab {
 		double m_windowTime;
 
 		int m_hSimIndex;
+
+		// Altezza della finestra dei dati del componente nel frame precedente: serve a
+		// decidere se c'è spazio per aprirla sopra al componente (vedi DrawComponentPopup)
+		float m_compPopupHeight = 200.0f;
+		float m_compPopupWidth = 270.0f;
 		int m_simSpeedIndex;
 
 		// Misura della velocità effettiva (tempo simulato / tempo reale) mostrata nel pannello
@@ -326,6 +331,8 @@ namespace CircuitLab {
 
 		// Disegna il pannello laterale ImGui (proprietà componente selezionato, oscilloscopio, save/load)
 		void DrawImageGuiPanel();
+		void DrawComponentPopup();
+		void MirrorComponent(int compId);
 
 		// Crea un componente del tipo dato in posizione pos (coordinate mondo) e lo
 		// aggiunge al canvas con lo snap alla griglia già usato per i tasti R/V/G/C/
@@ -437,7 +444,7 @@ namespace CircuitLab {
 		void SetOnCanRedo(const fnCanRedo &func) { m_onCanRedo = func; }
 
 		// Aggiunge la vista grafica di un componente al canvas
-		void AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation);
+		void AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation, bool mirrored = false);
 
 		// Aggiunge la vista grafica di un filo al canvas
 		int AddViewLink(int comp1, int term1, int nodeViewId);

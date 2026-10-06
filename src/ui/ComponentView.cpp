@@ -25,10 +25,11 @@ const std::map<CircuitLab::ComponentType, CircuitLab::ComponentDesign> CircuitLa
 };
 
 CircuitLab::ComponentView::ComponentView(int componentLink, const Vec2 &position,
-	float rotation, const std::string &name, ComponentType type) :
+	float rotation, const std::string &name, ComponentType type, bool mirrored) :
 	m_componentLink(componentLink),
 	m_position(position),
 	m_rotation(rotation),
+	m_mirrored(mirrored),
 	m_name(name),
 	m_type(type)
 {}
@@ -40,6 +41,7 @@ void CircuitLab::ComponentView::Save(nlohmann::json & j) const
 	j["type"] = GetComponentType();
 	j["position"] = { GetPosition().x, GetPosition().y };
 	j["rotation"] = GetRotation();
+	j["mirrored"] = IsMirrored();
 }
 
 namespace {
@@ -71,6 +73,10 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderTarget &target, sf::Color c
 	sf::Transform transform;
 	transform.translate({ GetPosition().x, GetPosition().y });
 	transform.rotate(sf::degrees(GetRotation()));
+	// Lo specchio sta DOPO la rotazione nella composizione: i punti locali vengono prima
+	// specchiati e poi ruotati, come per le posizioni dei terminali.
+	if (IsMirrored())
+		transform.scale({ -1.0f, 1.0f });
 	sf::RenderStates states;
 	states.transform = transform;
 

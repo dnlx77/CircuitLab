@@ -27,6 +27,10 @@ namespace CircuitLab {
 	private:
 		Vec2 m_position;       // Posizione del centro del componente nel canvas (pixel)
 		float m_rotation;      // Rotazione in gradi
+		// Specchiato rispetto all'asse verticale locale (x -> -x), applicato PRIMA della
+		// rotazione: per un transistor sposta la base da sinistra a destra. Vale per il
+		// simbolo e per le posizioni dei terminali (vedi UI::GetRotatedTerminalPos).
+		bool m_mirrored = false;
 		std::string m_name;    // Nome visualizzato (es. "Resistor", "Voltage source")
 		int m_componentLink;   // ID del Component corrispondente nel circuito
 		ComponentType m_type;  // Tipo del componente (resistor, voltageSource, ground...)
@@ -37,10 +41,20 @@ namespace CircuitLab {
 
 	public:
 		ComponentView(int componentLink, const Vec2 &position, float rotation,
-			const std::string &name, ComponentType type);
+			const std::string &name, ComponentType type, bool mirrored = false);
 
 		const Vec2 &GetPosition() const { return m_position; }
 		float GetRotation() const { return m_rotation; }
+		bool IsMirrored() const { return m_mirrored; }
+		// Vero se lo specchio cambia qualcosa: serve almeno un terminale fuori dall'asse
+		// verticale (resistore, condensatore... sono simmetrici e non hanno nulla da specchiare)
+		bool IsMirrorable() const
+		{
+			for (const auto &offset : GetComponetDesign().terminalOffset)
+				if (offset.x != 0)
+					return true;
+			return false;
+		}
 		const std::string &GetName() const { return m_name; }
 		int GetComponentLink() const { return m_componentLink; }
 		ComponentType GetComponentType() const { return m_type; }
@@ -62,6 +76,7 @@ namespace CircuitLab {
 
 		void SetPosition(const Vec2 &position) { m_position = position; }
 		void SetRotation(float rotation) { m_rotation = rotation; }
+		void SetMirrored(bool mirrored) { m_mirrored = mirrored; }
 		void SetName(const std::string &name) { m_name = name; }
 		void SetComponentLink(int link) { m_componentLink = link; }
 		void SetComponentType(ComponentType type) { m_type = type; }

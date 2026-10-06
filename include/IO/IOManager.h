@@ -19,7 +19,7 @@ namespace CircuitLab {
 	using fnLinkLoad = std::function<bool(int compId1, int termComp1, int compId2, int termComp2)>;
 
 	// Aggiunge la vista grafica di un componente alla UI
-	using fnComponentViewLoad = std::function<void(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation)>;
+	using fnComponentViewLoad = std::function<void(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation, bool mirrored)>;
 
 	// Aggiunge una LinkView (un filo da un terminale a un NodeView hub) alla UI.
 	// Restituisce l'ID assegnato alla nuova LinkView.

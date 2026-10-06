@@ -305,9 +305,9 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 		});
 
 	// Aggiunge la vista grafica di un componente alla UI durante il caricamento
-	m_ioManager->SetOnComponentViewLoad([this](int compId, const std::string &name, ComponentType type, Vec2 position, float rotation)
+	m_ioManager->SetOnComponentViewLoad([this](int compId, const std::string &name, ComponentType type, Vec2 position, float rotation, bool mirrored)
 		{
-			m_ui->AddViewComponent(compId, name, type, position, rotation);
+			m_ui->AddViewComponent(compId, name, type, position, rotation, mirrored);
 		});
 
 	// Aggiunge la vista grafica di un filo alla UI durante il caricamento

@@ -121,7 +121,7 @@ void CircuitLab::IOManager::Deserialize(const nlohmann::json &j)
 	for (auto const compViewJosn : j["componentsView"])
 	{
 		Vec2 vec(compViewJosn["position"][0], compViewJosn["position"][1]);
-		m_onComponentViewLoad(loadVsRealNodeMap.at(compViewJosn["componentLink"]), compViewJosn["name"].get<std::string>(), compViewJosn["type"].get<ComponentType>(), vec, compViewJosn["rotation"]);
+		m_onComponentViewLoad(loadVsRealNodeMap.at(compViewJosn["componentLink"]), compViewJosn["name"].get<std::string>(), compViewJosn["type"].get<ComponentType>(), vec, compViewJosn["rotation"], compViewJosn.value("mirrored", false));
 	}
 
 	// 3) Ricrea i link logici tra terminali nel circuito (Core, non UI)

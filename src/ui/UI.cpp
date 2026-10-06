@@ -285,6 +285,9 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 
 		float x1 = dx * cosAngle - dy * sinAngle;
 		float y1 = dx * sinAngle + dy * cosAngle;
+		// Inverso dello specchio applicato nel disegno e nei terminali
+		if (comp.IsMirrored())
+			x1 = -x1;
 
 		int i = 0;
 		for (const auto &terminal : des.terminalOffset)
@@ -403,7 +406,8 @@ sf::Vector2f CircuitLab::UI::GetRotatedTerminalPos(const ComponentView &cw, int 
 	// quelli laterali (base del transistor, a y = 0: spostarla in verticale la
 	// faceva uscire dall'asse del suo lead). A parità di distanza (trasformatore)
 	// resta in verticale, come prima.
-	const int offX = des.terminalOffset[termIndex].x;
+	// Lo specchio (x -> -x) si applica nel riferimento locale, prima della rotazione
+	const int offX = cw.IsMirrored() ? -des.terminalOffset[termIndex].x : des.terminalOffset[termIndex].x;
 	const int offY = des.terminalOffset[termIndex].y;
 	float x = static_cast<float>(offX);
 	float y = static_cast<float>(offY);
@@ -1055,6 +1059,12 @@ void CircuitLab::UI::HandleEvents()
 				UpdateLinksForComponent(m_selectedComponent.compId);
 			}
 
+			// F = specchia (flip) il componente selezionato. Non si attiva mentre si scrive in
+			// un campo di testo (es. il nome del file, che può contenere una "f").
+			if (m_selectedComponent.state == SelectionState::componentSelected && keyboardEvent->code == sf::Keyboard::Key::F &&
+				!ImGui::GetIO().WantTextInput)
+				MirrorComponent(m_selectedComponent.compId);
+
 			// Alternativa da tastiera al click per aprire/chiudere un interruttore
 			// (o cambiare via a un deviatore) selezionato, comoda per toggle
 			// ripetuti senza dover ricliccare ogni volta.
@@ -1350,35 +1360,99 @@ void CircuitLab::UI::DrawImageGuiPanel()
 		ImGui::Text("]");
 	}
 
-	if (m_selectedComponent.state == SelectionState::componentSelected)
+	ImGui::End();
+
+	// Dopo ImGui::End() chiama DrawOscilloscope se visibile
+	if (m_showOscilloscope)
+		DrawOscilloscope();
+}
+
+// Finestra con i dati del componente selezionato (posizione, rotazione, specchio,
+// valori, forma d'onda), che si apre sopra al componente: prima stavano in fondo al
+// pannello laterale, lontano da ciò che si sta modificando. Se sopra non c'è spazio
+// si apre sotto. Chiudendola con la X si deseleziona il componente.
+void CircuitLab::UI::DrawComponentPopup()
+{
+	if (m_selectedComponent.state != SelectionState::componentSelected)
+		return;
+
+	ComponentView *view = nullptr;
+	for (auto &cw : m_componentViewList)
+		if (cw.GetComponentLink() == m_selectedComponent.compId)
+		{
+			view = &cw;
+			break;
+		}
+	if (!view)
+		return;
+
+	const int compId = m_selectedComponent.compId;
+	const ComponentDesign &des = view->GetComponetDesign();
+
+	// Ancoraggio: sopra il bordo alto del componente (con un margine per i
+	// terminali e le etichette), nel riferimento della finestra (pixel). La vista del
+	// canvas ha già lo zoom/pan correnti, quindi il punto segue il componente.
+	constexpr float POPUP_MIN_WIDTH = 240.0f;
+	constexpr float POPUP_FIELD_WIDTH = 90.0f;
+	constexpr float POPUP_MARGIN = 8.0f;
+	const float reach = (static_cast<float>(std::max(des.compWidth, des.compHeight)) / 2.0f + des.terminalRadius + 10.0f) * m_zoom;
+	const sf::Vector2i center = m_window.mapCoordsToPixel({ view->GetPosition().x, view->GetPosition().y }, m_view);
+	const float canvasWidth = static_cast<float>(m_width - PANEL_WIDTH);
+	const float halfWidth = m_compPopupWidth / 2.0f;
+	const float x = std::clamp(static_cast<float>(center.x), halfWidth, std::max(halfWidth, canvasWidth - halfWidth));
+	const bool above = (static_cast<float>(center.y) - reach - m_compPopupHeight - POPUP_MARGIN) >= 0.0f;
+	const float y = above ? static_cast<float>(center.y) - reach - POPUP_MARGIN : static_cast<float>(center.y) + reach + POPUP_MARGIN;
+
+	ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always, ImVec2(0.5f, above ? 1.0f : 0.0f));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(POPUP_MIN_WIDTH, 0.0f), ImVec2(FLT_MAX, FLT_MAX));
+
+	// "###" fissa l'identità della finestra: il titolo cambia da componente a componente
+	const std::string title = std::string(ComponentPrefix(view->GetComponentType())) + std::to_string(compId) +
+		" - " + ComponentDisplayName(view->GetComponentType()) + "###compPopup";
+	bool open = true;
+	const ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing;
+
+	if (ImGui::Begin(title.c_str(), &open, flags))
 	{
-		float posX, posY, rot;
+		m_compPopupHeight = ImGui::GetWindowHeight();
+		m_compPopupWidth = ImGui::GetWindowWidth();
+
+		// Larghezza fissa per i campi: con quella di default (65% della finestra) le
+		// etichette a destra venivano tagliate, e la finestra, che si adatta al contenuto,
+		// non cresceva per mostrarle per intero.
+		ImGui::PushItemWidth(POPUP_FIELD_WIDTH);
+
+		// Un id per componente: senza, un campo in modifica resterebbe "attivo" passando
+		// a un altro componente con gli stessi nomi di campo.
+		ImGui::PushID(compId);
+
+		float posX = view->GetPosition().x;
+		float posY = view->GetPosition().y;
+		float rot = view->GetRotation();
 		bool edited = false;
-		std::map<ComponentValue, double> values;
-		for (auto &cw : m_componentViewList)
-			if (cw.GetComponentLink() == m_selectedComponent.compId)
-			{
-				posX = cw.GetPosition().x;
-				posY = cw.GetPosition().y;
-				rot = cw.GetRotation();
-				ImGui::InputFloat("Posizione X: ", &posX); if (ImGui::IsItemDeactivatedAfterEdit()) edited = true;
-				ImGui::InputFloat("Posizione Y: ", &posY); if (ImGui::IsItemDeactivatedAfterEdit()) edited = true;
-				ImGui::InputFloat("Rotazione: ", &rot); if (ImGui::IsItemDeactivatedAfterEdit()) edited = true;
+		ImGui::InputFloat("Posizione X", &posX); if (ImGui::IsItemDeactivatedAfterEdit()) edited = true;
+		ImGui::InputFloat("Posizione Y", &posY); if (ImGui::IsItemDeactivatedAfterEdit()) edited = true;
+		ImGui::InputFloat("Rotazione", &rot); if (ImGui::IsItemDeactivatedAfterEdit()) edited = true;
+		if (edited)
+		{
+			if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
 
-				if (edited)
-				{
-					if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+			view->SetRotation(rot);
+			view->SetPosition(Vec2(posX, posY));
+			UpdateLinksForComponent(compId);
+		}
 
-					Vec2 newPos;
-					newPos.x = posX;
-					newPos.y = posY;
-					cw.SetRotation(rot);
-					cw.SetPosition(newPos);
-					UpdateLinksForComponent(m_selectedComponent.compId);
-				}
-			}
+		// Specchio: solo per i componenti dove cambia qualcosa (es. base del transistor
+		// a destra invece che a sinistra)
+		if (view->IsMirrorable())
+		{
+			bool mirrored = view->IsMirrored();
+			if (ImGui::Checkbox("Specchia (F)", &mirrored))
+				MirrorComponent(compId);
+		}
 
-		values = m_onGetComponentValues(m_selectedComponent.compId);
+		std::map<ComponentValue, double> values = m_onGetComponentValues(compId);
 		for (auto &[key, value] : values)
 		{
 			std::string label(ComponentValueToString(key));
@@ -1391,7 +1465,7 @@ void CircuitLab::UI::DrawImageGuiPanel()
 			{
 				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
 				values.at(key) = value;
-				m_onSetComponentValues(m_selectedComponent.compId, values);
+				m_onSetComponentValues(compId, values);
 			}
 
 			// Per valori piccoli o grandi la notazione scientifica è scomoda da
@@ -1402,7 +1476,7 @@ void CircuitLab::UI::DrawImageGuiPanel()
 		}
 
 		// Combo box waveform — visibile solo per VoltageGenerator
-		WaveFormType currentWaveForm = m_onGetWaveFormType(m_selectedComponent.compId);
+		WaveFormType currentWaveForm = m_onGetWaveFormType(compId);
 		if (currentWaveForm != WaveFormType::none)
 		{
 			const char *waveFormNames[] = { "DC", "Sine", "Square" };
@@ -1422,17 +1496,40 @@ void CircuitLab::UI::DrawImageGuiPanel()
 			if (ImGui::Combo("Waveform", &currentIndex, waveFormNames, waveFormCount))
 			{
 				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
-				m_onSetWaveFormType(m_selectedComponent.compId, waveFormValues[currentIndex]);
+				m_onSetWaveFormType(compId, waveFormValues[currentIndex]);
 			}
 		}
 
+		ImGui::PopID();
+		ImGui::PopItemWidth();
 	}
-
 	ImGui::End();
 
-	// Dopo ImGui::End() chiama DrawOscilloscope se visibile
-	if (m_showOscilloscope)
-		DrawOscilloscope();
+	// Chiusa con la X: deseleziona il componente
+	if (!open)
+	{
+		m_selectedComponent.state = SelectionState::none;
+		m_selectedComponent.compId = -1;
+		m_selectedComponent.terminalIndex = -1;
+	}
+}
+
+// Specchia (o ripristina) il componente rispetto all'asse verticale locale. I terminali
+// cambiano posto (la base di un transistor passa da sinistra a destra): si riaggancia
+// alla griglia come dopo una rotazione e si aggiornano i fili.
+void CircuitLab::UI::MirrorComponent(int compId)
+{
+	for (auto &cw : m_componentViewList)
+	{
+		if (cw.GetComponentLink() != compId || !cw.IsMirrorable())
+			continue;
+
+		if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+		cw.SetMirrored(!cw.IsMirrored());
+		SnapComponentToGrid(cw);
+		UpdateLinksForComponent(compId);
+		return;
+	}
 }
 
 void CircuitLab::UI::DrawComponents()
@@ -2710,9 +2807,9 @@ CircuitLab::UI::~UI()
 	ImGui::SFML::Shutdown();
 }
 
-void CircuitLab::UI::AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation)
+void CircuitLab::UI::AddViewComponent(int compId, const std::string &name, ComponentType type, Vec2 position, float rotation, bool mirrored)
 {
-	m_componentViewList.emplace_back(ComponentView(compId, position, rotation, name, type));
+	m_componentViewList.emplace_back(ComponentView(compId, position, rotation, name, type, mirrored));
 }
 
 int CircuitLab::UI::AddViewLink(int comp1, int term1, int nodeViewId)
@@ -2954,13 +3051,17 @@ void CircuitLab::UI::Render()
 	// --- Aggiornamento ImGui ---
 	ImGui::SFML::Update(m_window, dt);
 
+	// Il viewport serve già alle finestre ImGui che si ancorano a punti del canvas
+	// (vedi DrawComponentPopup, che converte coordinate mondo in pixel con m_view)
+	m_view.setViewport(sf::FloatRect({ 0.f, 0.f }, { (static_cast<float>(m_width - PANEL_WIDTH) / m_width), 1.f }));
+
 	DrawImageGuiPanel();
+	DrawComponentPopup();
 	DrawCanvasDropTarget();
 
 	// --- Rendering canvas ---
 	m_window.clear(BACKGROUND_COLOR);
 
-	m_view.setViewport(sf::FloatRect({ 0.f, 0.f }, { (static_cast<float>(m_width - PANEL_WIDTH) / m_width), 1.f }));
 	m_window.setView(m_view);
 
 	if (m_showGrid)
