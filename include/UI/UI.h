@@ -101,6 +101,10 @@ namespace CircuitLab {
 		static constexpr int PARTICLE_SIZE = 5;
 		static constexpr int PARTICLE_SPACING_FACTOR = 3;
 		static constexpr float PARTICLE_SPEED_SCALE = 0.1f;
+		// Impostazioni dei pallini della corrente, dal pannello laterale: visibilità e
+		// moltiplicatore di velocità (1 = PARTICLE_SPEED_SCALE, valori più bassi rallentano)
+		bool m_showParticles = true;
+		float m_particleSpeed = 1.0f;
 		// Sotto questa soglia (in Ampere) la corrente è considerata nulla ai fini
 		// del colore dei pallini, per evitare sfarfallii tra i due colori per
 		// rumore numerico attorno allo zero.

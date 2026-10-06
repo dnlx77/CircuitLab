@@ -33,7 +33,14 @@ namespace {
 	// con cui la CPU riesce a calcolare — utile per raggiungere in fretta un
 	// transitorio lungo (es. l'assestamento di un filtro passa-alto RC con
 	// costante di tempo di alcuni secondi) senza aspettare in tempo reale.
-	constexpr double SPEED_VALUES[] = { 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, -1.0 };
+	//
+	// Le velocità sotto 1 sono il "rallentatore": con segnali di decine o migliaia
+	// di Hz, a 1x un fotogramma (16 ms) copre più periodi e la corrente letta ad
+	// ogni fotogramma è di fatto casuale (aliasing), quindi i pallini saltano senza
+	// senso; a 0.01x un periodo di 40 Hz dura 2.5 s reali e il movimento si segue.
+	// L'ordine deve coincidere con speedNames in UI::DrawImageGuiPanel (l'indice
+	// predefinito, 1x, è UI::m_simSpeedIndex).
+	constexpr double SPEED_VALUES[] = { 0.001, 0.01, 0.1, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, -1.0 };
 }
 
 // Crea il componente appropriato in base al tipo richiesto.
@@ -114,8 +121,11 @@ void CircuitLab::Application::SimulationLoop()
 			// Se il calcolo non riesce a stare al passo con la velocità chiesta, il
 			// debito crescerebbe senza limite e, appena il circuito diventa più
 			// leggero, la simulazione "correrebbe" per recuperarlo. Oltre
-			// MAX_PACING_LAG secondi reali di ritardo lo si lascia perdere.
-			if (owed > speed * MAX_PACING_LAG)
+			// MAX_PACING_LAG secondi reali di ritardo lo si lascia perdere. Il limite non
+			// scende mai sotto qualche passo: alle velocità lente (0.001x con timestep di
+			// 1 ms) speed * MAX_PACING_LAG è più piccolo di un singolo passo, e il debito
+			// verrebbe azzerato prima di poterne mai coprire uno (simulazione ferma).
+			if (owed > std::max(speed * MAX_PACING_LAG, 4.0 * h))
 			{
 				anchorWall = now;
 				anchorSim = m_simulationTime;

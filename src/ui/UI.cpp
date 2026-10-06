@@ -1262,7 +1262,7 @@ void CircuitLab::UI::DrawImageGuiPanel()
 		m_onSetHSim(m_hSimIndex);
 
 	const char *speedNames[] = {
-		"1x", "2x", "5x", "10x", "20x", "50x", "100x", "Massima"
+		"0.001x", "0.01x", "0.1x", "1x", "2x", "5x", "10x", "20x", "50x", "100x", "Massima"
 	};
 	constexpr int speedCount = static_cast<int>(std::size(speedNames));
 
@@ -1282,7 +1282,8 @@ void CircuitLab::UI::DrawImageGuiPanel()
 		m_speedSampleWall = wallNow;
 		m_speedSampleSim = simNow;
 	}
-	ImGui::Text("Tempo simulato: %s  (%.1fx)", FormatEngineering(simNow, "s").c_str(), m_measuredSpeed);
+	// %.3g e non %.1f: alle velocità lente (0.01x) una sola cifra decimale mostrerebbe "0.0x"
+	ImGui::Text("Tempo simulato: %s  (%.3gx)", FormatEngineering(simNow, "s").c_str(), m_measuredSpeed);
 
 	ImGui::Separator();
 
@@ -1335,6 +1336,18 @@ void CircuitLab::UI::DrawImageGuiPanel()
 	if (ImGui::Button(m_showOscilloscope ? "Hide Oscilloscope" : "Show Oscilloscope"))
 		m_showOscilloscope = !m_showOscilloscope;
 	ImGui::Separator();
+
+	ImGui::Checkbox("Mostra pallini della corrente", &m_showParticles);
+
+	// Il moltiplicatore agisce sulla velocità con cui i pallini avanzano (che resta
+	// proporzionale alla corrente): con correnti alte, o che cambiano verso troppo in
+	// fretta, rallentarli permette di seguire il movimento. Scala logaritmica: i valori
+	// utili vanno da 1x (come prima) fino a mille volte più lenti.
+	ImGui::BeginDisabled(!m_showParticles);
+	ImGui::SliderFloat("Velocita' pallini", &m_particleSpeed, 0.001f, 1.0f, "%.3fx", ImGuiSliderFlags_Logarithmic);
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+		ImGui::SetTooltip("Rallenta il movimento dei pallini (1x = velocita' reale,\nsempre proporzionale alla corrente).");
+	ImGui::EndDisabled();
 
 	ImGui::Checkbox("Mostra griglia", &m_showGrid);
 	ImGui::Checkbox("Aggancia alla griglia", &m_snapToGrid);
@@ -1686,7 +1699,8 @@ void CircuitLab::UI::DrawWires()
 		};
 		m_window.draw(line, 2, sf::PrimitiveType::Lines);
 
-		DrawParticles(wire.id);
+		if (m_showParticles)
+			DrawParticles(wire.id);
 	}
 }
 
@@ -1897,6 +1911,25 @@ void CircuitLab::UI::DrawOscilloscope()
 		ImGui::SetTooltip("Larghezza della finestra temporale visibile, in secondi");
 	ImGui::SameLine();
 	ImGui::TextUnformatted("s");
+
+	// Slider accanto alla casella (stessa variabile): si può scrivere il valore oppure
+	// trascinarlo. Scala logaritmica, perché la finestra va da microsecondi a secondi.
+	// Durante il trascinamento cambia solo la finestra mostrata (anteprima immediata sui
+	// campioni già raccolti); al rilascio si comunica il valore all'applicazione, che
+	// ricalcola la decimazione e svuota i campioni (a ogni frame del trascinamento
+	// l'oscilloscopio resterebbe vuoto). Ctrl+clic sullo slider permette di scrivere.
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(100.0f);
+	const double windowSliderMin = 1e-5;
+	const double windowSliderMax = 10.0;
+	ImGui::SliderScalar("##windowSlider", ImGuiDataType_Double, &m_windowTime, &windowSliderMin, &windowSliderMax, "", ImGuiSliderFlags_Logarithmic);
+	if (ImGui::IsItemDeactivatedAfterEdit())
+	{
+		if (m_windowTime < 0.000001) m_windowTime = 0.000001;
+		m_onSetWindowTime(m_windowTime);
+	}
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Trascina per cambiare la finestra (scala logaritmica, da 10 us a 10 s).\nCtrl+clic per scrivere il valore.");
 
 	ImGui::SameLine();
 	if (ImGui::Button("Auto Sync"))
@@ -2647,7 +2680,7 @@ void CircuitLab::UI::UpdateParticles(float dt)
 		// all'indietro, ben oltre l'inizio del filo — il pallino "fuori dal circuito"
 		// notato ogni tanto vicino a un generatore appena avviata la simulazione.
 		// x - floor(x) è invece corretto per qualunque x, positivo o negativo.
-		float x = lp.offset + static_cast<float>(m_linkViewCurrentList[lp.linkViewId]) * dt * PARTICLE_SPEED_SCALE;
+		float x = lp.offset + static_cast<float>(m_linkViewCurrentList[lp.linkViewId]) * dt * PARTICLE_SPEED_SCALE * m_particleSpeed;
 		lp.offset = x - std::floor(x);
 	}
 }
@@ -2694,7 +2727,7 @@ CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &t
 	m_window{ sf::VideoMode({ m_width, m_heigth }), m_title },
 	m_showOscilloscope{ false },
 	m_hSimIndex{ 3 },
-	m_simSpeedIndex{ 0 },
+	m_simSpeedIndex{ 3 }, // 1x (vedi SPEED_VALUES in Application.cpp)
 	m_windowTime{ 1.0 }
 {
 	if (!ImGui::SFML::Init(m_window))

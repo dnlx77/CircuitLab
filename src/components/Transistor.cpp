@@ -57,8 +57,9 @@ double CircuitLab::Transistor::LimitVoltage(double vNew, double vOld, double vt,
 // Linearizzazione di Newton attorno a (VBE, VBC): modello companion standard
 // di un BJT (senza effetto Early) — vedi la spiegazione in Transistor.h.
 // gpi (base-emettitore) e gmu (base-collettore) si stampano come due
-// "resistori"; gm e go come due generatori di corrente pilotati in tensione
-// da collettore a emettitore, pilotati rispettivamente da VBE e VBC. Il
+// "resistori"; gm e (go + gmu) come due generatori di corrente pilotati in
+// tensione da collettore a emettitore, pilotati rispettivamente da VBE e VBC
+// (vedi sotto perché per VBC è go + gmu e non go). Il
 // pattern di stampa di un generatore pilotato I=g*(Vcp-Vcn) da nodo p a nodo n
 // è: A(p,cp)+=g; A(p,cn)-=g; A(n,cp)-=g; A(n,cn)+=g — la stessa idea del
 // resistore (che è il caso degenere p=cp, n=cn), generalizzata a controllo e
@@ -137,11 +138,20 @@ bool CircuitLab::Transistor::StampNonlinear(Eigen::MatrixXd &A,
 	if (n2 >= 0 && n0 >= 0) A(n2, n0) -= gm;
 	if (n2 >= 0)            A(n2, n2) += gm;
 
-	// go: generatore pilotato collettore(n1)->emettitore(n2), pilotato da VBC (n0,n1)
-	if (n1 >= 0 && n0 >= 0) A(n1, n0) += go;
-	if (n1 >= 0)            A(n1, n1) -= go;
-	if (n2 >= 0 && n0 >= 0) A(n2, n0) -= go;
-	if (n2 >= 0 && n1 >= 0) A(n2, n1) += go;
+	// go: generatore pilotato collettore(n1)->emettitore(n2), pilotato da VBC (n0,n1).
+	// Attenzione: il coefficiente da stampare NON è la derivata totale dIC/dVBC (go): quella
+	// comprende già il contributo della corrente base-collettore (iR/BR), che arriva al
+	// collettore dalla resistenza gmu stampata sopra. Il generatore deve portare solo la
+	// parte "di trasporto" (iF - iR), la cui dipendenza da VBC è -gR = go + gmu. Stampando
+	// go, il termine gmu veniva contato due volte: in regione attiva non si nota (gR è
+	// trascurabile), ma in saturazione (giunzione base-collettore in diretta, con BR = 1)
+	// il punto fisso di Newton non risolveva più le equazioni del modello e la convergenza
+	// non veniva mai raggiunta (verificato su un multivibratore astabile).
+	const double goTransport = go + gmu;
+	if (n1 >= 0 && n0 >= 0) A(n1, n0) += goTransport;
+	if (n1 >= 0)            A(n1, n1) -= goTransport;
+	if (n2 >= 0 && n0 >= 0) A(n2, n0) -= goTransport;
+	if (n2 >= 0 && n1 >= 0) A(n2, n1) += goTransport;
 
 	if (n0 >= 0) B[n0] -= iBeq;
 	if (n1 >= 0) B[n1] -= iCeq;

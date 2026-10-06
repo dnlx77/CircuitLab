@@ -37,8 +37,9 @@ namespace CircuitLab {
 	// companion a piccolo segnale standard di un BJT (senza effetto Early),
 	// stampato in MNA come due "resistori" (gpi tra base-emettitore, gmu tra
 	// base-collettore) più due generatori di corrente pilotati in tensione
-	// (gm e go, entrambi da collettore a emettitore, pilotati rispettivamente
-	// da VBE e VBC) — vedi StampNonlinear.
+	// (entrambi da collettore a emettitore, pilotati da VBE con coefficiente gm
+	// e da VBC con coefficiente go + gmu = -gR: la parte di go dovuta a iR/BR è
+	// già nella resistenza gmu) — vedi StampNonlinear.
 	class Transistor : public Component {
 	private:
 		// Tensione termica kT/q a ~300 K (stessa costante del Diodo)
