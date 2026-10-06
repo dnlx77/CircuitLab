@@ -2,6 +2,17 @@
 #include "Common/Logger.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include <filesystem>
+
+namespace {
+	// I percorsi circolano in UTF-8 (finestre di scelta file, ImGui): su Windows un
+	// std::ifstream(std::string) li leggerebbe invece nella tabella di caratteri
+	// locale e non aprirebbe un file con accenti nel nome o nella cartella.
+	std::filesystem::path FromUtf8(const std::string &utf8)
+	{
+		return std::filesystem::path(reinterpret_cast<const char8_t *>(utf8.c_str()));
+	}
+}
 
 nlohmann::json CircuitLab::IOManager::Serialize(const Circuit &circ, const std::vector<ComponentView> &compsView, const std::vector<LinkView> &linksView, const std::vector<NodeView> &nodesView) const
 {
@@ -89,7 +100,7 @@ void CircuitLab::IOManager::SaveToFile(const std::string &filePath, const Circui
 {
 	nlohmann::json j = Serialize(circ, compsView, linksView, nodesView);
 
-	std::ofstream o(filePath);
+	std::ofstream o(FromUtf8(filePath));
 	if (!o.is_open())
 	{
 		LOG_ERROR("Errore nell'apertura del file " << filePath);
@@ -196,15 +207,31 @@ void CircuitLab::IOManager::Deserialize(const nlohmann::json &j)
 
 void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 {
-	std::ifstream i(filePath);
+	std::ifstream i(FromUtf8(filePath));
 	if (!i.is_open())
 	{
 		LOG_ERROR("Errore nell'apertura del file " << filePath);
 		return;
 	}
 
+	// Con la finestra di scelta file si può aprire un .json qualunque: va verificato
+	// PRIMA di azzerare il circuito, altrimenti un file sbagliato lascerebbe
+	// l'utente con un canvas vuoto (o farebbe terminare il programma per un'eccezione).
 	nlohmann::json j;
-	i >> j;
+	try
+	{
+		i >> j;
+	}
+	catch (const nlohmann::json::exception &e)
+	{
+		LOG_ERROR("Il file " << filePath << " non e' un JSON valido: " << e.what());
+		return;
+	}
+	if (!j.is_object() || !j.contains("components") || !j.contains("links"))
+	{
+		LOG_ERROR("Il file " << filePath << " non e' un circuito CircuitLab");
+		return;
+	}
 
 	// Resetta il circuito e la UI prima di ricaricare
 	m_onNew();

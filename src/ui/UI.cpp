@@ -11,10 +11,27 @@
 #include <vector>
 
 #include "UI/Ui.h"
+#include "UI/FileDialog.h"
+#include <filesystem>
 #include "Core/Vector2.h"
 #include "Common/Logger.h"
 
 namespace {
+	// Nome e cartella di un percorso in UTF-8 (come arrivano dalla finestra di scelta file)
+	std::filesystem::path PathFromUtf8(const std::string &utf8)
+	{
+		return std::filesystem::path(reinterpret_cast<const char8_t *>(utf8.c_str()));
+	}
+
+	std::string Utf8Of(const std::filesystem::path &path)
+	{
+		const std::u8string u8 = path.u8string();
+		return std::string(reinterpret_cast<const char *>(u8.c_str()), u8.size());
+	}
+
+	std::string FileNameOf(const std::string &path) { return Utf8Of(PathFromUtf8(path).filename()); }
+	std::string DirectoryOf(const std::string &path) { return Utf8Of(PathFromUtf8(path).parent_path()); }
+
 	// Prefisso di una lettera per il tipo di componente ("R", "V", "G", ...),
 	// usato nelle etichette sul canvas e nei nomi dei canali dell'oscilloscopio.
 	const char *ComponentPrefix(CircuitLab::ComponentType type)
@@ -1082,7 +1099,11 @@ void CircuitLab::UI::HandleEvents()
 				sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RControl);
 			bool shiftHeld = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) ||
 				sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
-			if (ctrlHeld && keyboardEvent->code == sf::Keyboard::Key::Z && !shiftHeld && m_onUndo)
+			if (ctrlHeld && keyboardEvent->code == sf::Keyboard::Key::S)
+				m_pendingFileAction = m_currentFilePath.empty() ? FileAction::saveAs : FileAction::save;
+			else if (ctrlHeld && keyboardEvent->code == sf::Keyboard::Key::O)
+				m_pendingFileAction = FileAction::open;
+			else if (ctrlHeld && keyboardEvent->code == sf::Keyboard::Key::Z && !shiftHeld && m_onUndo)
 				m_onUndo();
 			else if (ctrlHeld && ((keyboardEvent->code == sf::Keyboard::Key::Z && shiftHeld) || keyboardEvent->code == sf::Keyboard::Key::Y) && m_onRedo)
 				m_onRedo();
@@ -1266,16 +1287,30 @@ void CircuitLab::UI::DrawImageGuiPanel()
 	ImGui::Separator();
 
 	if (ImGui::Button("New"))
+	{
 		m_onNew();
+		m_currentFilePath.clear();
+	}
 
-	static char pathBuffer[256] = "circuit.json";
-	ImGui::InputText("File", pathBuffer, sizeof(pathBuffer));
+	if (m_currentFilePath.empty())
+		ImGui::TextDisabled("File: (nessuno)");
+	else
+	{
+		ImGui::Text("File: %s", FileNameOf(m_currentFilePath).c_str());
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("%s", m_currentFilePath.c_str());
+	}
 
-	if (ImGui::Button("Save"))
-		m_onSave(pathBuffer);
+	// Le tre azioni aprono la finestra di scelta file di sistema (a fine frame, vedi
+	// ProcessPendingFileAction); "Salva" la salta se il file è già noto
+	if (ImGui::Button("Apri... (Ctrl+O)"))
+		m_pendingFileAction = FileAction::open;
 
-	if (ImGui::Button("Load"))
-		m_onLoad(pathBuffer);
+	if (ImGui::Button("Salva (Ctrl+S)"))
+		m_pendingFileAction = m_currentFilePath.empty() ? FileAction::saveAs : FileAction::save;
+
+	if (ImGui::Button("Salva con nome..."))
+		m_pendingFileAction = FileAction::saveAs;
 
 	ImGui::Separator();
 
@@ -3086,4 +3121,52 @@ void CircuitLab::UI::Render()
 	// Render ImGui sopra il canvas
 	ImGui::SFML::Render(m_window);
 	m_window.display();
+
+	ProcessPendingFileAction();
+}
+
+// Esegue l'azione su file richiesta durante il frame. Le finestre di scelta file sono
+// bloccanti (e modali rispetto alla finestra dell'app): chiamarle dal pulsante, in mezzo
+// ai widget ImGui, lascerebbe il frame a metà con lo stato del mouse "premuto"; qui il
+// frame è già finito.
+void CircuitLab::UI::ProcessPendingFileAction()
+{
+	const FileAction action = m_pendingFileAction;
+	m_pendingFileAction = FileAction::none;
+	if (action == FileAction::none)
+		return;
+
+	void *owner = reinterpret_cast<void *>(m_window.getNativeHandle());
+	const std::string directory = DirectoryOf(m_currentFilePath);
+
+	switch (action)
+	{
+	case FileAction::open:
+		if (const auto path = FileDialog::OpenCircuit(owner, directory))
+		{
+			m_onLoad(*path);
+			// Dopo il caricamento: il caricamento stesso passa da New, che non deve
+			// azzerare il file corrente se poi non riesce
+			m_currentFilePath = *path;
+		}
+		break;
+
+	case FileAction::saveAs:
+	{
+		const std::string suggested = m_currentFilePath.empty() ? std::string("circuito.json") : FileNameOf(m_currentFilePath);
+		if (const auto path = FileDialog::SaveCircuit(owner, directory, suggested))
+		{
+			m_onSave(*path);
+			m_currentFilePath = *path;
+		}
+		break;
+	}
+
+	case FileAction::save:
+		m_onSave(m_currentFilePath);
+		break;
+
+	case FileAction::none:
+		break;
+	}
 }

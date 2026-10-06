@@ -140,6 +140,15 @@ namespace CircuitLab {
 		// decidere se c'è spazio per aprirla sopra al componente (vedi DrawComponentPopup)
 		float m_compPopupHeight = 200.0f;
 		float m_compPopupWidth = 270.0f;
+
+		// File del circuito corrente (dopo Apri / Salva con nome): "Salva" scrive qui senza
+		// chiedere ogni volta il percorso. Vuoto per un circuito nuovo.
+		std::string m_currentFilePath;
+		// Azione richiesta da un pulsante o da una scorciatoia: la finestra di scelta file
+		// è bloccante, quindi si esegue a fine frame (vedi ProcessPendingFileAction) e non
+		// nel mezzo dei widget ImGui.
+		enum class FileAction { none, open, save, saveAs };
+		FileAction m_pendingFileAction = FileAction::none;
 		int m_simSpeedIndex;
 
 		// Misura della velocità effettiva (tempo simulato / tempo reale) mostrata nel pannello
@@ -332,6 +341,7 @@ namespace CircuitLab {
 		// Disegna il pannello laterale ImGui (proprietà componente selezionato, oscilloscopio, save/load)
 		void DrawImageGuiPanel();
 		void DrawComponentPopup();
+		void ProcessPendingFileAction();
 		void MirrorComponent(int compId);
 
 		// Crea un componente del tipo dato in posizione pos (coordinate mondo) e lo

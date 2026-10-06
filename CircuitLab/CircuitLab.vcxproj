@@ -181,6 +181,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClCompile Include="..\src\components\ChangeoverSwitch.cpp" />
     <ClCompile Include="..\src\components\Transistor.cpp" />
     <ClCompile Include="..\src\ui\WireGraph.cpp" />
+    <ClCompile Include="..\src\ui\FileDialog.cpp" />
     <ClCompile Include="..\src\components\Terminal.cpp" />
     <ClCompile Include="..\src\components\VoltageGenerator.cpp" />
     <ClCompile Include="..\src\components\WaveForm.cpp" />
@@ -214,6 +215,7 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClInclude Include="..\include\Components\ChangeoverSwitch.h" />
     <ClInclude Include="..\include\Components\Transistor.h" />
     <ClInclude Include="..\include\UI\WireGraph.h" />
+    <ClInclude Include="..\include\UI\FileDialog.h" />
     <ClInclude Include="..\include\Components\Terminal.h" />
     <ClInclude Include="..\include\Components\VoltageGenerator.h" />
     <ClInclude Include="..\include\Components\WaveForm.h" />
