@@ -20,6 +20,9 @@ namespace CircuitLab {
 		virtual ~WaveForm() = default;
 		// Restituisce il valore istantaneo della forma d'onda al tempo t.
 		virtual double Evaluate(double t) = 0;
+		// Componente continua della forma d'onda: il valore che ha il generatore nell'analisi
+		// del punto di lavoro DC (le sorgenti alternate, senza offset, valgono 0).
+		virtual double DcValue() const = 0;
 		virtual std::map<ComponentValue, double> GetValues() const = 0;
 		virtual void SetValues(const std::map<ComponentValue, double> &values) = 0;
 		WaveFormType GetType() const { return m_waveFormType; }

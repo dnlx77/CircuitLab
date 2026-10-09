@@ -45,6 +45,7 @@ namespace CircuitLab {
 		double GetPreviousVoltage() const { return m_previousVoltage; }
 
 		void ResetDynamicState() override { m_previousVoltage = 0.0; }
+		void SetStateFromDc(const std::vector<double> &terminalVoltages) override;
 
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;

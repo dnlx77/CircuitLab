@@ -10,6 +10,7 @@ namespace CircuitLab {
 	public:
 		DCWaveForm(double voltage);
 		double Evaluate(double t) override;
+		double DcValue() const override { return m_voltage; }
 		std::map<ComponentValue, double> GetValues() const override;
 		void SetValues(const std::map<ComponentValue, double> &values) override;
 		void SaveSpecificData(nlohmann::json &j) const override;

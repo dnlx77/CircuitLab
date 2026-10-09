@@ -69,6 +69,33 @@ namespace {
 
 }
 
+std::optional<Eigen::VectorXd> CircuitLab::SolveOperatingPoint(Circuit &circuit, Solver &solver, bool &converged)
+{
+	converged = false;
+
+	circuit.SetDcAnalysis(true);
+	circuit.ComputeMatrix();
+	circuit.ComputeVector(StampContext{});
+
+	std::optional<Eigen::VectorXd> result;
+	if (circuit.HasNonlinearComponents())
+		result = SolveNonlinearStep(circuit, solver, Eigen::VectorXd(), converged);
+	else
+	{
+		// Lineare: una sola soluzione. Si fattorizza qui (il callback di Circuit, se c'è, ha
+		// già fattorizzato la stessa matrice, ma non va dato per scontato).
+		solver.Factorize(circuit.GetCircuitMatrix());
+		result = solver.SolveCircuit(circuit.GetCircuitVector());
+		converged = result.has_value();
+	}
+
+	if (result.has_value() && converged)
+		circuit.ApplyDcState(*result);
+
+	circuit.SetDcAnalysis(false);
+	return result;
+}
+
 std::optional<Eigen::VectorXd> CircuitLab::SolveNonlinearStep(Circuit &circuit, Solver &solver,
 	const Eigen::VectorXd &warmStart, bool &converged)
 {

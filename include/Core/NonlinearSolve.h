@@ -59,6 +59,17 @@ namespace CircuitLab {
 	std::optional<Eigen::VectorXd> SolveNonlinearStep(Circuit &circuit, Solver &solver,
 		const Eigen::VectorXd &warmStart, bool &converged);
 
+	// Calcola il PUNTO DI LAVORO DC del circuito: lo stato di regime con tutte le grandezze
+	// costanti (condensatori aperti, induttori in corto, sorgenti al valore continuo; vedi
+	// Circuit::SetDcAnalysis). Con componenti non lineari usa SolveNonlinearStep, quindi
+	// anche i suoi tentativi di riserva (partenze casuali, source stepping), da zero.
+	// Se converge imposta lo stato dinamico di ogni componente a quello del punto di lavoro
+	// (Circuit::ApplyDcState) e restituisce il vettore soluzione, che ha lo stesso layout delle
+	// incognite del transitorio e si può usare come partenza del primo passo. Il circuito
+	// viene lasciato in modalità transitoria (da ricalcolare). nullopt se la matrice è
+	// singolare; converged dice se si è arrivati a convergenza.
+	std::optional<Eigen::VectorXd> SolveOperatingPoint(Circuit &circuit, Solver &solver, bool &converged);
+
 	namespace NonlinearSolve {
 		inline constexpr int FAST_ITERATIONS = 50;      // tentativo 1
 		inline constexpr int DAMPED_ITERATIONS = 100;   // tentativo 2 e passi del 5

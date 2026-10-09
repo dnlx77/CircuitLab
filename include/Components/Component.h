@@ -19,6 +19,14 @@ namespace CircuitLab {
 	// mentre la caduta sul "filo" resta trascurabile (1 A -> 1 µV).
 	inline constexpr double SHORT_CIRCUIT_CONDUCTANCE = 1e6;
 
+	// Valore speciale del passo h (sia in StampMatrix sia in StampContext::h) con cui
+	// Circuit chiede il modello del PUNTO DI LAVORO DC, cioè il regime stazionario con
+	// tutte le grandezze costanti: condensatori aperti, induttori (e avvolgimenti dei
+	// trasformatori) in corto, generatori al loro valore continuo, nessuna memoria dei
+	// passi precedenti. Gli altri componenti (resistori, diodi, transistor...) non
+	// dipendono da h e si stampano come sempre.
+	inline constexpr double DC_ANALYSIS_STEP = -1.0;
+
 	// Contesto passato a StampVector ad ogni step di simulazione:
 	// t = tempo corrente, h = passo di integrazione, companionState = stato del modello
 	// companion per componenti dinamici (es. condensatori/induttori, quando introdotti).
@@ -143,6 +151,14 @@ namespace CircuitLab {
 		// tornando al timestep originale. Default: no-op (componenti senza
 		// memoria, come Resistor, non hanno nulla da azzerare).
 		virtual void ResetDynamicState() {}
+
+		// Imposta lo stato dinamico (tensione del condensatore, corrente dell'induttore...)
+		// al valore che ha nel punto di lavoro DC appena calcolato: terminalVoltages sono le
+		// tensioni dei terminali del componente, nello stesso ordine di GetTerminals(), rispetto
+		// a massa. Da chiamare PRIMA che la matrice venga ristampata con il passo di
+		// integrazione (alcuni componenti usano ancora i coefficienti dell'analisi DC).
+		// Default: no-op (componenti senza memoria).
+		virtual void SetStateFromDc(const std::vector<double> &terminalVoltages) { (void)terminalVoltages; }
 
 		// Inverte lo stato aperto/chiuso. Solo lo Switch lo sovrascrive;
 		// per tutti gli altri componenti è un no-op (non ha senso "aprirli").

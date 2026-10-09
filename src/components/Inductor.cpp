@@ -18,7 +18,8 @@ void CircuitLab::Inductor::StampMatrix(Eigen::MatrixXd &A,
 {
 	(void)voltageSourceMap;
 
-	m_conductance = (m_inductance > 1e-9) ? (h / m_inductance) : SHORT_CIRCUIT_CONDUCTANCE;
+	// DC: induttore in corto (a regime la tensione ai suoi capi è nulla)
+	m_conductance = (h == DC_ANALYSIS_STEP || m_inductance <= 1e-9) ? SHORT_CIRCUIT_CONDUCTANCE : (h / m_inductance);
 
 	int n1 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
 	int n2 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
@@ -43,9 +44,9 @@ void CircuitLab::Inductor::StampVector(Eigen::VectorXd &B,
 	const StampContext &ctx)
 {
 	(void)voltageSourceMap;
-	(void)ctx;
 
-	double iEq = m_previousCurrent;
+	// DC: nessuna memoria del passo precedente
+	double iEq = (ctx.h == DC_ANALYSIS_STEP) ? 0.0 : m_previousCurrent;
 
 	int n1 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
 	int n2 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
@@ -59,6 +60,12 @@ void CircuitLab::Inductor::UpdateState(double v1, double v2)
 	// i(t) = Geq*(v1-v2) + i(t-h): usa il valore VECCHIO di m_previousCurrent
 	// (letto qui prima dell'assegnazione) per calcolare quello nuovo.
 	m_previousCurrent += m_conductance * (v1 - v2);
+}
+
+void CircuitLab::Inductor::SetStateFromDc(const std::vector<double> &terminalVoltages)
+{
+	// In DC l'induttore è la conduttanza di corto: la sua corrente è G*(v1-v2)
+	m_previousCurrent = SHORT_CIRCUIT_CONDUCTANCE * (terminalVoltages[0] - terminalVoltages[1]);
 }
 
 void CircuitLab::Inductor::SaveSpecificData(nlohmann::json &j) const

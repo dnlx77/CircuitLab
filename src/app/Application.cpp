@@ -387,6 +387,11 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			{
 				std::lock_guard<std::mutex> lock(m_circuitMutex);
 				m_circuit->ResetDynamicState();
+
+				// Con l'opzione attiva si parte direttamente dal regime: condensatori già
+				// carichi, induttori già a regime (se il calcolo fallisce resta lo stato scarico)
+				if (m_startFromDc)
+					ApplyDcOperatingPointLocked();
 			}
 
 			// Calcola subito un punto di funzionamento del circuito appena
@@ -400,13 +405,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			// successivo, quasi istantaneo. Il tempo virtuale avanzato da
 			// questo passo viene poi azzerato per non sfalsare l'inizio di
 			// una simulazione continua successiva.
-			Simulate();
-			{
-				std::lock_guard<std::mutex> lock(m_swapMutex);
-				std::swap(m_backIndex, m_frontIndex);
-			}
-			m_newOutputReady = true;
-			m_simulationTime = 0.0;
+			PrimeOutput();
 
 			m_simStatus = previousStatus;
 		});
@@ -524,6 +523,8 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 				// come un mini "New" che non tocca però topologia o valori.
 				m_circuit->ResetDynamicState();
 				m_simulationResult = Eigen::VectorXd();
+				if (m_startFromDc)
+					ApplyDcOperatingPointLocked();
 
 				// Vedi il commento su m_simulationTime in ClearState(): con un
 				// timestep enorme anche solo qualche step fa crescere parecchio il
@@ -533,6 +534,16 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 				m_simulationTime = 0.0;
 			}
 			UpdateDecimationFactor();
+		});
+
+	m_ui->SetOnSetStartFromDc([this](bool enabled)
+		{
+			m_startFromDc = enabled;
+		});
+
+	m_ui->SetOnRestartFromDc([this]()
+		{
+			RestartFromDc();
 		});
 
 	m_ui->SetOnSetSimSpeed([this](int index)
@@ -1019,9 +1030,69 @@ void CircuitLab::Application::SampleChannels(const SimulationOutput &output)
 
 void CircuitLab::Application::SetSimulationStatus(SimulationStatus status)
 {
+	// Avvio da t=0 (circuito nuovo, appena caricato o dopo un cambio di timestep): si parte
+	// dal regime. La simulazione non sta girando, quindi nessun passo concorrente. Ripartire
+	// da Pausa/Stop (tempo > 0) non ricalcola nulla: riprende da dove era.
+	if (status == SimulationStatus::running && m_simStatus != SimulationStatus::running &&
+		m_startFromDc && m_simulationTime == 0.0)
+	{
+		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		ApplyDcOperatingPointLocked();
+	}
+
 	m_simStatus = status;
 	if (status == SimulationStatus::running)
 		m_ui->CreateLinkParticlesList();
+}
+
+bool CircuitLab::Application::ApplyDcOperatingPointLocked()
+{
+	// Casi senza nulla (o nulla di sensato) da risolvere: Simulate() li segnala già con
+	// il proprio messaggio, qui basta non toccare lo stato
+	if (m_circuit->IsCircuitEmpty() || m_circuit->CircuitHasOnlyGround() || m_circuit->HasFloatingTerminal())
+		return false;
+
+	bool converged = false;
+	const auto result = SolveOperatingPoint(*m_circuit, *m_solver, converged);
+	if (!result.has_value() || !converged)
+		return false;
+
+	m_simulationResult = *result;
+	return true;
+}
+
+void CircuitLab::Application::PrimeOutput()
+{
+	Simulate();
+	{
+		std::lock_guard<std::mutex> lock(m_swapMutex);
+		std::swap(m_backIndex, m_frontIndex);
+	}
+	m_newOutputReady = true;
+	m_simulationTime = 0.0;
+}
+
+void CircuitLab::Application::RestartFromDc()
+{
+	// Come il Load: si ferma la simulazione e si aspetta un eventuale passo in corso, così
+	// il thread di simulazione non vede lo stato a metà
+	const SimulationStatus previousStatus = m_simStatus;
+	m_simStatus = SimulationStatus::stopped;
+	{
+		std::lock_guard<std::mutex> lock(m_circuitMutex);
+	}
+
+	{
+		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		m_circuit->ResetDynamicState();
+		m_simulationResult = Eigen::VectorXd();
+		ApplyDcOperatingPointLocked();
+		m_simulationTime = 0.0;
+	}
+	UpdateDecimationFactor(); // svuota anche i campioni dell'oscilloscopio
+	PrimeOutput();
+
+	m_simStatus = previousStatus;
 }
 
 void CircuitLab::Application::AddChannel(ProbeType type, int idA, int idB, int compId)

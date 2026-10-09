@@ -55,6 +55,8 @@ namespace CircuitLab {
 		using fnGetHSim = std::function<double()>;
 		using fnSetHSim = std::function<void(int)>;
 		using fnSetSimSpeed = std::function<void(int)>;
+		using fnSetStartFromDc = std::function<void(bool)>;
+		using fnRestartFromDc = std::function<void()>;
 		using fnSetWindowTime = std::function<void(double)>;
 		using fnAutoSync = std::function<void()>;
 		using fnGetSimulationTime = std::function<double()>;
@@ -154,6 +156,7 @@ namespace CircuitLab {
 		enum class FileAction { none, open, save, saveAs };
 		FileAction m_pendingFileAction = FileAction::none;
 		int m_simSpeedIndex;
+		bool m_startFromDc = false; // vedi Application::m_startFromDc (stesso valore iniziale)
 
 		// Misura della velocità effettiva (tempo simulato / tempo reale) mostrata nel pannello
 		double m_speedSampleWall = 0.0;
@@ -275,6 +278,8 @@ namespace CircuitLab {
 		fnGetHSim m_onGetHSim;
 		fnSetHSim m_onSetHSim;
 		fnSetSimSpeed m_onSetSimSpeed;
+		fnSetStartFromDc m_onSetStartFromDc;
+		fnRestartFromDc m_onRestartFromDc;
 		fnSetWindowTime m_onSetWindowTime;
 		fnAutoSync m_onAutoSync;
 		fnGetSimulationTime m_onGetSimulationTime;
@@ -446,6 +451,8 @@ namespace CircuitLab {
 		void SetOnGetHSim(const fnGetHSim &func) { m_onGetHSim = func; }
 		void SetOnSetHSim(const fnSetHSim &func) { m_onSetHSim = func; }
 		void SetOnSetSimSpeed(const fnSetSimSpeed &func) { m_onSetSimSpeed = func; }
+		void SetOnSetStartFromDc(const fnSetStartFromDc &func) { m_onSetStartFromDc = func; }
+		void SetOnRestartFromDc(const fnRestartFromDc &func) { m_onRestartFromDc = func; }
 		void SetOnSetWindowTime(const fnSetWindowTime &func) { m_onSetWindowTime = func; }
 		void SetOnAutoSync(const fnAutoSync &func) { m_onAutoSync = func; }
 		void SetOnGetSimulationTime(const fnGetSimulationTime &func) { m_onGetSimulationTime = func; }

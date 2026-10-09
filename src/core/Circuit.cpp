@@ -61,8 +61,17 @@ void CircuitLab::Circuit::ComputeMatrix()
 	m_circuitMatrix = Eigen::MatrixXd::Zero(num_nodes, num_nodes);
 	m_circuitVector = Eigen::VectorXd::Zero(num_nodes);
 
+	const double stampStep = m_dcAnalysis ? DC_ANALYSIS_STEP : m_h;
 	for (const auto &comp : m_components)
-		comp->StampMatrix(m_circuitMatrix, m_nodesMap, m_voltageSourceMap, m_h);
+		comp->StampMatrix(m_circuitMatrix, m_nodesMap, m_voltageSourceMap, stampStep);
+
+	// Punto di lavoro DC: un piccolo shunt a massa su ogni nodo (come il "gmin" di SPICE).
+	// Un nodo collegato solo a condensatori (aperti in DC) non avrebbe altrimenti nessun
+	// riferimento e la matrice sarebbe singolare; 1e-12 S non altera i valori di un circuito
+	// reale (corrisponde a una resistenza di 1 TOhm).
+	if (m_dcAnalysis)
+		for (size_t i = 0; i < m_nodesMap.size(); i++)
+			m_circuitMatrix(i, i) += DC_NODE_SHUNT_CONDUCTANCE;
 
 	if (m_onFactorize)
 		m_onFactorize(m_circuitMatrix);
@@ -74,8 +83,27 @@ void CircuitLab::Circuit::ComputeVector(const StampContext &ctx)
 	assert(!m_isDirty && "ComputerVector called before ComputeMatrix");
 	m_circuitVector.setZero(m_circuitMatrix.rows());
 
+	StampContext stampCtx = ctx;
+	if (m_dcAnalysis)
+		stampCtx.h = DC_ANALYSIS_STEP;
+
 	for (const auto &comp : m_components)
-		comp->StampVector(m_circuitVector, m_nodesMap, m_voltageSourceMap, ctx);
+		comp->StampVector(m_circuitVector, m_nodesMap, m_voltageSourceMap, stampCtx);
+}
+
+void CircuitLab::Circuit::ApplyDcState(const Eigen::VectorXd &x)
+{
+	for (const auto &comp : m_components)
+	{
+		std::vector<double> voltages;
+		for (const Terminal &terminal : comp->GetTerminals())
+		{
+			// massa (0) e terminali liberi (-1) non hanno riga in matrice: tensione 0
+			const int nodeId = terminal.GetNodeId();
+			voltages.push_back(nodeId > 0 ? x[m_nodesMap.at(nodeId)] : 0.0);
+		}
+		comp->SetStateFromDc(voltages);
+	}
 }
 
 bool CircuitLab::Circuit::HasNonlinearComponents() const

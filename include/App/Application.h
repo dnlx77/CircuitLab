@@ -33,6 +33,17 @@ namespace CircuitLab {
 		// in Application.cpp e SimulationLoop). Atomico: scritto dal thread di
 		// rendering (SetOnSetSimSpeed), letto dal thread di simulazione.
 		std::atomic<double> m_simSpeed{ 1.0 };
+		// Se vero, all'avvio da t=0 (e dopo Load o un cambio di timestep) lo stato di partenza è
+		// il PUNTO DI LAVORO DC invece dello stato scarico: i condensatori partono già caricati
+		// e gli induttori già attraversati dalla corrente di regime, senza il transitorio di
+		// assestamento (vedi ApplyDcOperatingPointLocked). Disattivabile dal pannello per
+		// osservare la carica dei condensatori da zero.
+		//
+		// Spento di default: un circuito oscillante (multivibratore astabile) partendo
+		// esattamente dal punto di lavoro DC resta fermo su quell'equilibrio (verificato: nemmeno
+		// una perturbazione di 10 mV lo fa partire, mentre dallo stato scarico oscilla), e un
+		// circuito RC non mostrerebbe più la carica del condensatore.
+		std::atomic<bool> m_startFromDc{ false };
 		double m_windowTime;
 		int m_decimationFactor;
 		int m_sampleCounter;
@@ -90,6 +101,17 @@ namespace CircuitLab {
 		SimulationResult m_topologyCheck = SimulationResult::success;
 		bool m_topologyChecked = false;
 
+		// Calcola il punto di lavoro DC e lo adotta come stato di partenza: imposta lo stato
+		// dinamico dei componenti e il punto di partenza di Newton (m_simulationResult). Con
+		// m_circuitMutex già acquisito dal chiamante. Restituisce false (senza toccare lo stato)
+		// se il circuito è vuoto, ha terminali scollegati o il calcolo non converge.
+		bool ApplyDcOperatingPointLocked();
+
+		// Calcola un passo dal circuito attuale e lo pubblica al rendering subito (swap +
+		// notifica), azzerando poi il tempo virtuale: mostra i valori veri nel pannello senza
+		// aspettare l'avvio della simulazione continua. Chiamare con la simulazione ferma.
+		void PrimeOutput();
+
 		void SimulationLoop();
 		void RenderLoop();
 
@@ -117,6 +139,10 @@ namespace CircuitLab {
 		const Eigen::VectorXd &GetResult() const { return m_simulationResult; }
 
 		void SetSimulationStatus(SimulationStatus status);
+
+		// Riparte da t=0 dallo stato di regime (punto di lavoro DC), anche a simulazione in
+		// corso: azzera il tempo e i campioni dell'oscilloscopio e riprende da dove era.
+		void RestartFromDc();
 
 		void AddChannel(ProbeType type, int idA, int idB = -1, int compId = -1);
 

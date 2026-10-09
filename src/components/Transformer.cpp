@@ -33,9 +33,20 @@ void CircuitLab::Transformer::StampMatrix(Eigen::MatrixXd &A,
 	// det > 0 sempre, perché k < 1 rigorosamente (M^2 = k^2*L1*L2 < L1*L2)
 	const double det = l1 * l2 - m * m;
 
-	m_g11 = h * l2 / det;
-	m_g22 = h * l1 / det;
-	m_g12 = -h * m / det;
+	if (h == DC_ANALYSIS_STEP)
+	{
+		// DC: i due avvolgimenti sono due cortocircuiti indipendenti (a regime il flusso
+		// non cambia e non induce tensione: nessun accoppiamento)
+		m_g11 = SHORT_CIRCUIT_CONDUCTANCE;
+		m_g22 = SHORT_CIRCUIT_CONDUCTANCE;
+		m_g12 = 0.0;
+	}
+	else
+	{
+		m_g11 = h * l2 / det;
+		m_g22 = h * l1 / det;
+		m_g12 = -h * m / det;
+	}
 
 	int n0 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
 	int n1 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
@@ -77,18 +88,21 @@ void CircuitLab::Transformer::StampVector(Eigen::VectorXd &B,
 	const StampContext &ctx)
 {
 	(void)voltageSourceMap;
-	(void)ctx;
 
 	int n0 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
 	int n1 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
 	int n2 = (GetTerminals()[2].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[2].GetNodeId()) : -1;
 	int n3 = (GetTerminals()[3].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[3].GetNodeId()) : -1;
 
-	if (n0 >= 0) B[n0] -= m_i1Prev;
-	if (n1 >= 0) B[n1] += m_i1Prev;
+	// DC: nessuna memoria del passo precedente
+	const double i1 = (ctx.h == DC_ANALYSIS_STEP) ? 0.0 : m_i1Prev;
+	const double i2 = (ctx.h == DC_ANALYSIS_STEP) ? 0.0 : m_i2Prev;
 
-	if (n2 >= 0) B[n2] -= m_i2Prev;
-	if (n3 >= 0) B[n3] += m_i2Prev;
+	if (n0 >= 0) B[n0] -= i1;
+	if (n1 >= 0) B[n1] += i1;
+
+	if (n2 >= 0) B[n2] -= i2;
+	if (n3 >= 0) B[n3] += i2;
 }
 
 std::pair<double, double> CircuitLab::Transformer::BranchCurrents(double vPrimary, double vSecondary) const
@@ -105,6 +119,13 @@ void CircuitLab::Transformer::UpdateWindingState(double vPrimary, double vSecond
 	// dell'assegnazione) per calcolare quelli nuovi.
 	m_i1Prev += m_g11 * vPrimary + m_g12 * vSecondary;
 	m_i2Prev += m_g12 * vPrimary + m_g22 * vSecondary;
+}
+
+void CircuitLab::Transformer::SetStateFromDc(const std::vector<double> &terminalVoltages)
+{
+	// In DC ogni avvolgimento è la conduttanza di corto: corrente = G*(v+ - v-)
+	m_i1Prev = SHORT_CIRCUIT_CONDUCTANCE * (terminalVoltages[0] - terminalVoltages[1]);
+	m_i2Prev = SHORT_CIRCUIT_CONDUCTANCE * (terminalVoltages[2] - terminalVoltages[3]);
 }
 
 void CircuitLab::Transformer::SaveSpecificData(nlohmann::json &j) const

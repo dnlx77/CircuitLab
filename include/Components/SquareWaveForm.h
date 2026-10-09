@@ -11,6 +11,7 @@ namespace CircuitLab {
 	public:
 		SquareWaveForm(double amplitude, double frequency);
 		double Evaluate(double t) override;
+		double DcValue() const override { return 0.0; } // alterna +A / -A: media nulla
 		std::map<ComponentValue, double> GetValues() const override;
 		void SetValues(const std::map<ComponentValue, double> &values) override;
 		void SaveSpecificData(nlohmann::json &j) const override;

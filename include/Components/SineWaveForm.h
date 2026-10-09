@@ -12,6 +12,7 @@ namespace CircuitLab {
 	public:
 		SineWaveForm(double amplitude, double frequency, double phase);
 		double Evaluate(double t) override;
+		double DcValue() const override { return 0.0; }
 		std::map<ComponentValue, double> GetValues() const override;
 		void SetValues(const std::map<ComponentValue, double> &values) override;
 		void SaveSpecificData(nlohmann::json &j) const override;

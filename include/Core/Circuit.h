@@ -13,6 +13,9 @@ namespace CircuitLab {
 		int compId2, termIndex2;  // Secondo componente e indice del suo terminale
 	};
 
+	// Conduttanza verso massa aggiunta a ogni nodo nell'analisi del punto di lavoro DC
+	inline constexpr double DC_NODE_SHUNT_CONDUCTANCE = 1e-12;
+
 	// Rappresenta il circuito elettrico nel suo insieme.
 	// Si occupa di gestire la collezione di componenti, costruire
 	// la matrice MNA (A) e il vettore (b), e gestire le connessioni tra terminali.
@@ -30,6 +33,9 @@ namespace CircuitLab {
 		std::vector<Link> m_links;             // Lista dei collegamenti tra terminali
 		int m_nextNodeId;  // Prossimo ID disponibile per i nodi
 		bool m_isDirty;    // true se il circuito è stato modificato e va ricalcolato
+		// Analisi del punto di lavoro DC (vedi SetDcAnalysis): matrice e vettore si costruiscono
+		// con il modello a regime invece che con quello del passo di integrazione
+		bool m_dcAnalysis = false;
 		double m_h;        // Passo di simulazione corrente, passato a StampMatrix
 		                   // (i componenti con modello companion, es. condensatori, ne dipendono)
 
@@ -86,6 +92,20 @@ namespace CircuitLab {
 		// Segnala che il circuito è stato modificato e va ricalcolato
 		void InvalidateCircuit() { m_isDirty = true; }
 		bool IsDirty() const { return m_isDirty; }
+
+		// Passa all'analisi del punto di lavoro DC (on) o torna al modello transitorio (off).
+		// Cambia il modello stampato, quindi invalida la matrice: ComputeMatrix/ComputeVector
+		// costruiscono il sistema DC (condensatori aperti, induttori in corto, generatori al
+		// valore continuo, un piccolo shunt a massa su ogni nodo perché uno collegato solo a
+		// condensatori non resti senza riferimento). Lo spazio delle incognite è lo STESSO del
+		// transitorio, quindi il vettore soluzione è direttamente il punto di partenza di
+		// Newton per il primo passo. Vedi SolveOperatingPoint.
+		void SetDcAnalysis(bool on) { if (on != m_dcAnalysis) { m_dcAnalysis = on; InvalidateCircuit(); } }
+
+		// Imposta lo stato dinamico di ogni componente (tensione dei condensatori, corrente
+		// degli induttori...) a quello del punto di lavoro DC x, appena risolto. Presuppone che
+		// la mappa dei nodi sia quella con cui x è stato calcolato.
+		void ApplyDcState(const Eigen::VectorXd &x);
 
 		// Imposta il passo di simulazione usato dallo Stamp statico (StampMatrix).
 		// Invalida il circuito se il valore cambia, perché la conduttanza equivalente

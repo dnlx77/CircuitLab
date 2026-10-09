@@ -16,6 +16,14 @@ void CircuitLab::Capacitor::StampMatrix(Eigen::MatrixXd &A,
 {
 	(void)voltageSourceMap;
 
+	// DC: condensatore aperto, non stampa nulla (un nodo collegato solo a condensatori
+	// resta senza riferimento: ci pensa il piccolo shunt a massa di Circuit::ComputeMatrix)
+	if (h == DC_ANALYSIS_STEP)
+	{
+		m_conductance = 0.0;
+		return;
+	}
+
 	m_conductance = (h > 1e-15) ? (m_capacitance / h) : SHORT_CIRCUIT_CONDUCTANCE;
 
 	int n1 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
@@ -52,6 +60,11 @@ void CircuitLab::Capacitor::StampVector(Eigen::VectorXd &B,
 void CircuitLab::Capacitor::UpdateState(double v1, double v2)
 {
 	m_previousVoltage = v1 - v2;
+}
+
+void CircuitLab::Capacitor::SetStateFromDc(const std::vector<double> &terminalVoltages)
+{
+	m_previousVoltage = terminalVoltages[0] - terminalVoltages[1];
 }
 
 void CircuitLab::Capacitor::SaveSpecificData(nlohmann::json &j) const

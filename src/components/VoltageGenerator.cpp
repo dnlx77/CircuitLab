@@ -31,7 +31,8 @@ void CircuitLab::VoltageGenerator::StampVector(Eigen::VectorXd &B, const std::ma
 	// k è l'indice della riga extra per la corrente incognita
 	int k = VoltageGeneratorMap.at(GetId());
 
-	B[k] = m_waveForm->Evaluate(ctx.t);
+	// h = DC_ANALYSIS_STEP: punto di lavoro DC, solo la componente continua
+	B[k] = (ctx.h == DC_ANALYSIS_STEP) ? m_waveForm->DcValue() : m_waveForm->Evaluate(ctx.t);
 }
 
 CircuitLab::WaveFormType CircuitLab::VoltageGenerator::GetWaveFormType() const

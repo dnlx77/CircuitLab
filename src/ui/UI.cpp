@@ -1285,6 +1285,20 @@ void CircuitLab::UI::DrawImageGuiPanel()
 	// %.3g e non %.1f: alle velocità lente (0.01x) una sola cifra decimale mostrerebbe "0.0x"
 	ImGui::Text("Tempo simulato: %s  (%.3gx)", FormatEngineering(simNow, "s").c_str(), m_measuredSpeed);
 
+	if (ImGui::Checkbox("Parti dal punto di lavoro DC", &m_startFromDc))
+		m_onSetStartFromDc(m_startFromDc);
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("All'avvio (e dopo Apri o un cambio di timestep) i condensatori partono\n"
+			"gia' carichi e gli induttori gia' a regime, invece che scarichi:\n"
+			"niente transitorio di assestamento (es. 25 s di un amplificatore\n"
+			"accoppiato in alternata).\n"
+			"Lascialo spento per vedere la carica da zero e per gli oscillatori\n"
+			"(un multivibratore partendo dal regime resta fermo).");
+	if (ImGui::Button("Riparti dal punto DC"))
+		m_onRestartFromDc();
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("Azzera il tempo e riparte adesso dallo stato di regime.");
+
 	ImGui::Separator();
 
 	if (ImGui::Button("New"))
