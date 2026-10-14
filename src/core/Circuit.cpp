@@ -32,9 +32,12 @@ int CircuitLab::Circuit::ComputeNodes()
 		i++;
 	}
 
-	// LOG
+	// LOG: una sola riga (la matrice si ricostruisce ad ogni modifica di un valore, anche mentre si
+	// trascina uno slider: una riga per nodo, con il flush su file e console, pesava sul frame)
+	std::ostringstream nodeList;
 	for (const auto &n : nodes)
-		LOG_DEBUG("node in set: " << n);
+		nodeList << ' ' << n;
+	LOG_DEBUG("nodes in set:" << nodeList.str());
 
 	// Le sorgenti di tensione introducono una variabile extra (la corrente)
 	// che occupa una riga/colonna aggiuntiva in fondo alla matrice
@@ -45,7 +48,15 @@ int CircuitLab::Circuit::ComputeNodes()
 		}
 	}
 
-	return static_cast<int>(nodes.size() + m_voltageSourceMap.size());
+	const int size = static_cast<int>(nodes.size() + m_voltageSourceMap.size());
+	m_indexToNode.assign(size, -1);
+	m_indexToSource.assign(size, -1);
+	for (const auto &[nodeId, index] : m_nodesMap)
+		m_indexToNode[index] = nodeId;
+	for (const auto &[componentId, index] : m_voltageSourceMap)
+		m_indexToSource[index] = componentId;
+
+	return size;
 }
 
 void CircuitLab::Circuit::ComputeMatrix()
@@ -253,10 +264,9 @@ std::vector<int> CircuitLab::Circuit::GetNodesIdFromComponentId(int compId) cons
 // Ricerca inversa nella mappa nodi: dato un indice nella matrice, restituisce il nodeId (-1 se non trovato)
 int CircuitLab::Circuit::GetNodesFromIndex(int index) const
 {
-	for (const auto &[key, value] : m_nodesMap)
-		if (value == index)
-			return key;
-	return -1;
+	if (index < 0 || index >= static_cast<int>(m_indexToNode.size()))
+		return -1;
+	return m_indexToNode[index];
 }
 
 int CircuitLab::Circuit::GetIndexFromNodes(int nodeId) const
@@ -264,13 +274,21 @@ int CircuitLab::Circuit::GetIndexFromNodes(int nodeId) const
 	return m_nodesMap.at(nodeId);
 }
 
+bool CircuitLab::Circuit::TryGetIndexFromNodes(int nodeId, int &index) const
+{
+	const auto it = m_nodesMap.find(nodeId);
+	if (it == m_nodesMap.end())
+		return false;
+	index = it->second;
+	return true;
+}
+
 // Ricerca inversa nella mappa sorgenti: dato un indice nella matrice, restituisce il componentId (-1 se non trovato)
 int CircuitLab::Circuit::GetCurrentFromIndex(int index) const
 {
-	for (const auto &[key, value] : m_voltageSourceMap)
-		if (value == index)
-			return key;
-	return -1;
+	if (index < 0 || index >= static_cast<int>(m_indexToSource.size()))
+		return -1;
+	return m_indexToSource[index];
 }
 
 std::map<CircuitLab::ComponentValue, double> CircuitLab::Circuit::GetComponentValues(int compId) const

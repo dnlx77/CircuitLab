@@ -19,6 +19,10 @@ namespace CircuitLab {
 		// con errori enormi). Scalando righe e colonne a norma ~1 quel rapporto
 		// sparisce; il risultato torna alla scala originale in SolveCircuit.
 		Eigen::ColPivHouseholderQR<Eigen::MatrixXd> m_matrix;
+		// Fattorizzazione LU della stessa matrice equilibrata: è la strada normale (più veloce);
+		// la QR sopra serve solo quando la LU non è affidabile (vedi Factorize)
+		Eigen::PartialPivLU<Eigen::MatrixXd> m_lu;
+		bool m_useLu;
 		Eigen::VectorXd m_rowScale;
 		Eigen::VectorXd m_colScale;
 		bool m_isMatrixInvertible;

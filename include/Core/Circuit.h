@@ -30,6 +30,11 @@ namespace CircuitLab {
 		Eigen::VectorXd m_circuitVector;  // Vettore b del sistema MNA
 		std::map<int, int> m_nodesMap;         // nodeId -> indice nella matrice
 		std::map<int, int> m_voltageSourceMap; // componentId -> indice riga extra (per sorgenti di tensione)
+		// Le due mappe sopra lette al contrario (indice di riga -> nodeId / componentId, -1 dove
+		// non c'è), ricostruite insieme a loro: servono a GetNodesFromIndex/GetCurrentFromIndex,
+		// chiamate per ogni riga ad ogni step che costruisce l'output
+		std::vector<int> m_indexToNode;
+		std::vector<int> m_indexToSource;
 		std::vector<Link> m_links;             // Lista dei collegamenti tra terminali
 		int m_nextNodeId;  // Prossimo ID disponibile per i nodi
 		bool m_isDirty;    // true se il circuito è stato modificato e va ricalcolato
@@ -169,6 +174,9 @@ namespace CircuitLab {
 
 		// Inverso di GetNodesFromIndex: dato un nodeId, restituisce l'indice nella matrice
 		int GetIndexFromNodes(int nodeId) const;
+
+		// Come GetIndexFromNodes ma senza eccezioni: false se il nodo non ha una riga in matrice
+		bool TryGetIndexFromNodes(int nodeId, int &index) const;
 
 		// Dato un indice nella matrice, restituisce il componentId della sorgente di tensione (-1 se non trovato)
 		int GetCurrentFromIndex(int index) const;

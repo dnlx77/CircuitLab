@@ -1,6 +1,7 @@
 #include <imgui-SFML.h>
 #include <imgui.h>
 #include <implot.h>
+#include <array>
 #include <numbers>
 #include <set>
 
@@ -1702,85 +1703,119 @@ void CircuitLab::UI::DrawComponents()
 	}
 }
 
+namespace {
+	// Aggiunge a vertices un cerchio pieno (ventaglio di triangoli). Pallini e nodi sono
+	// piccoli e numerosi: disegnarli uno a uno con sf::CircleShape costava una chiamata di
+	// disegno (e un'allocazione) ciascuno; così un'intera categoria si disegna in una sola.
+	void AppendCircle(sf::VertexArray &vertices, sf::Vector2f center, float radius, sf::Color color)
+	{
+		constexpr int SEGMENTS = 20;
+		static const std::array<sf::Vector2f, SEGMENTS + 1> unitCircle = []
+		{
+			std::array<sf::Vector2f, SEGMENTS + 1> points;
+			for (int i = 0; i <= SEGMENTS; i++)
+			{
+				const float angle = 2.0f * static_cast<float>(std::numbers::pi) * static_cast<float>(i) / SEGMENTS;
+				points[i] = { std::cos(angle), std::sin(angle) };
+			}
+			return points;
+		}();
+
+		for (int i = 0; i < SEGMENTS; i++)
+		{
+			vertices.append(sf::Vertex{ center, color });
+			vertices.append(sf::Vertex{ center + unitCircle[i] * radius, color });
+			vertices.append(sf::Vertex{ center + unitCircle[i + 1] * radius, color });
+		}
+	}
+}
+
 void CircuitLab::UI::DrawWires()
 {
-	// Disegna i fili come linee bianche tra i punti dei terminali collegati
+	// Posizione dei NodeView per id, calcolata una volta: ad ogni filo servirebbe altrimenti
+	// una ricerca lineare nella lista
+	std::unordered_map<int, sf::Vector2f> nodePositions;
+	nodePositions.reserve(m_nodeViewList.size());
+	for (const auto &nv : m_nodeViewList)
+		nodePositions[nv.id] = nv.position;
+
+	// Disegna i fili come linee bianche tra i punti dei terminali collegati (tutti insieme)
+	sf::VertexArray lines(sf::PrimitiveType::Lines);
 	for (const auto &wire : m_linkViewList)
 	{
-		sf::Vertex line[2] = {
-			sf::Vertex{wire.startPos, (m_selectedComponent.state == SelectionState::linkSelected && wire.id == m_selectedComponent.linkId) ? sf::Color::Red : sf::Color::White},
-			sf::Vertex{GetNodeviewPositionByNodeViewId(wire.nodeViewId), (m_selectedComponent.state == SelectionState::linkSelected && wire.id == m_selectedComponent.linkId) ? sf::Color::Red : sf::Color::White}
-		};
-		m_window.draw(line, 2, sf::PrimitiveType::Lines);
+		const auto end = nodePositions.find(wire.nodeViewId);
+		if (end == nodePositions.end())
+			throw std::runtime_error("NodeView not found for id: " + std::to_string(wire.nodeViewId));
 
-		if (m_showParticles)
-			DrawParticles(wire.id);
+		const sf::Color color = (m_selectedComponent.state == SelectionState::linkSelected && wire.id == m_selectedComponent.linkId) ? sf::Color::Red : sf::Color::White;
+		lines.append(sf::Vertex{ wire.startPos, color });
+		lines.append(sf::Vertex{ end->second, color });
 	}
+	m_window.draw(lines);
+
+	if (m_showParticles)
+		DrawParticles(nodePositions);
 }
 
 void CircuitLab::UI::DrawNodes()
 {
+	// Cerchi verdi; quelli selezionati (singolarmente o nel gruppo scelto col rettangolo, anche
+	// durante il trascinamento in blocco che non tocca m_selectedNodeViewIds) hanno prima un
+	// cerchio giallo più grande dietro, che fa da contorno.
+	sf::VertexArray outlines(sf::PrimitiveType::Triangles);
+	sf::VertexArray nodes(sf::PrimitiveType::Triangles);
 	for (const auto &nv : m_nodeViewList)
 	{
-		// Disegna i nodi come cerchi verdi
-		sf::CircleShape node(NODE_RADIUS);
-		node.setFillColor(sf::Color::Green);
-		node.setOrigin({ NODE_RADIUS, NODE_RADIUS });
-		node.setPosition(nv.position);
-
-		// Outline giallo se questo nodo è selezionato, singolarmente o come parte
-		// del gruppo (resta evidenziato anche durante il trascinamento in blocco,
-		// che non tocca m_selectedNodeViewIds).
 		bool isMultiSelected = std::find(m_selectedNodeViewIds.begin(), m_selectedNodeViewIds.end(), nv.id) != m_selectedNodeViewIds.end();
 		if (isMultiSelected || (nv.id == m_selectedComponent.nodeViewId && m_selectedComponent.state == SelectionState::nodeViewSelected))
-		{
-			node.setOutlineColor(sf::Color::Yellow);
-			node.setOutlineThickness(OUTLINE_THICKNESS);
-		}
+			AppendCircle(outlines, nv.position, NODE_RADIUS + OUTLINE_THICKNESS, sf::Color::Yellow);
 
-		m_window.draw(node);
-		node.setOutlineThickness(0); // Reset per il prossimo nodo
-
-		std::string nodeString;
+		AppendCircle(nodes, nv.position, NODE_RADIUS, sf::Color::Green);
 	}
+	m_window.draw(outlines);
+	m_window.draw(nodes);
 }
 
-void CircuitLab::UI::DrawParticles(int linkId)
+void CircuitLab::UI::DrawParticles(const std::unordered_map<int, sf::Vector2f> &nodePositions)
 {
+	if (m_linkParticlesList.empty())
+		return;
+
+	std::unordered_map<int, const LinkView *> links;
+	links.reserve(m_linkViewList.size());
 	for (const auto &lv : m_linkViewList)
+		links[lv.id] = &lv;
+
+	sf::VertexArray particles(sf::PrimitiveType::Triangles);
+	for (const auto &lp : m_linkParticlesList)
 	{
-		if (lv.id == linkId)
+		const auto linkIt = links.find(lp.linkViewId);
+		if (linkIt == links.end())
+			continue;
+		const LinkView &lv = *linkIt->second;
+		const auto endIt = nodePositions.find(lv.nodeViewId);
+		if (endIt == nodePositions.end())
+			continue;
+		const sf::Vector2f nodeViewPos = endIt->second;
+
+		// Colore in base al segno della corrente su questo filo: distingue a
+		// colpo d'occhio il verso, oltre alla direzione di movimento dei pallini
+		// (che da sola può essere poco evidente, specialmente con correnti piccole).
+		const auto currentIt = m_linkViewCurrentList.find(lp.linkViewId);
+		const double current = currentIt != m_linkViewCurrentList.end() ? currentIt->second : 0.0;
+		const sf::Color particleColor = (current > PARTICLE_CURRENT_SIGN_EPSILON) ? PARTICLE_COLOR_POSITIVE
+			: (current < -PARTICLE_CURRENT_SIGN_EPSILON) ? PARTICLE_COLOR_NEGATIVE
+			: PARTICLE_COLOR_NEUTRAL;
+
+		for (int i = 0; i < lp.count; i++)
 		{
-			sf::Vector2f nodeViewPos = GetNodeviewPositionByNodeViewId(lv.nodeViewId);
-
-			// Colore in base al segno della corrente su questo filo: distingue a
-			// colpo d'occhio il verso, oltre alla direzione di movimento dei pallini
-			// (che da sola può essere poco evidente, specialmente con correnti piccole).
-			double current = m_linkViewCurrentList.count(linkId) ? m_linkViewCurrentList.at(linkId) : 0.0;
-			sf::Color particleColor = (current > PARTICLE_CURRENT_SIGN_EPSILON) ? PARTICLE_COLOR_POSITIVE
-				: (current < -PARTICLE_CURRENT_SIGN_EPSILON) ? PARTICLE_COLOR_NEGATIVE
-				: PARTICLE_COLOR_NEUTRAL;
-
-			for (const auto &lp : m_linkParticlesList)
-			{
-				if (lp.linkViewId == linkId)
-				{
-					for (int i = 0; i < lp.count; i++)
-					{
-						float t_i = std::fmod(lp.offset + static_cast<float>(i) / lp.count, 1.0f);
-						sf::Vector2f pPos;
-						pPos.x = lv.startPos.x + (nodeViewPos.x - lv.startPos.x) * t_i;
-						pPos.y = lv.startPos.y + (nodeViewPos.y - lv.startPos.y) * t_i;
-						sf::CircleShape particle(NODE_RADIUS);
-						particle.setFillColor(particleColor);
-						particle.setOrigin({ NODE_RADIUS, NODE_RADIUS });
-						particle.setPosition({ pPos.x,pPos.y });
-						m_window.draw(particle);
-					}
-				}
-			}
+			const float t_i = std::fmod(lp.offset + static_cast<float>(i) / lp.count, 1.0f);
+			const sf::Vector2f pPos{ lv.startPos.x + (nodeViewPos.x - lv.startPos.x) * t_i,
+				lv.startPos.y + (nodeViewPos.y - lv.startPos.y) * t_i };
+			AppendCircle(particles, pPos, NODE_RADIUS, particleColor);
 		}
 	}
+	m_window.draw(particles);
 }
 
 void CircuitLab::UI::DrawOscilloscope()
@@ -3126,6 +3161,7 @@ void CircuitLab::UI::Clear()
 	m_selectedNodeViewIds.clear();
 	m_selectingRect = false;
 }
+
 
 void CircuitLab::UI::Render()
 {

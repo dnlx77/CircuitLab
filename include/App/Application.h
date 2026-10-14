@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <deque>
@@ -62,6 +63,29 @@ namespace CircuitLab {
 		// causando iteratori invalidati o un m_isDirty "perso" (la modifica sembra
 		// non essere mai stata rilevata).
 		std::mutex m_circuitMutex;
+
+		// Quanti punti dell'interfaccia stanno aspettando m_circuitMutex. Il thread di
+		// simulazione lo tiene per un intero batch (fino a MAX_BATCH_WALL_TIME): se vede
+		// qualcuno in attesa chiude il batch al passo successivo, così la UI non perde
+		// fino a 8 ms ad ogni callback (a velocità massima, con la UI che chiede lo stato
+		// di ogni componente, il fotogramma durava anche il doppio).
+		std::atomic<int> m_uiWaiters{ 0 };
+
+		// Lock di m_circuitMutex per il thread dell'interfaccia (vedi m_uiWaiters)
+		class UiLock {
+		public:
+			UiLock(std::mutex &mutex, std::atomic<int> &waiters) : m_mutex(mutex)
+			{
+				waiters.fetch_add(1, std::memory_order_relaxed);
+				m_mutex.lock();
+				waiters.fetch_sub(1, std::memory_order_relaxed);
+			}
+			~UiLock() { m_mutex.unlock(); }
+			UiLock(const UiLock &) = delete;
+			UiLock &operator=(const UiLock &) = delete;
+		private:
+			std::mutex &m_mutex;
+		};
 
 		std::vector<OscilloscopeChannel> m_channels;
 		std::vector<Color> m_channelPalette;
@@ -135,6 +159,12 @@ namespace CircuitLab {
 		void AutoSync();
 
 		void SampleChannels(const SimulationOutput &output);
+
+		// Campiona i canali dell'oscilloscopio direttamente dalla soluzione, senza costruire un
+		// SimulationOutput, quando sono tutti sonde di tensione. Se c'è un canale di corrente non
+		// campiona nulla e restituisce false (si deve usare SampleChannels). sampleTime è il tempo
+		// simulato dello step risolto.
+		bool SampleVoltageChannels(double sampleTime);
 
 		const Eigen::VectorXd &GetResult() const { return m_simulationResult; }
 

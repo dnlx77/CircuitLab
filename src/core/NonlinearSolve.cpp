@@ -31,10 +31,19 @@ namespace {
 		bool havePrevDelta = false;
 		double damping = 1.0;
 
+		// Matrice, vettore e spostamento fuori dal ciclo: assegnare a una matrice già della
+		// dimensione giusta riusa la memoria, invece di allocarne di nuova ad ogni iterazione
+		Eigen::MatrixXd A;
+		Eigen::VectorXd b;
+		Eigen::VectorXd delta;
+
 		for (int iter = 0; iter < maxIterations; iter++)
 		{
-			Eigen::MatrixXd A = linearA;
-			Eigen::VectorXd b = (sourceScale == 1.0) ? linearB : Eigen::VectorXd(sourceScale * linearB);
+			A = linearA;
+			if (sourceScale == 1.0)
+				b = linearB;
+			else
+				b = sourceScale * linearB;
 			bool limited = circuit.StampNonlinear(A, b, x);
 
 			// A cambia ad ogni iterazione: la fattorizzazione cachata da
@@ -42,9 +51,10 @@ namespace {
 			solver.Factorize(A);
 			auto next = solver.SolveCircuit(b);
 			if (!next.has_value())
-				return { false, true, x };
+				return { false, true, std::move(x) };
 
-			Eigen::VectorXd delta = *next - x;
+			delta = *next;
+			delta -= x;
 			if (adaptive)
 			{
 				if (havePrevDelta)
@@ -61,10 +71,10 @@ namespace {
 			x += delta;
 
 			if (!limited && circuit.NonlinearConverged(x))
-				return { true, false, x };
+				return { true, false, std::move(x) };
 		}
 
-		return { false, false, x };
+		return { false, false, std::move(x) };
 	}
 
 }

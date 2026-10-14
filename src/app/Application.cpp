@@ -1,3 +1,4 @@
+#include <array>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <SFML/System/Sleep.hpp>
@@ -20,6 +21,17 @@
 #include "Common/Logger.h"
 
 namespace {
+	// nodeId dei terminali di un componente (al massimo 4, il trasformatore), senza allocare
+	// un vettore per ogni componente ad ogni step (vedi Component::GetTerminalNodeIds)
+	std::array<int, 4> TerminalNodeIds(const CircuitLab::Component &component)
+	{
+		std::array<int, 4> ids{ -1, -1, -1, -1 };
+		const auto &terminals = component.GetTerminals();
+		for (size_t i = 0; i < terminals.size() && i < ids.size(); i++)
+			ids[i] = terminals[i].GetNodeId();
+		return ids;
+	}
+
 	constexpr double TIMESTEP_VALUES[] = {
 		1.0, 0.1, 0.01, 0.001,
 		0.0001, 0.00001, 0.000001, 0.0000001, 0.00000001, 0.000000001, 0.0000000001, 0.00000000001, 0.000000000001,
@@ -134,6 +146,10 @@ void CircuitLab::Application::SimulationLoop()
 			steps = std::min(MAX_STEPS_PER_BATCH, static_cast<int>(owed / h));
 		}
 
+		// Vero se l'interfaccia ha chiesto il mutex durante il batch: in quel caso il batch si chiude
+		// e va lasciata una pausa in cui la UI possa prenderlo (vedi sotto)
+		bool yieldToUi = false;
+
 		if (steps > 0)
 		{
 			// Il mutex del circuito è tenuto per tutto il batch (non per singolo
@@ -153,8 +169,11 @@ void CircuitLab::Application::SimulationLoop()
 				std::lock_guard<std::mutex> lock(m_circuitMutex);
 				for (int i = 0; i < steps; i++)
 				{
-					const bool last = i == steps - 1 || ((i & 63) == 63 &&
-						std::chrono::duration<double>(Clock::now() - batchStart).count() > MAX_BATCH_WALL_TIME);
+					// Il batch finisce anche se la UI sta aspettando il mutex (m_uiWaiters)
+					const bool uiWaiting = m_uiWaiters.load(std::memory_order_relaxed) > 0;
+					yieldToUi |= uiWaiting;
+					const bool last = i == steps - 1 || uiWaiting ||
+						((i & 63) == 63 && std::chrono::duration<double>(Clock::now() - batchStart).count() > MAX_BATCH_WALL_TIME);
 					outputComplete = SimulateLocked(last);
 					if (last || m_simStatus != SimulationStatus::running)
 						break;
@@ -172,10 +191,14 @@ void CircuitLab::Application::SimulationLoop()
 			}
 		}
 
-		// sf::sleep (non std::this_thread::sleep_for): su Windows alza la
-		// risoluzione del timer di sistema per la durata della pausa, così 1 ms
-		// dura davvero ~1 ms e non ~15.
-		sf::sleep(sf::milliseconds(1));
+		// Pausa solo quando serve: se non c'era nessun passo da fare (si aspetta che il tempo
+		// reale "maturi" altri passi), o se la UI ha interrotto il batch e deve trovare il mutex
+		// libero (std::mutex non è equo: senza pausa il thread di simulazione lo riprenderebbe
+		// subito). Con la simulazione a velocità massima e la UI ferma si calcola senza soste.
+		// sf::sleep (non std::this_thread::sleep_for): su Windows alza la risoluzione del timer
+		// di sistema per la durata della pausa, così 1 ms dura davvero ~1 ms e non ~15.
+		if (steps <= 0 || yieldToUi)
+			sf::sleep(sf::milliseconds(1));
 	}
 }
 
@@ -244,14 +267,14 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 
 	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type) -> int
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			m_circuit->InvalidateCircuit();
 			return m_circuit->AddComponent(MakeComponent(type));
 		});
 
 	m_ui->SetOnCreateLink([this](int compId1, int termIndex1, int compId2, int termIndex2) -> bool
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			m_circuit->InvalidateCircuit();
 			// Propaga il risultato al chiamante: false indica un collegamento non valido o duplicato
 			return m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
@@ -261,21 +284,21 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 		{
 			// Chiede al circuito i nodeId dei terminali del componente,
 			// usati dalla UI per costruire le etichette da visualizzare sul canvas
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			return m_circuit->GetNodesIdFromComponentId(compId);
 		});
 
 	m_ui->SetOnDeleteComponent([this](int compId)
 		{
 			// Rimuove il componente dal circuito e ricostruisce le connessioni rimaste
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			m_circuit->RemoveComponent(compId);
 		});
 
 	m_ui->SetOnFreeTerminal([this](int compId, int termIndex)
 		{
 			// La UI ha tolto il filo di questo terminale: lo lascia libero anche nel circuito
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			m_circuit->FreeTerminal(compId, termIndex);
 		});
 
@@ -283,7 +306,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 		{
 			// La UI ha cancellato un Ground: questi terminali restano uniti tra loro
 			// ma non sono più a massa
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			m_circuit->DetachFromGround(terminals);
 		});
 
@@ -294,21 +317,21 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 	// Crea un componente nel circuito durante il caricamento da file
 	m_ioManager->SetOnComponentLoad([this](CircuitLab::ComponentType type) -> int
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			m_circuit->InvalidateCircuit();
 			return m_circuit->AddComponent(MakeComponent(type));
 		});
 
 	m_ioManager->SetOnComponentLoadData([this](int compId, const nlohmann::json &j)
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			m_circuit->GetComponentById(compId)->Load(j);
 		});
 
 	// Collega due terminali nel circuito durante il caricamento da file
 	m_ioManager->SetOnLoadLink([this](int compId1, int termIndex1, int compId2, int termIndex2) -> bool
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			m_circuit->InvalidateCircuit();
 			// Propaga il risultato al chiamante: false indica un collegamento non valido o duplicato
 			return m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
@@ -348,7 +371,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 
 	m_ui->SetOnSave([this](const std::string &path)
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			m_ioManager->SaveToFile(path, *m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList(), m_ui->GetNodeViewList());
 		});
 
@@ -371,7 +394,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			SimulationStatus previousStatus = m_simStatus;
 			m_simStatus = SimulationStatus::stopped;
 			{
-				std::lock_guard<std::mutex> lock(m_circuitMutex);
+				UiLock lock(m_circuitMutex, m_uiWaiters);
 			}
 
 			m_ioManager->LoadFromFile(path);
@@ -385,7 +408,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			// diodo/transistor...), anche se il file lo conteneva (es. perché
 			// salvato mentre la simulazione era in corso, o da un'altra sessione).
 			{
-				std::lock_guard<std::mutex> lock(m_circuitMutex);
+				UiLock lock(m_circuitMutex, m_uiWaiters);
 				m_circuit->ResetDynamicState();
 
 				// Con l'opzione attiva si parte direttamente dal regime: condensatori già
@@ -423,25 +446,25 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 
 	m_ui->SetOnGetComponentValues([this](int compId) -> std::map<ComponentValue, double>
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			return m_circuit->GetComponentValues(compId);
 		});
 
 	m_ui->SetOnSetComponentValues([this](int compId, const std::map<ComponentValue, double> &values)
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			m_circuit->SetComponentValues(compId, values);
 		});
 
 	m_ui->SetOnToggleSwitch([this](int compId)
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			m_circuit->ToggleSwitch(compId);
 		});
 
 	m_ui->SetOnIsSwitchClosed([this](int compId) -> bool
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			return m_circuit->GetComponentById(compId)->IsSwitchClosed();
 		});
 
@@ -453,25 +476,25 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 
 	m_ui->SetOnGetComponentTypeById([this](int compId)->ComponentType
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			return m_circuit->GetComponentType(compId);
 		});
 
 	m_ui->SetOnGetComponentsByNodeId([this](int nodeId)->std::vector<int>
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			return m_circuit->GetComponentsByNodeId(nodeId);
 		});
 
 	m_ui->SetOnGetWaveFormType([this](int compId) -> WaveFormType
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			return m_circuit->GetComponentById(compId)->GetWaveFormType();
 		});
 
 	m_ui->SetOnSetWaveFormType([this](int compId, WaveFormType type)
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			m_circuit->InvalidateCircuit();
 			m_circuit->GetComponentById(compId)->SetWaveFormType(type);
 		});
@@ -510,7 +533,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 		{
 			m_hSim = TIMESTEP_VALUES[index];
 			{
-				std::lock_guard<std::mutex> lock(m_circuitMutex);
+				UiLock lock(m_circuitMutex, m_uiWaiters);
 				m_circuit->SetTimestep(m_hSim);
 
 				// Un timestep molto diverso da quello con cui lo stato dinamico
@@ -574,7 +597,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 
 	m_ui->SetOnGetMaxFrequency([this]()->double
 		{
-			std::lock_guard<std::mutex> lock(m_circuitMutex);
+			UiLock lock(m_circuitMutex, m_uiWaiters);
 			return m_circuit->GetMaxFrequency();
 		});
 
@@ -594,22 +617,28 @@ void CircuitLab::Application::Simulate()
 {
 	// Protegge l'intero step contro modifiche concorrenti al circuito dal thread
 	// di rendering (aggiunta/rimozione componenti, collegamenti, cambio valori...).
-	std::lock_guard<std::mutex> lock(m_circuitMutex);
+	UiLock lock(m_circuitMutex, m_uiWaiters);
 	SimulateLocked(true);
 }
 
 bool CircuitLab::Application::SimulateLocked(bool publish)
 {
 	SimulationOutput &output = m_buffers[m_backIndex];
-	output = SimulationOutput{};
+
+	// Il back buffer si azzera solo quando serve: per un esito d'errore, o più sotto per
+	// uno step che verrà pubblicato o campionato. Gli altri step non lo toccano (svuotare e
+	// riempire le mappe dell'output ad ogni step costava più della soluzione stessa).
+	auto reportFailure = [&](SimulationResult result)
+	{
+		output = SimulationOutput{};
+		output.simRes = result;
+		return true;
+	};
 
 	// Questi controlli sono difensivi: m_circuit non dovrebbe mai essere nullptr
 	// dato che viene creato nel costruttore, ma è buona pratica verificarlo
 	if (m_circuit == nullptr)
-	{
-		output.simRes = SimulationResult::no_circuit;
-		return true;
-	}
+		return reportFailure(SimulationResult::no_circuit);
 
 	// I controlli di validità dipendono solo dalla topologia: si rifanno solo
 	// quando il circuito è cambiato (dirty), non ad ogni step.
@@ -628,7 +657,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 
 	if (m_topologyCheck != SimulationResult::success)
 	{
-		output.simRes = m_topologyCheck;
+		reportFailure(m_topologyCheck);
 		// Circuito non valido (es. un componente è rimasto scollegato dopo
 		// un edit): interrompe la simulazione invece di continuare a calcolare
 		// risultati privi di senso. Il prossimo "Start" rifarà lo stesso controllo
@@ -652,19 +681,13 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 		result = CircuitLab::SolveNonlinearStep(*m_circuit, *m_solver, m_simulationResult, converged);
 
 		if (result.has_value() && !converged)
-		{
-			output.simRes = SimulationResult::no_convergence;
-			return true;
-		}
+			return reportFailure(SimulationResult::no_convergence);
 	}
 	else
 		result = m_solver->SolveCircuit(m_circuit->GetCircuitVector());
 
 	if (!result.has_value())
-	{
-		output.simRes = SimulationResult::solve_error;
-		return true;
-	}
+		return reportFailure(SimulationResult::solve_error);
 
 	m_simulationResult = result.value();
 
@@ -675,6 +698,49 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 	m_sampleCounter++;
 	const bool sampleNow = m_sampleCounter >= m_decimationFactor;
 	const bool needOutput = publish || sampleNow;
+
+	const std::vector<std::unique_ptr<Component>> &compList = m_circuit->GetComponentsVector();
+
+	if (!publish && (!sampleNow || SampleVoltageChannels(m_simulationTime)))
+	{
+		// Step "silenzioso": niente da pubblicare, e l'oscilloscopio o non campiona o legge solo
+		// tensioni (campionate qui dalla soluzione). Serve solo portare avanti lo stato dei
+		// componenti con memoria: nessuna mappa, nessun vettore temporaneo.
+		if (sampleNow)
+			m_sampleCounter = 0;
+		auto voltageAt = [&](const Terminal &terminal)
+		{
+			const int nodeId = terminal.GetNodeId();
+			return nodeId > 0 ? m_simulationResult[m_circuit->GetIndexFromNodes(nodeId)] : 0.0;
+		};
+		for (auto &comp : compList)
+		{
+			switch (comp->GetType())
+			{
+			case ComponentType::capacitor:
+			case ComponentType::inductor:
+			{
+				const std::vector<Terminal> &terminals = comp->GetTerminals();
+				comp->UpdateState(voltageAt(terminals[0]), voltageAt(terminals[1]));
+				break;
+			}
+			case ComponentType::transformer:
+			{
+				const std::vector<Terminal> &terminals = comp->GetTerminals();
+				static_cast<Transformer *>(comp.get())->UpdateWindingState(
+					voltageAt(terminals[0]) - voltageAt(terminals[1]),
+					voltageAt(terminals[2]) - voltageAt(terminals[3]));
+				break;
+			}
+			default:
+				break;
+			}
+		}
+		m_simulationTime += m_hSim;
+		return false;
+	}
+
+	output = SimulationOutput{};
 
 	// Costruisce il vettore di output associando ogni indice della soluzione
 	// al nome della variabile corrispondente:
@@ -717,20 +783,12 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 		}
 	}
 
-	const std::vector<std::unique_ptr<Component>> &compList = m_circuit->GetComponentsVector();
 	double v1, v2;
 	for (auto &comp : compList)
 	{
-		// Senza output da costruire servono solo i componenti con stato da
-		// aggiornare a fine step (condensatore, induttore, trasformatore)
-		const ComponentType type = comp->GetType();
-		if (!needOutput && type != ComponentType::capacitor
-			&& type != ComponentType::inductor && type != ComponentType::transformer)
-			continue;
-
 		if (comp->GetType() == ComponentType::resistor)
 		{
-			std::vector<int> termList = comp->GetTerminalNodeIds();
+			const std::array<int, 4> termList = TerminalNodeIds(*comp);
 			// <= 0 copre sia il ground (0) sia un terminale mai collegato (-1):
 			// in entrambi i casi non ha una riga nella matrice, quindi niente
 			// GetIndexFromNodes (che altrimenti lancerebbe std::out_of_range).
@@ -753,7 +811,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			// zero se aperto). Senza questo blocco, output.currentComp/currentBranch
 			// non avevano mai una voce per lo switch: i fili "ancorati" a lui
 			// restavano sempre a corrente 0 (pallini fermi e gialli).
-			std::vector<int> termList = comp->GetTerminalNodeIds();
+			const std::array<int, 4> termList = TerminalNodeIds(*comp);
 			if (termList[0] <= 0)
 				v1 = 0.0;
 			else
@@ -770,7 +828,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 		}
 		else if (comp->GetType() == ComponentType::capacitor)
 		{
-			std::vector<int> termList = comp->GetTerminalNodeIds();
+			const std::array<int, 4> termList = TerminalNodeIds(*comp);
 			// Vedi commento nel ramo resistor: <= 0 copre ground (0) e terminale
 			// mai collegato (-1), entrambi assenti da m_nodesMap.
 			if (termList[0] <= 0)
@@ -793,7 +851,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 		}
 		else if (comp->GetType() == ComponentType::inductor)
 		{
-			std::vector<int> termList = comp->GetTerminalNodeIds();
+			const std::array<int, 4> termList = TerminalNodeIds(*comp);
 			// Vedi commento nel ramo resistor: <= 0 copre ground (0) e terminale
 			// mai collegato (-1), entrambi assenti da m_nodesMap.
 			if (termList[0] <= 0)
@@ -816,7 +874,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 		}
 		else if (comp->GetType() == ComponentType::diode)
 		{
-			std::vector<int> termList = comp->GetTerminalNodeIds();
+			const std::array<int, 4> termList = TerminalNodeIds(*comp);
 			// Vedi commento nel ramo resistor: <= 0 copre ground (0) e terminale
 			// mai collegato (-1), entrambi assenti da m_nodesMap.
 			if (termList[0] <= 0)
@@ -842,7 +900,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			// tiene solo la corrente di primario (per il probe "corrente di
 			// componente" dell'oscilloscopio, che ha un solo valore per id);
 			// branchCurrent ha invece una voce per ciascun avvolgimento.
-			std::vector<int> termList = comp->GetTerminalNodeIds();
+			const std::array<int, 4> termList = TerminalNodeIds(*comp);
 			auto voltageAt = [&](int idx) -> double
 			{
 				if (termList[idx] <= 0)
@@ -869,7 +927,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			// comune. componentCurrent tiene la corrente totale al comune (somma dei
 			// due rami: quello inattivo vale ~0, quindi equivale alla corrente della
 			// via attiva); branchCurrent ha una voce per ciascuna via.
-			std::vector<int> termList = comp->GetTerminalNodeIds();
+			const std::array<int, 4> termList = TerminalNodeIds(*comp);
 			auto voltageAt = [&](int idx) -> double
 			{
 				if (termList[idx] <= 0)
@@ -900,7 +958,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			// interroga così, invece di passare dal percorso generico a coppie.
 			// componentCurrent tiene la corrente di collettore (il probe più
 			// comune per un transistor nell'oscilloscopio).
-			std::vector<int> termList = comp->GetTerminalNodeIds();
+			const std::array<int, 4> termList = TerminalNodeIds(*comp);
 			auto voltageAt = [&](int idx) -> double
 			{
 				if (termList[idx] <= 0)
@@ -949,7 +1007,7 @@ void CircuitLab::Application::UpdateDecimationFactor()
 	// sinistro resterebbe vuoto.
 	double fMax;
 	{
-		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		UiLock lock(m_circuitMutex, m_uiWaiters);
 		fMax = m_circuit->GetMaxFrequency();
 	}
 	const double span = m_windowTime + (fMax > 0.0 ? 1.0 / fMax : 0.0);
@@ -972,7 +1030,7 @@ void CircuitLab::Application::AutoSync()
 {
 	double fMax;
 	{
-		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		UiLock lock(m_circuitMutex, m_uiWaiters);
 		fMax = m_circuit->GetMaxFrequency();
 	}
 	if (fMax <= 0.0)
@@ -981,6 +1039,51 @@ void CircuitLab::Application::AutoSync()
 	m_windowTime = 4.0 / fMax;
 	m_ui->SetWindowTime(m_windowTime);  // aggiorna il widget in UI
 	UpdateDecimationFactor();
+}
+
+bool CircuitLab::Application::SampleVoltageChannels(double sampleTime)
+{
+	std::lock_guard<std::mutex> lock(m_channelsMutex);
+	for (const auto &channel : m_channels)
+		if (channel.active && channel.type != ProbeType::nodeVoltage && channel.type != ProbeType::differentialVoltage)
+			return false;
+
+	// Come in SampleChannels: un nodo senza riga in matrice vale 0 per la massa, e il campione
+	// è 0 se il nodo non esiste (più) nel circuito
+	auto nodeVoltage = [&](int nodeId, double &voltage)
+	{
+		if (nodeId == 0)
+		{
+			voltage = 0.0;
+			return true;
+		}
+		int index;
+		if (!m_circuit->TryGetIndexFromNodes(nodeId, index))
+			return false;
+		voltage = m_simulationResult[index];
+		return true;
+	};
+
+	for (auto &channel : m_channels)
+	{
+		if (!channel.active) continue;
+
+		double value = 0.0;
+		double a, b;
+		if (channel.type == ProbeType::nodeVoltage)
+		{
+			if (nodeVoltage(channel.idA, a))
+				value = a;
+		}
+		else if (nodeVoltage(channel.idA, a) && nodeVoltage(channel.idB, b))
+			value = a - b;
+
+		channel.samples.push_back(value);
+		channel.lastSampleTime = sampleTime;
+		if (static_cast<int>(channel.samples.size()) > OscilloscopeChannel::MAX_SAMPLES)
+			channel.samples.pop_front();
+	}
+	return true;
 }
 
 void CircuitLab::Application::SampleChannels(const SimulationOutput &output)
@@ -1036,7 +1139,7 @@ void CircuitLab::Application::SetSimulationStatus(SimulationStatus status)
 	if (status == SimulationStatus::running && m_simStatus != SimulationStatus::running &&
 		m_startFromDc && m_simulationTime == 0.0)
 	{
-		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		UiLock lock(m_circuitMutex, m_uiWaiters);
 		ApplyDcOperatingPointLocked();
 	}
 
@@ -1079,11 +1182,11 @@ void CircuitLab::Application::RestartFromDc()
 	const SimulationStatus previousStatus = m_simStatus;
 	m_simStatus = SimulationStatus::stopped;
 	{
-		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		UiLock lock(m_circuitMutex, m_uiWaiters);
 	}
 
 	{
-		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		UiLock lock(m_circuitMutex, m_uiWaiters);
 		m_circuit->ResetDynamicState();
 		m_simulationResult = Eigen::VectorXd();
 		ApplyDcOperatingPointLocked();
@@ -1108,13 +1211,13 @@ void CircuitLab::Application::AddChannel(ProbeType type, int idA, int idB, int c
 	case ProbeType::differentialVoltage:  label = "V(N" + std::to_string(idA) + "-N" + std::to_string(idB) + ")"; break;
 	case ProbeType::componentCurrent:
 	{
-		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		UiLock lock(m_circuitMutex, m_uiWaiters);
 		label = "I(" + Component::ComponentTypeName(m_circuit->GetComponentType(compId)) + std::to_string(compId) + ")";
 		break;
 	}
 	case ProbeType::branchCurrent:
 	{
-		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		UiLock lock(m_circuitMutex, m_uiWaiters);
 		label = "I(" + Component::ComponentTypeName(m_circuit->GetComponentType(compId)) + std::to_string(compId) +
 			": N" + std::to_string(idA) + "-N" + std::to_string(idB) + ")";
 		break;
@@ -1136,7 +1239,7 @@ void CircuitLab::Application::AddChannel(ProbeType type, int idA, int idB, int c
 void CircuitLab::Application::ClearState()
 {
 	{
-		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		UiLock lock(m_circuitMutex, m_uiWaiters);
 		m_circuit->Clear();
 
 		// SolveNonlinearStep riusa m_simulationResult come punto di partenza di
@@ -1195,7 +1298,7 @@ void CircuitLab::Application::PushUndoSnapshot()
 {
 	nlohmann::json snapshot;
 	{
-		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		UiLock lock(m_circuitMutex, m_uiWaiters);
 		snapshot = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList(), m_ui->GetNodeViewList());
 	}
 
@@ -1217,7 +1320,7 @@ void CircuitLab::Application::Undo()
 
 	nlohmann::json current;
 	{
-		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		UiLock lock(m_circuitMutex, m_uiWaiters);
 		current = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList(), m_ui->GetNodeViewList());
 	}
 	m_redoStack.push_back(std::move(current));
@@ -1240,7 +1343,7 @@ void CircuitLab::Application::Redo()
 
 	nlohmann::json current;
 	{
-		std::lock_guard<std::mutex> lock(m_circuitMutex);
+		UiLock lock(m_circuitMutex, m_uiWaiters);
 		current = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList(), m_ui->GetNodeViewList());
 	}
 	m_undoStack.push_back(std::move(current));

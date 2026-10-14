@@ -2,6 +2,7 @@
 #include <SFML/Graphics.hpp>
 #include <functional>
 #include <map>
+#include <unordered_map>
 
 #include "Common/ComponentType.h"
 #include "Common/SimulationOutput.h"
@@ -386,7 +387,7 @@ namespace CircuitLab {
 		void DrawNodes();
 
 		// Disegna le particelle di corrente (stile Falstad) lungo il filo linkId
-		void DrawParticles(int linkId);
+		void DrawParticles(const std::unordered_map<int, sf::Vector2f> &nodePositions);
 
 		// Disegna la finestra ImPlot dell'oscilloscopio con i canali attivi
 		void DrawOscilloscope();
