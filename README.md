@@ -26,6 +26,8 @@ CircuitLab/
 │   ├── components/     # Implementazioni dei componenti
 │   ├── core/           # Circuit.cpp, Solver.cpp
 │   └── ui/             # UI.cpp, ComponentView.cpp
+├── CircuitLabCore/     # Libreria statica del nucleo di simulazione (core/, components/, Logger)
+├── tests/              # Test automatici (Catch2) del nucleo di simulazione
 ├── external/           # Librerie di terze parti (submodules)
 │   ├── SFML/
 │   ├── imgui/
@@ -45,6 +47,7 @@ CircuitLab/
 | [imgui-sfml](https://github.com/SFML/imgui-sfml) | latest | Backend ImGui per SFML |
 | [Eigen](https://eigen.tuxfamily.org/) | 3.x (header-only) | Algebra lineare (solver MNA) |
 | [nlohmann-json](https://github.com/nlohmann/json) | 3.x | Salvataggio/caricamento JSON (pianificato) |
+| [Catch2](https://github.com/catchorg/Catch2) | 3.16.1 (single header, in `external/catch2`) | Test automatici |
 
 ## Per iniziare
 
@@ -71,6 +74,31 @@ git submodule update --init --recursive
 > **Nota:** Le librerie precompilate di SFML e imgui-sfml devono essere collocate
 > rispettivamente in `lib/SFML/` e `lib/imgui-sfml/`, rispettando la struttura
 > delle sottocartelle `Debug/` e `Release/` attesa dal progetto.
+
+### Test
+
+I test (Catch2) coprono il nucleo di simulazione, senza interfaccia grafica: modello del
+transistor NPN/PNP in tutte le regioni (confrontato con una soluzione indipendente delle
+equazioni di Ebers-Moll), convergenza di Newton su circuiti difficili (trigger di Schmitt,
+amplificatore, multivibratore astabile), punto di lavoro DC e circuiti lineari.
+
+```bash
+msbuild CircuitLab.slnx /p:Configuration=Release /p:Platform=x64
+bin\tests\Release\CircuitLabTests.exe
+```
+
+Il nucleo (circuito, solver, componenti) è la libreria statica `CircuitLabCore`, referenziata
+sia dall'applicazione sia dai test: i sorgenti sono elencati e compilati una volta sola. Si può
+compilare anche solo `tests/CircuitLabTests.vcxproj`, che non richiede SFML. Conviene lanciare i
+test in `Release`: in `Debug` Eigen non è ottimizzato e la suite impiega alcuni minuti invece di
+qualche secondo. Opzioni utili: `CircuitLabTests.exe "[transistor]"` esegue solo i test con quell'etichetta
+(`[solver]`, `[dc]`, `[circuit]`...), `--list-tests` li elenca. Ogni bug corretto dovrebbe
+lasciare un test che lo riproduce.
+
+Per misurare le prestazioni del passo di simulazione c'è anche un benchmark, nascosto dalla suite
+normale: `CircuitLabTests.exe "[bench]"` stampa i microsecondi per passo su alcuni circuiti
+(RC lineari, amplificatore, trigger di Schmitt, multivibratore, scala di diodi). Da lanciare in
+`Release` prima e dopo una modifica al solver o ai componenti.
 
 ### Utilizzo
 

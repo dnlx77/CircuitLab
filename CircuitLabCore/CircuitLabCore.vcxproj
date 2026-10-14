@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    Nucleo di simulazione (circuito, solver, componenti): libreria statica senza interfaccia
+    grafica, SFML o salvataggio su file. La usano sia l'applicazione (CircuitLab) sia i test
+    (CircuitLabTests), così i sorgenti sono elencati e compilati una volta sola.
+  -->
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{8f2a6c14-7d3b-4e95-a1c0-6b9e5d2f4a73}</ProjectGuid>
+    <RootNamespace>CircuitLabCore</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <!-- Le librerie stanno nella cartella external, non in vcpkg -->
+    <VcpkgEnabled>false</VcpkgEnabled>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <!-- Come l'applicazione: ottimizzazione dell'intero programma (/GL), altrimenti si perderebbe
+         l'inlining tra le funzioni del nucleo e quelle dell'applicazione -->
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <!-- Percorsi relativi a questo file: il progetto si compila anche da solo, senza la soluzione -->
+    <OutDir>$(MSBuildThisFileDirectory)..\bin\core\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)..\obj\CircuitLabCore\$(Platform)\$(Configuration)\</IntDir>
+    <IncludePath>$(MSBuildThisFileDirectory)..\include;$(MSBuildThisFileDirectory)..\external\eigen;$(MSBuildThisFileDirectory)..\external\nlohmann-json\include;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\Common\Logger.cpp" />
+    <ClCompile Include="..\src\core\Circuit.cpp" />
+    <ClCompile Include="..\src\core\NonlinearSolve.cpp" />
+    <ClCompile Include="..\src\core\Solver.cpp" />
+    <ClCompile Include="..\src\components\Capacitor.cpp" />
+    <ClCompile Include="..\src\components\ChangeoverSwitch.cpp" />
+    <ClCompile Include="..\src\components\Component.cpp" />
+    <ClCompile Include="..\src\components\DCWaveForm.cpp" />
+    <ClCompile Include="..\src\components\Diode.cpp" />
+    <ClCompile Include="..\src\components\Ground.cpp" />
+    <ClCompile Include="..\src\components\Inductor.cpp" />
+    <ClCompile Include="..\src\components\Resistor.cpp" />
+    <ClCompile Include="..\src\components\SineWaveForm.cpp" />
+    <ClCompile Include="..\src\components\SquareWaveForm.cpp" />
+    <ClCompile Include="..\src\components\Switch.cpp" />
+    <ClCompile Include="..\src\components\Terminal.cpp" />
+    <ClCompile Include="..\src\components\Transformer.cpp" />
+    <ClCompile Include="..\src\components\Transistor.cpp" />
+    <ClCompile Include="..\src\components\VoltageGenerator.cpp" />
+    <ClCompile Include="..\src\components\WaveForm.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\include\Common\ComponentType.h" />
+    <ClInclude Include="..\include\Common\ComponentValue.h" />
+    <ClInclude Include="..\include\Common\Logger.h" />
+    <ClInclude Include="..\include\Core\Circuit.h" />
+    <ClInclude Include="..\include\Core\NonlinearSolve.h" />
+    <ClInclude Include="..\include\Core\Solver.h" />
+    <ClInclude Include="..\include\Components\Capacitor.h" />
+    <ClInclude Include="..\include\Components\ChangeoverSwitch.h" />
+    <ClInclude Include="..\include\Components\Component.h" />
+    <ClInclude Include="..\include\Components\DCWaveForm.h" />
+    <ClInclude Include="..\include\Components\Diode.h" />
+    <ClInclude Include="..\include\Components\Ground.h" />
+    <ClInclude Include="..\include\Components\Inductor.h" />
+    <ClInclude Include="..\include\Components\Resistor.h" />
+    <ClInclude Include="..\include\Components\SineWaveForm.h" />
+    <ClInclude Include="..\include\Components\SquareWaveForm.h" />
+    <ClInclude Include="..\include\Components\Switch.h" />
+    <ClInclude Include="..\include\Components\Terminal.h" />
+    <ClInclude Include="..\include\Components\Transformer.h" />
+    <ClInclude Include="..\include\Components\Transistor.h" />
+    <ClInclude Include="..\include\Components\VoltageGenerator.h" />
+    <ClInclude Include="..\include\Components\WaveForm.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -166,28 +166,8 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
     <ClCompile Include="..\external\implot\implot.cpp" />
     <ClCompile Include="..\external\implot\implot_items.cpp" />
     <ClCompile Include="..\src\app\Application.cpp" />
-    <ClCompile Include="..\src\Common\Logger.cpp" />
-    <ClCompile Include="..\src\components\Capacitor.cpp" />
-    <ClCompile Include="..\src\components\Component.cpp" />
-    <ClCompile Include="..\src\components\DCWaveForm.cpp" />
-    <ClCompile Include="..\src\components\Ground.cpp" />
-    <ClCompile Include="..\src\components\Inductor.cpp" />
-    <ClCompile Include="..\src\components\Resistor.cpp" />
-    <ClCompile Include="..\src\components\SineWaveForm.cpp" />
-    <ClCompile Include="..\src\components\SquareWaveForm.cpp" />
-    <ClCompile Include="..\src\components\Switch.cpp" />
-    <ClCompile Include="..\src\components\Diode.cpp" />
-    <ClCompile Include="..\src\components\Transformer.cpp" />
-    <ClCompile Include="..\src\components\ChangeoverSwitch.cpp" />
-    <ClCompile Include="..\src\components\Transistor.cpp" />
     <ClCompile Include="..\src\ui\WireGraph.cpp" />
     <ClCompile Include="..\src\ui\FileDialog.cpp" />
-    <ClCompile Include="..\src\components\Terminal.cpp" />
-    <ClCompile Include="..\src\components\VoltageGenerator.cpp" />
-    <ClCompile Include="..\src\components\WaveForm.cpp" />
-    <ClCompile Include="..\src\core\Circuit.cpp" />
-    <ClCompile Include="..\src\core\Solver.cpp" />
-    <ClCompile Include="..\src\core\NonlinearSolve.cpp" />
     <ClCompile Include="..\src\io\IOManager.cpp" />
     <ClCompile Include="..\src\ui\ComponentView.cpp" />
     <ClCompile Include="..\src\ui\UI.cpp" />
@@ -195,37 +175,21 @@ xcopy /Y /D "$(SolutionDir)assets\*.ttf" "$(OutDir)"</Command>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\App\Application.h" />
-    <ClInclude Include="..\include\Common\ComponentType.h" />
-    <ClInclude Include="..\include\Common\ComponentValue.h" />
-    <ClInclude Include="..\include\Common\Logger.h" />
     <ClInclude Include="..\include\Common\OscilloscopeChannel.h" />
     <ClInclude Include="..\include\Common\SimulationOutput.h" />
     <ClInclude Include="..\include\Common\UICommon.h" />
-    <ClInclude Include="..\include\Components\Capacitor.h" />
-    <ClInclude Include="..\include\Components\Component.h" />
-    <ClInclude Include="..\include\Components\DCWaveForm.h" />
-    <ClInclude Include="..\include\Components\Ground.h" />
-    <ClInclude Include="..\include\Components\Inductor.h" />
-    <ClInclude Include="..\include\Components\Resistor.h" />
-    <ClInclude Include="..\include\Components\SineWaveForm.h" />
-    <ClInclude Include="..\include\Components\SquareWaveForm.h" />
-    <ClInclude Include="..\include\Components\Switch.h" />
-    <ClInclude Include="..\include\Components\Diode.h" />
-    <ClInclude Include="..\include\Components\Transformer.h" />
-    <ClInclude Include="..\include\Components\ChangeoverSwitch.h" />
-    <ClInclude Include="..\include\Components\Transistor.h" />
     <ClInclude Include="..\include\UI\WireGraph.h" />
     <ClInclude Include="..\include\UI\FileDialog.h" />
-    <ClInclude Include="..\include\Components\Terminal.h" />
-    <ClInclude Include="..\include\Components\VoltageGenerator.h" />
-    <ClInclude Include="..\include\Components\WaveForm.h" />
-    <ClInclude Include="..\include\Core\Circuit.h" />
-    <ClInclude Include="..\include\Core\Solver.h" />
-    <ClInclude Include="..\include\Core\NonlinearSolve.h" />
     <ClInclude Include="..\include\Core\Vector2.h" />
     <ClInclude Include="..\include\IO\IOManager.h" />
     <ClInclude Include="..\include\UI\ComponentView.h" />
     <ClInclude Include="..\include\UI\UI.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Nucleo di simulazione (circuito, solver, componenti): libreria statica condivisa con i test -->
+    <ProjectReference Include="..\CircuitLabCore\CircuitLabCore.vcxproj">
+      <Project>{8f2a6c14-7d3b-4e95-a1c0-6b9e5d2f4a73}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -3,5 +3,10 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Project Path="CircuitLabCore/CircuitLabCore.vcxproj" Id="8f2a6c14-7d3b-4e95-a1c0-6b9e5d2f4a73" />
   <Project Path="CircuitLab/CircuitLab.vcxproj" Id="07e53ab0-3ee3-4f8c-b364-f8c42e41258d" />
+  <Project Path="tests/CircuitLabTests.vcxproj" Id="5b1c3d7e-2a64-4f0b-9c58-3e7a1d4b8f26">
+    <!-- I test esistono solo per x64: con la piattaforma x86 della soluzione usano comunque x64 -->
+    <Platform Solution="*|x86" Project="x64" />
+  </Project>
 </Solution>
