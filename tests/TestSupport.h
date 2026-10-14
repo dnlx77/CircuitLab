@@ -9,6 +9,7 @@
 #include "Core/Circuit.h"
 #include "Core/NonlinearSolve.h"
 #include "Core/Solver.h"
+#include "Core/TransientStepper.h"
 #include "Components/Capacitor.h"
 #include "Components/Diode.h"
 #include "Components/Ground.h"
@@ -18,10 +19,9 @@
 #include "Components/Transistor.h"
 #include "Components/VoltageGenerator.h"
 
-// Strumenti comuni ai test: costruzione veloce di circuiti e un semplice simulatore a passi che
-// fa lo stesso lavoro di Application::SimulateLocked (matrice, vettore, soluzione lineare o con
-// Newton, aggiornamento dello stato dei componenti con memoria) senza dipendere da interfaccia
-// grafica, SFML o thread.
+// Strumenti comuni ai test: costruzione veloce di circuiti e un simulatore a passi che usa lo stesso
+// TransientStepper dell'applicazione (matrice, vettore, soluzione lineare o con Newton, stato dei
+// componenti con memoria), senza interfaccia grafica, SFML o thread.
 namespace test {
 
 	using namespace CircuitLab;
@@ -53,12 +53,12 @@ namespace test {
 
 		double time() const { return m_time; }
 		double timestep() const { return m_h; }
-		const Eigen::VectorXd &solution() const { return m_x; }
+		const Eigen::VectorXd &solution() const { return m_stepper.Solution(); }
 
 	private:
 		Circuit &m_circuit;
 		Solver m_solver;
-		Eigen::VectorXd m_x;
+		TransientStepper m_stepper;
 		double m_h;
 		double m_time = 0.0;
 	};

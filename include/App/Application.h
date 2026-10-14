@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 #include "Core/Circuit.h"
 #include "Core/Solver.h"
+#include "Core/TransientStepper.h"
 #include "Common/ComponentType.h"
 #include "Common/SimulationOutput.h"
 #include "IO/IOManager.h"
@@ -25,7 +26,8 @@ namespace CircuitLab {
 		std::unique_ptr<Circuit> m_circuit;         // Il circuito elettrico
 		std::unique_ptr<UI> m_ui;                   // L'interfaccia grafica
 		std::unique_ptr<Solver> m_solver;
-		Eigen::VectorXd m_simulationResult;         // Ultimo vettore soluzione MNA
+		// Un passo di simulazione sul circuito; tiene anche l'ultimo vettore soluzione MNA
+		std::unique_ptr<TransientStepper> m_stepper;
 		std::unique_ptr<IOManager> m_ioManager;		// Gestisce salvataggio e caricamento su file JSON
 		sf::Clock m_deltaClock;
 		std::atomic<double> m_simulationTime;
@@ -126,7 +128,7 @@ namespace CircuitLab {
 		bool m_topologyChecked = false;
 
 		// Calcola il punto di lavoro DC e lo adotta come stato di partenza: imposta lo stato
-		// dinamico dei componenti e il punto di partenza di Newton (m_simulationResult). Con
+		// dinamico dei componenti e il punto di partenza di Newton (la soluzione nello stepper). Con
 		// m_circuitMutex già acquisito dal chiamante. Restituisce false (senza toccare lo stato)
 		// se il circuito è vuoto, ha terminali scollegati o il calcolo non converge.
 		bool ApplyDcOperatingPointLocked();
@@ -166,7 +168,7 @@ namespace CircuitLab {
 		// simulato dello step risolto.
 		bool SampleVoltageChannels(double sampleTime);
 
-		const Eigen::VectorXd &GetResult() const { return m_simulationResult; }
+		const Eigen::VectorXd &GetResult() const { return m_stepper->Solution(); }
 
 		void SetSimulationStatus(SimulationStatus status);
 

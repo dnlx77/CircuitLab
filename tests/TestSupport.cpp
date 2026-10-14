@@ -36,14 +36,14 @@ namespace test {
 		return circuit.GetNodesIdFromComponentId(component)[terminal];
 	}
 
-	Simulation::Simulation(Circuit &circuit, double timestep) : m_circuit(circuit), m_h(timestep)
+	Simulation::Simulation(Circuit &circuit, double timestep) : m_circuit(circuit), m_stepper(circuit, m_solver), m_h(timestep)
 	{
 		m_circuit.SetTimestep(timestep);
 	}
 
 	double Simulation::Voltage(int nodeId) const
 	{
-		return (nodeId > 0 && m_x.size() > 0) ? m_x[m_circuit.GetIndexFromNodes(nodeId)] : 0.0;
+		return m_stepper.NodeVoltage(nodeId);
 	}
 
 	double Simulation::Voltage(int component, int terminal) const
@@ -53,53 +53,13 @@ namespace test {
 
 	bool Simulation::StartFromDcOperatingPoint()
 	{
-		bool converged = false;
-		const auto result = SolveOperatingPoint(m_circuit, m_solver, converged);
-		if (!result.has_value() || !converged)
-			return false;
-		m_x = *result;
-		return true;
+		return m_stepper.StartFromDcOperatingPoint();
 	}
 
 	bool Simulation::Step()
 	{
-		m_circuit.ComputeMatrix();
-		StampContext context;
-		context.t = m_time;
-		context.h = m_h;
-		m_circuit.ComputeVector(context);
-
-		std::optional<Eigen::VectorXd> result;
-		bool converged = true;
-		if (m_circuit.HasNonlinearComponents())
-			result = SolveNonlinearStep(m_circuit, m_solver, m_x, converged);
-		else
-		{
-			m_solver.Factorize(m_circuit.GetCircuitMatrix());
-			result = m_solver.SolveCircuit(m_circuit.GetCircuitVector());
-		}
-		if (!result.has_value() || !converged)
+		if (m_stepper.Step(m_time, m_h) != TransientStepper::Status::ok)
 			return false;
-		m_x = *result;
-
-		// Stato dei componenti con memoria, come in Application::SimulateLocked
-		for (const auto &component : m_circuit.GetComponentsVector())
-		{
-			const int id = component->GetId();
-			switch (component->GetType())
-			{
-			case ComponentType::capacitor:
-			case ComponentType::inductor:
-				component->UpdateState(Voltage(id, 0), Voltage(id, 1));
-				break;
-			case ComponentType::transformer:
-				static_cast<Transformer *>(component.get())->UpdateWindingState(
-					Voltage(id, 0) - Voltage(id, 1), Voltage(id, 2) - Voltage(id, 3));
-				break;
-			default:
-				break;
-			}
-		}
 
 		m_time += m_h;
 		return true;

@@ -89,6 +89,7 @@
     <ClCompile Include="..\src\core\Circuit.cpp" />
     <ClCompile Include="..\src\core\NonlinearSolve.cpp" />
     <ClCompile Include="..\src\core\Solver.cpp" />
+    <ClCompile Include="..\src\core\TransientStepper.cpp" />
     <ClCompile Include="..\src\components\Capacitor.cpp" />
     <ClCompile Include="..\src\components\ChangeoverSwitch.cpp" />
     <ClCompile Include="..\src\components\Component.cpp" />
@@ -113,6 +114,7 @@
     <ClInclude Include="..\include\Core\Circuit.h" />
     <ClInclude Include="..\include\Core\NonlinearSolve.h" />
     <ClInclude Include="..\include\Core\Solver.h" />
+    <ClInclude Include="..\include\Core\TransientStepper.h" />
     <ClInclude Include="..\include\Components\Capacitor.h" />
     <ClInclude Include="..\include\Components\ChangeoverSwitch.h" />
     <ClInclude Include="..\include\Components\Component.h" />

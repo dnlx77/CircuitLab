@@ -6,6 +6,7 @@
 #include "App/Application.h"
 #include "Core/Solver.h"
 #include "Core/NonlinearSolve.h"
+#include "Core/TransientStepper.h"
 #include "Components/Resistor.h"
 #include "Components/VoltageGenerator.h"
 #include "Components/Ground.h"
@@ -239,6 +240,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 	m_circuit = std::make_unique<Circuit>();
 	m_ioManager = std::make_unique<IOManager>();
 	m_solver = std::make_unique<Solver>();
+	m_stepper = std::make_unique<TransientStepper>(*m_circuit, *m_solver);
 	m_circuit->SetTimestep(m_hSim);
 
 	// Colori saturi e ben distinguibili tra loro (anche per chi ha difficoltà con
@@ -545,7 +547,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 				// sempre da dove l'ultimo step lo ha lasciato). Si azzera qui,
 				// come un mini "New" che non tocca però topologia o valori.
 				m_circuit->ResetDynamicState();
-				m_simulationResult = Eigen::VectorXd();
+				m_stepper->ClearSolution();
 				if (m_startFromDc)
 					ApplyDcOperatingPointLocked();
 
@@ -599,11 +601,6 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 		{
 			UiLock lock(m_circuitMutex, m_uiWaiters);
 			return m_circuit->GetMaxFrequency();
-		});
-
-	m_circuit->SetOnFactorize([this](const Eigen::MatrixXd &matrix)
-		{
-			m_solver->Factorize(matrix);
 		});
 }
 
@@ -667,29 +664,18 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 		return true;
 	}
 
-	StampContext ctx;
-	ctx.t = m_simulationTime;
-	ctx.h = m_hSim;
-
-	// Risolve il sistema MNA; restituisce nullopt se la matrice è singolare
-	m_circuit->ComputeMatrix();
-	m_circuit->ComputeVector(ctx);
-	std::optional<Eigen::VectorXd> result;
-	if (m_circuit->HasNonlinearComponents())
+	// Risolve il sistema MNA (la soluzione resta nello stepper; lo stato dei componenti con
+	// memoria si porta avanti più sotto, dopo aver letto le correnti che dipendono da quello
+	// precedente)
+	switch (m_stepper->Solve(m_simulationTime, m_hSim))
 	{
-		bool converged = false;
-		result = CircuitLab::SolveNonlinearStep(*m_circuit, *m_solver, m_simulationResult, converged);
-
-		if (result.has_value() && !converged)
-			return reportFailure(SimulationResult::no_convergence);
-	}
-	else
-		result = m_solver->SolveCircuit(m_circuit->GetCircuitVector());
-
-	if (!result.has_value())
+	case TransientStepper::Status::ok:
+		break;
+	case TransientStepper::Status::noConvergence:
+		return reportFailure(SimulationResult::no_convergence);
+	case TransientStepper::Status::singular:
 		return reportFailure(SimulationResult::solve_error);
-
-	m_simulationResult = result.value();
+	}
 
 	// L'output completo (nomi, mappe delle correnti) serve solo allo step che
 	// verrà pubblicato al rendering e a quelli campionati dall'oscilloscopio:
@@ -708,34 +694,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 		// componenti con memoria: nessuna mappa, nessun vettore temporaneo.
 		if (sampleNow)
 			m_sampleCounter = 0;
-		auto voltageAt = [&](const Terminal &terminal)
-		{
-			const int nodeId = terminal.GetNodeId();
-			return nodeId > 0 ? m_simulationResult[m_circuit->GetIndexFromNodes(nodeId)] : 0.0;
-		};
-		for (auto &comp : compList)
-		{
-			switch (comp->GetType())
-			{
-			case ComponentType::capacitor:
-			case ComponentType::inductor:
-			{
-				const std::vector<Terminal> &terminals = comp->GetTerminals();
-				comp->UpdateState(voltageAt(terminals[0]), voltageAt(terminals[1]));
-				break;
-			}
-			case ComponentType::transformer:
-			{
-				const std::vector<Terminal> &terminals = comp->GetTerminals();
-				static_cast<Transformer *>(comp.get())->UpdateWindingState(
-					voltageAt(terminals[0]) - voltageAt(terminals[1]),
-					voltageAt(terminals[2]) - voltageAt(terminals[3]));
-				break;
-			}
-			default:
-				break;
-			}
-		}
+		m_stepper->CommitState();
 		m_simulationTime += m_hSim;
 		return false;
 	}
@@ -751,7 +710,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 	std::map<std::tuple<int, int, int>, double> branchCurrent;
 	std::unordered_map<int, double> nodeToVoltage;
 	nodeToVoltage[0] = 0.0;
-	for (int i = 0; needOutput && i < m_simulationResult.size(); i++)
+	for (int i = 0; needOutput && i < m_stepper->Solution().size(); i++)
 	{
 		int vNode = m_circuit->GetNodesFromIndex(i);
 		int iNode = m_circuit->GetCurrentFromIndex(i);
@@ -759,8 +718,8 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 		if (vNode != -1)
 		{
 			if (publish)
-				outVec.emplace_back("V" + std::to_string(vNode), m_simulationResult[i]);
-			nodeToVoltage[vNode] = m_simulationResult[i];
+				outVec.emplace_back("V" + std::to_string(vNode), m_stepper->Solution()[i]);
+			nodeToVoltage[vNode] = m_stepper->Solution()[i];
 		}
 
 		if (iNode != -1)
@@ -776,10 +735,10 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 					if (j < terminalsId.size() - 1)
 						compString += "_";
 				}
-				outVec.emplace_back("I(V" + compString + ")", m_simulationResult[i]);
+				outVec.emplace_back("I(V" + compString + ")", m_stepper->Solution()[i]);
 			}
-			componentCurrent[iNode] = m_simulationResult[i];
-			branchCurrent[{terminalsId[0], terminalsId[1], iNode}] = m_simulationResult[i];
+			componentCurrent[iNode] = m_stepper->Solution()[i];
+			branchCurrent[{terminalsId[0], terminalsId[1], iNode}] = m_stepper->Solution()[i];
 		}
 	}
 
@@ -795,11 +754,11 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			if (termList[0] <= 0)
 				v1 = 0.0;
 			else
-				v1 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[0])];
+				v1 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[0])];
 			if (termList[1] <= 0)
 				v2 = 0.0;
 			else
-				v2 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[1])];
+				v2 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[1])];
 			double current = (v1 - v2) / comp->GetValues().at(ComponentValue::resistance);
 			componentCurrent[comp->GetId()] = current;
 			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
@@ -815,11 +774,11 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			if (termList[0] <= 0)
 				v1 = 0.0;
 			else
-				v1 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[0])];
+				v1 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[0])];
 			if (termList[1] <= 0)
 				v2 = 0.0;
 			else
-				v2 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[1])];
+				v2 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[1])];
 
 			auto *sw = static_cast<Switch *>(comp.get());
 			double current = sw->GetConductance() * (v1 - v2);
@@ -834,20 +793,18 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			if (termList[0] <= 0)
 				v1 = 0.0;
 			else
-				v1 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[0])];
+				v1 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[0])];
 			if (termList[1] <= 0)
 				v2 = 0.0;
 			else
-				v2 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[1])];
+				v2 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[1])];
 
 			// i = C * dv/dt = Geq * ((v1-v2) - v(t-h)), con v(t-h) letto PRIMA
-			// di aggiornare lo stato del condensatore per il prossimo step.
+			// di aggiornare lo stato del condensatore (CommitState, a fine ciclo).
 			auto *cap = static_cast<Capacitor *>(comp.get());
 			double current = comp->GetValues().at(ComponentValue::capacitance) / m_hSim * ((v1 - v2) - cap->GetPreviousVoltage());
 			componentCurrent[comp->GetId()] = current;
 			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
-
-			cap->UpdateState(v1, v2);
 		}
 		else if (comp->GetType() == ComponentType::inductor)
 		{
@@ -857,11 +814,11 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			if (termList[0] <= 0)
 				v1 = 0.0;
 			else
-				v1 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[0])];
+				v1 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[0])];
 			if (termList[1] <= 0)
 				v2 = 0.0;
 			else
-				v2 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[1])];
+				v2 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[1])];
 
 			// i(t) = Geq*(v1-v2) + i(t-h), con i(t-h) letta PRIMA di aggiornare
 			// lo stato dell'induttore per il prossimo step.
@@ -869,8 +826,6 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			double current = ind->GetConductance() * (v1 - v2) + ind->GetPreviousCurrent();
 			componentCurrent[comp->GetId()] = current;
 			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
-
-			ind->UpdateState(v1, v2);
 		}
 		else if (comp->GetType() == ComponentType::diode)
 		{
@@ -880,11 +835,11 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			if (termList[0] <= 0)
 				v1 = 0.0;
 			else
-				v1 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[0])];
+				v1 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[0])];
 			if (termList[1] <= 0)
 				v2 = 0.0;
 			else
-				v2 = m_simulationResult[m_circuit->GetIndexFromNodes(termList[1])];
+				v2 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[1])];
 
 			// Corrente anodo->catodo dall'equazione di Shockley con la Vd
 			// convergente (stesso verso positivo del resistore: terminale 0 -> 1).
@@ -905,7 +860,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			{
 				if (termList[idx] <= 0)
 					return 0.0;
-				return m_simulationResult[m_circuit->GetIndexFromNodes(termList[idx])];
+				return m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[idx])];
 			};
 			double vPrimary = voltageAt(0) - voltageAt(1);
 			double vSecondary = voltageAt(2) - voltageAt(3);
@@ -917,8 +872,6 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			componentCurrent[comp->GetId()] = primaryCurrent;
 			branchCurrent[{termList[0], termList[1], comp->GetId()}] = primaryCurrent;
 			branchCurrent[{termList[2], termList[3], comp->GetId()}] = secondaryCurrent;
-
-			transformer->UpdateWindingState(vPrimary, vSecondary);
 		}
 		else if (comp->GetType() == ComponentType::changeoverSwitch)
 		{
@@ -932,7 +885,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			{
 				if (termList[idx] <= 0)
 					return 0.0;
-				return m_simulationResult[m_circuit->GetIndexFromNodes(termList[idx])];
+				return m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[idx])];
 			};
 			double vCommon = voltageAt(0);
 			double vVia1 = voltageAt(1);
@@ -963,7 +916,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			{
 				if (termList[idx] <= 0)
 					return 0.0;
-				return m_simulationResult[m_circuit->GetIndexFromNodes(termList[idx])];
+				return m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[idx])];
 			};
 			double vBase = voltageAt(0);
 			double vColl = voltageAt(1);
@@ -977,6 +930,9 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			branchCurrent[{termList[2], -1002, comp->GetId()}] = currents.ie;
 		}
 	}
+
+	// Le correnti sopra sono lette con lo stato dello step precedente: solo ora lo si porta avanti
+	m_stepper->CommitState();
 
 	output.simRes = SimulationResult::success;
 	output.res = std::move(outVec);
@@ -1060,7 +1016,7 @@ bool CircuitLab::Application::SampleVoltageChannels(double sampleTime)
 		int index;
 		if (!m_circuit->TryGetIndexFromNodes(nodeId, index))
 			return false;
-		voltage = m_simulationResult[index];
+		voltage = m_stepper->Solution()[index];
 		return true;
 	};
 
@@ -1155,13 +1111,7 @@ bool CircuitLab::Application::ApplyDcOperatingPointLocked()
 	if (m_circuit->IsCircuitEmpty() || m_circuit->CircuitHasOnlyGround() || m_circuit->HasFloatingTerminal())
 		return false;
 
-	bool converged = false;
-	const auto result = SolveOperatingPoint(*m_circuit, *m_solver, converged);
-	if (!result.has_value() || !converged)
-		return false;
-
-	m_simulationResult = *result;
-	return true;
+	return m_stepper->StartFromDcOperatingPoint();
 }
 
 void CircuitLab::Application::PrimeOutput()
@@ -1188,7 +1138,7 @@ void CircuitLab::Application::RestartFromDc()
 	{
 		UiLock lock(m_circuitMutex, m_uiWaiters);
 		m_circuit->ResetDynamicState();
-		m_simulationResult = Eigen::VectorXd();
+		m_stepper->ClearSolution();
 		ApplyDcOperatingPointLocked();
 		m_simulationTime = 0.0;
 	}
@@ -1242,7 +1192,7 @@ void CircuitLab::Application::ClearState()
 		UiLock lock(m_circuitMutex, m_uiWaiters);
 		m_circuit->Clear();
 
-		// SolveNonlinearStep riusa m_simulationResult come punto di partenza di
+		// SolveNonlinearStep riusa m_stepper->Solution() come punto di partenza di
 		// Newton quando la sua dimensione combacia con quella del nuovo sistema
 		// (vedi lì) — un caso frequente qui, perché un annulla/ripeti ricostruisce
 		// tipicamente la STESSA topologia (stesso numero di nodi/sorgenti) di
@@ -1253,7 +1203,7 @@ void CircuitLab::Application::ClearState()
 		// se il "vecchio" x è molto lontano dal nuovo punto di lavoro (es. si è
 		// nel frattempo azzerato un generatore). Azzerarlo forza il prossimo
 		// step a ripartire da x=0, sempre coerente con lo stato appena ricostruito.
-		m_simulationResult = Eigen::VectorXd();
+		m_stepper->ClearSolution();
 
 		// m_simulationTime non veniva MAI azzerato qui (solo nel costruttore):
 		// cresceva per tutta la durata della sessione dell'app, anche attraverso
