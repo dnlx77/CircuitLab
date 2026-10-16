@@ -85,8 +85,8 @@ namespace {
 		}
 	}
 
-	// Una voce della palette componenti nel pannello laterale (vedi
-	// UI::DrawComponentPalette): l'etichetta include la scorciatoia da tastiera,
+	// Una voce della palette componenti, mostrata nel menu Componenti (vedi
+	// UI::DrawMainMenuBar): l'etichetta include la scorciatoia da tastiera,
 	// così l'utente non deve più memorizzarle a parte.
 	struct PaletteEntry { CircuitLab::ComponentType type; const char *label; };
 	struct PaletteCategory { const char *name; std::vector<PaletteEntry> entries; };
@@ -121,10 +121,6 @@ namespace {
 		};
 		return palette;
 	}
-
-	// Identificatore del tipo di payload ImGui per il drag&drop dalla palette
-	// al canvas (vedi UI::DrawComponentPalette / UI::DrawCanvasDropTarget).
-	constexpr const char *COMPONENT_DRAG_PAYLOAD = "CIRCUITLAB_COMPONENT_TYPE";
 
 	// Unità di misura di una proprietà di componente ("" se adimensionale o non
 	// univoca, es. la fase, per cui non si mostra alcuna forma con prefisso SI).
@@ -544,6 +540,85 @@ void CircuitLab::UI::DeleteComponent(int id)
 	m_onDeleteComponent(id);
 }
 
+// Cancella la selezione corrente (gruppo scelto col rettangolo, componente, nodo o filo).
+// L'undo va spinto SOLO quando si sta davvero per cancellare, non ad ogni chiamata.
+void CircuitLab::UI::DeleteSelection()
+{
+	if (!m_selectedComponentIds.empty() || !m_selectedNodeViewIds.empty())
+	{
+		if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+
+		// Cancella l'intero gruppo selezionato (componenti e NodeView liberi):
+		// stessa procedura del singolo elemento qui sotto, una volta per
+		// ciascuno (vedi DeleteComponent e il ramo nodeViewSelected).
+		for (int id : m_selectedComponentIds)
+			DeleteComponent(id);
+		for (int id : m_selectedNodeViewIds)
+			FreeTerminals(m_graph.RemoveFreeNodeView(id));
+		m_selectedComponentIds.clear();
+		m_selectedNodeViewIds.clear();
+
+		m_selectedComponent.state = SelectionState::none;
+		m_selectedComponent.compId = -1;
+		m_selectedComponent.terminalIndex = -1;
+		m_selectedComponent.nodeViewId = -1;
+	}
+	else if (m_selectedComponent.state == SelectionState::componentSelected)
+	{
+		if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+		DeleteComponent(m_selectedComponent.compId);
+
+		// Reset selezione
+		m_selectedComponent.state = SelectionState::none;
+		m_selectedComponent.compId = -1;
+		m_selectedComponent.terminalIndex = -1;
+		m_selectedComponent.nodeViewId = -1;
+	}
+	else if (m_selectedComponent.state == SelectionState::linkSelected)
+	{
+		// Un filo tra due terminali non si cancella da solo: il Circuit non sa
+		// scollegare, e il disegno direbbe una cosa diversa dal circuito. Si
+		// può però togliere un nodo di passaggio (annulla un nodo inserito sul
+		// filo): il filo torna un unico tratto.
+		int passThrough = m_graph.PassThroughNodeOfEdge(m_selectedComponent.linkId);
+		if (passThrough != -1)
+		{
+			if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+			FreeTerminals(m_graph.RemoveFreeNodeView(passThrough));
+		}
+
+		m_selectedComponent.state = SelectionState::none;
+		m_selectedComponent.linkId = -1;
+	}
+	else if (m_selectedComponent.state == SelectionState::nodeViewSelected)
+	{
+		if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+
+		// Si cancellano solo i nodi liberi (i loro vicini restano collegati tra
+		// loro). Il NodeView di un terminale sparisce insieme al suo componente.
+		FreeTerminals(m_graph.RemoveFreeNodeView(m_selectedComponent.nodeViewId));
+
+		m_selectedComponent.state = SelectionState::none;
+		m_selectedComponent.nodeViewId = -1;
+	}
+}
+
+void CircuitLab::UI::RotateSelectedComponent()
+{
+	if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+
+	for (auto &cw : m_componentViewList)
+		if (cw.GetComponentLink() == m_selectedComponent.compId)
+		{
+			cw.SetRotation(static_cast<float>(static_cast<int>(cw.GetRotation() + 45) % 360));
+			// Ruotando attorno al centro il primo terminale si sposta: lo
+			// si riaggancia alla griglia (no-op se l'aggancio è disattivato).
+			SnapComponentToGrid(cw);
+		}
+
+	UpdateLinksForComponent(m_selectedComponent.compId);
+}
+
 void CircuitLab::UI::PlaceNewComponent(ComponentType type, sf::Vector2i pos)
 {
 	if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
@@ -580,7 +655,15 @@ void CircuitLab::UI::HandleEvents()
 			{
 				// Aggiunta componenti con tasto modificatore + click
 				bool placedNode = false;
-				if (pixelPos.x < static_cast<int>(m_width - PANEL_WIDTH))
+				if (m_placingType.has_value())
+				{
+					// Modalità di piazzamento (voce scelta dal menu Componenti): il click posa
+					// il componente e non seleziona né collega nulla
+					if (IsInCanvas(pixelPos) && !ImGui::GetIO().WantCaptureMouse)
+						PlaceNewComponent(*m_placingType, pos);
+					placedNode = true;
+				}
+				else if (IsInCanvas(pixelPos) && !ImGui::GetIO().WantCaptureMouse)
 				{
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
 						PlaceNewComponent(ComponentType::resistor, pos);
@@ -689,8 +772,8 @@ void CircuitLab::UI::HandleEvents()
 			}
 			else if (mouseEvent->button == sf::Mouse::Button::Middle)
 			{
-				// Inizia il pan solo se il click è sul canvas (non su pannello/oscilloscopio)
-				if (!ImGui::GetIO().WantCaptureMouse && pixelPos.x < static_cast<int>(m_width - PANEL_WIDTH))
+				// Inizia il pan solo se il click è sul canvas (non su barre/finestre ImGui)
+				if (!ImGui::GetIO().WantCaptureMouse && IsInCanvas(pixelPos))
 				{
 					m_panning = true;
 					m_panLastPixel = pixelPos;
@@ -698,6 +781,13 @@ void CircuitLab::UI::HandleEvents()
 			}
 			else if (mouseEvent->button == sf::Mouse::Button::Right)
 			{
+				// Durante il piazzamento il click destro lo termina, senza altri effetti
+				if (m_placingType.has_value())
+				{
+					m_placingType.reset();
+					continue;
+				}
+
 				if (!ImGui::GetIO().WantCaptureMouse) CheckClick(pos, m_selectedComponent);
 
 				bool ctrlHeld = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl) ||
@@ -926,12 +1016,12 @@ void CircuitLab::UI::HandleEvents()
 			// sopra il pannello/oscilloscopio (dove la rotellina serve a ImGui/ImPlot).
 			if (wheelEvent->wheel == sf::Mouse::Wheel::Vertical &&
 				!ImGui::GetIO().WantCaptureMouse &&
-				wheelEvent->position.x < static_cast<int>(m_width - PANEL_WIDTH))
+				IsInCanvas(wheelEvent->position))
 			{
 				const sf::Vector2f before = m_window.mapPixelToCoords(wheelEvent->position, m_view);
 
 				m_zoom = std::clamp(m_zoom * std::pow(ZOOM_STEP, wheelEvent->delta), ZOOM_MIN, ZOOM_MAX);
-				m_view.setSize(sf::Vector2f(static_cast<float>(m_width - PANEL_WIDTH), static_cast<float>(m_heigth)) / m_zoom);
+				UpdateCanvasView();
 
 				const sf::Vector2f after = m_window.mapPixelToCoords(wheelEvent->position, m_view);
 				m_view.move(before - after);
@@ -995,87 +1085,20 @@ void CircuitLab::UI::HandleEvents()
 		}
 		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete) && (m_selectedComponent.state != SelectionState::draggingComponent && m_selectedComponent.state != SelectionState::draggingNodeView && m_selectedComponent.state != SelectionState::draggingSelection))
 		{
-			// Eliminazione con tasto Delete. Il tasto è controllato con isKeyPressed
-			// (vero ogni frame finché resta premuto, non solo alla pressione): ogni
-			// ramo qui sotto svuota la selezione che ha appena cancellato, quindi ai
-			// frame successivi nessuna condizione combacia più e non succede altro
-			// finché non si seleziona di nuovo qualcosa — l'undo va quindi spinto
-			// SOLO quando il ramo sta davvero per cancellare, non ad ogni frame.
-			if (!m_selectedComponentIds.empty() || !m_selectedNodeViewIds.empty())
-			{
-				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
-
-				// Cancella l'intero gruppo selezionato (componenti e NodeView liberi):
-				// stessa procedura del singolo elemento qui sotto, una volta per
-				// ciascuno (vedi DeleteComponent e il ramo nodeViewSelected).
-				for (int id : m_selectedComponentIds)
-					DeleteComponent(id);
-				for (int id : m_selectedNodeViewIds)
-					FreeTerminals(m_graph.RemoveFreeNodeView(id));
-				m_selectedComponentIds.clear();
-				m_selectedNodeViewIds.clear();
-
-				m_selectedComponent.state = SelectionState::none;
-				m_selectedComponent.compId = -1;
-				m_selectedComponent.terminalIndex = -1;
-				m_selectedComponent.nodeViewId = -1;
-			}
-			else if (m_selectedComponent.state == SelectionState::componentSelected)
-			{
-				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
-				DeleteComponent(m_selectedComponent.compId);
-
-				// Reset selezione
-				m_selectedComponent.state = SelectionState::none;
-				m_selectedComponent.compId = -1;
-				m_selectedComponent.terminalIndex = -1;
-				m_selectedComponent.nodeViewId = -1;
-			}
-			else if (m_selectedComponent.state == SelectionState::linkSelected)
-			{
-				// Un filo tra due terminali non si cancella da solo: il Circuit non sa
-				// scollegare, e il disegno direbbe una cosa diversa dal circuito. Si
-				// può però togliere un nodo di passaggio (annulla un nodo inserito sul
-				// filo): il filo torna un unico tratto.
-				int passThrough = m_graph.PassThroughNodeOfEdge(m_selectedComponent.linkId);
-				if (passThrough != -1)
-				{
-					if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
-					FreeTerminals(m_graph.RemoveFreeNodeView(passThrough));
-				}
-
-				m_selectedComponent.state = SelectionState::none;
-				m_selectedComponent.linkId = -1;
-			}
-			else if (m_selectedComponent.state == SelectionState::nodeViewSelected)
-			{
-				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
-
-				// Si cancellano solo i nodi liberi (i loro vicini restano collegati tra
-				// loro). Il NodeView di un terminale sparisce insieme al suo componente.
-				FreeTerminals(m_graph.RemoveFreeNodeView(m_selectedComponent.nodeViewId));
-
-				m_selectedComponent.state = SelectionState::none;
-				m_selectedComponent.nodeViewId = -1;
-			}
+			// Eliminazione con tasto Delete (il corpo è in DeleteSelection). Il tasto è controllato con
+			// isKeyPressed (vero ogni frame finché resta premuto): DeleteSelection svuota la selezione
+			// che ha appena cancellato, quindi ai frame successivi non fa più nulla finché non si
+			// seleziona di nuovo qualcosa.
+			DeleteSelection();
 		}
 		else if (const auto *keyboardEvent = event->getIf<sf::Event::KeyPressed>())
 		{
 			if (m_selectedComponent.state == SelectionState::componentSelected && keyboardEvent->code == sf::Keyboard::Key::Q)
-			{
-				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+				RotateSelectedComponent();
 
-				for (auto &cw : m_componentViewList)
-					if (cw.GetComponentLink() == m_selectedComponent.compId)
-					{
-						cw.SetRotation(static_cast<float>(static_cast<int>(cw.GetRotation() + 45) % 360));
-						// Ruotando attorno al centro il primo terminale si sposta: lo
-						// si riaggancia alla griglia (no-op se l'aggancio è disattivato).
-						SnapComponentToGrid(cw);
-					}
-
-				UpdateLinksForComponent(m_selectedComponent.compId);
-			}
+			// Esc termina la modalità di piazzamento
+			if (keyboardEvent->code == sf::Keyboard::Key::Escape)
+				m_placingType.reset();
 
 			// F = specchia (flip) il componente selezionato. Non si attiva mentre si scrive in
 			// un campo di testo (es. il nome del file, che può contenere una "f").
@@ -1101,13 +1124,21 @@ void CircuitLab::UI::HandleEvents()
 			bool shiftHeld = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LShift) ||
 				sf::Keyboard::isKeyPressed(sf::Keyboard::Key::RShift);
 			if (ctrlHeld && keyboardEvent->code == sf::Keyboard::Key::S)
-				m_pendingFileAction = m_currentFilePath.empty() ? FileAction::saveAs : FileAction::save;
+				m_pendingFileAction = (shiftHeld || m_currentFilePath.empty()) ? FileAction::saveAs : FileAction::save;
+			else if (ctrlHeld && keyboardEvent->code == sf::Keyboard::Key::N)
+				NewCircuit();
 			else if (ctrlHeld && keyboardEvent->code == sf::Keyboard::Key::O)
 				m_pendingFileAction = FileAction::open;
 			else if (ctrlHeld && keyboardEvent->code == sf::Keyboard::Key::Z && !shiftHeld && m_onUndo)
 				m_onUndo();
 			else if (ctrlHeld && ((keyboardEvent->code == sf::Keyboard::Key::Z && shiftHeld) || keyboardEvent->code == sf::Keyboard::Key::Y) && m_onRedo)
 				m_onRedo();
+			else if (keyboardEvent->code == sf::Keyboard::Key::F5)
+				m_onSetSimulationStatus(SimulationStatus::running);
+			else if (keyboardEvent->code == sf::Keyboard::Key::F6)
+				m_onSetSimulationStatus(SimulationStatus::paused);
+			else if (keyboardEvent->code == sf::Keyboard::Key::F7)
+				m_onSetSimulationStatus(SimulationStatus::stopped);
 		}
 	}
 }
@@ -1144,131 +1175,285 @@ void CircuitLab::UI::BuildPaletteIcons()
 		}
 }
 
-void CircuitLab::UI::DrawComponentPalette()
-{
-	if (!ImGui::CollapsingHeader("Componenti", ImGuiTreeNodeFlags_DefaultOpen))
-		return;
+namespace {
+	// Nomi dei passi di tempo e delle velocità (stesso ordine di TIMESTEP_VALUES e SPEED_VALUES
+	// in Application.cpp: la UI passa solo l'indice)
+	constexpr const char *TIMESTEP_NAMES[] = {
+		"1 s", "100 ms", "10 ms", "1 ms",
+		"100 us", "10 us", "1 us", "100 ns", "10 ns", "1 ns", "100 ps", "10 ps", "1 ps"
+	};
+	constexpr int TIMESTEP_COUNT = static_cast<int>(std::size(TIMESTEP_NAMES));
 
-	ImGui::TextWrapped("Trascina un simbolo sul circuito, oppure clicca per piazzarlo al centro della vista.");
+	constexpr const char *SPEED_NAMES[] = {
+		"0.001x", "0.01x", "0.1x", "1x", "2x", "5x", "10x", "20x", "50x", "100x", "Massima"
+	};
+	constexpr int SPEED_COUNT = static_cast<int>(std::size(SPEED_NAMES));
 
-	constexpr float ICON_SIZE = 40.0f;
-	constexpr int ICONS_PER_ROW = 4;
-
-	for (const auto &category : ComponentPalette())
+	// Messaggio per un esito di simulazione che non è un successo (nullptr se va tutto bene)
+	const char *SimulationMessage(CircuitLab::SimulationResult result)
 	{
-		ImGui::SeparatorText(category.name);
-		int column = 0;
-		for (const auto &entry : category.entries)
+		using CircuitLab::SimulationResult;
+		switch (result)
 		{
-			if (column > 0)
-				ImGui::SameLine();
-
-			// entry.type distingue i pulsanti nello stack ID di ImGui: senza
-			// PushID tutti userebbero lo stesso id letterale ("##icon") e ImGui
-			// li tratterebbe come lo stesso elemento.
-			ImGui::PushID(static_cast<int>(entry.type));
-			const sf::RenderTexture &icon = m_paletteIcons.at(entry.type);
-			bool clicked = ImGui::ImageButton("##icon", icon, { ICON_SIZE, ICON_SIZE });
-
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", entry.label);
-
-			// Il click (rilascio senza trascinare) piazza subito il componente;
-			// se invece si trascina, BeginDragDropSource intercetta il gesto e il
-			// drop viene gestito da DrawCanvasDropTarget quando il mouse è
-			// rilasciato sopra il canvas. Le due cose non si sovrappongono: un
-			// vero trascinamento non fa mai scattare il click.
-			if (ImGui::BeginDragDropSource())
-			{
-				ImGui::SetDragDropPayload(COMPONENT_DRAG_PAYLOAD, &entry.type, sizeof(ComponentType));
-				ImGui::Image(icon, sf::Vector2f{ ICON_SIZE, ICON_SIZE });
-				ImGui::Text("%s", entry.label);
-				ImGui::EndDragDropSource();
-			}
-			ImGui::PopID();
-
-			if (clicked)
-			{
-				sf::Vector2f center = m_view.getCenter();
-				PlaceNewComponent(entry.type, sf::Vector2i(
-					static_cast<int>(std::lround(center.x)),
-					static_cast<int>(std::lround(center.y))));
-			}
-
-			column = (column + 1) % ICONS_PER_ROW;
+		case SimulationResult::solve_error:           return "Circuito non risolvibile!";
+		case SimulationResult::empty_circuit:         return "Il circuito non contiene componenti!";
+		case SimulationResult::no_circuit:            return "Errore interno, puntatore a circuito nullo!";
+		case SimulationResult::only_ground_circuit:   return "Il circuito contiene solo componenti ground!";
+		case SimulationResult::disconnected_terminal: return "Circuito non valido: c'e' un terminale scollegato o un ramo aperto. Simulazione interrotta.";
+		case SimulationResult::no_convergence:        return "La simulazione non converge (componente non lineare).";
+		default:                                      return nullptr;
 		}
 	}
 }
 
-void CircuitLab::UI::DrawCanvasDropTarget()
+void CircuitLab::UI::NewCircuit()
 {
-	// GetDragDropPayload() (a differenza di BeginDragDropTarget) si può
-	// interrogare da qualunque punto, senza un item associato: la usiamo per
-	// sapere SE mostrare l'overlay, prima ancora di disegnarlo. Così, fuori da
-	// un drag dalla palette, questa finestra non viene creata affatto e il
-	// canvas sottostante continua a ricevere i normali eventi SFML (selezione,
-	// trascinamento nodi, pan, ...) esattamente come prima di questa funzione.
-	const ImGuiPayload *peek = ImGui::GetDragDropPayload();
-	if (!peek || !peek->IsDataType(COMPONENT_DRAG_PAYLOAD))
+	m_onNew();
+	m_currentFilePath.clear();
+	m_placingType.reset();
+}
+
+// Barra dei menu. Le voci duplicano i comandi che prima stavano nel pannello laterale; le
+// scorciatoie indicate a destra sono quelle gestite in HandleEvents.
+void CircuitLab::UI::DrawMainMenuBar()
+{
+	if (!ImGui::BeginMainMenuBar())
 		return;
 
-	ImGui::SetNextWindowPos({ 0.0f, 0.0f });
-	ImGui::SetNextWindowSize({ static_cast<float>(m_width - PANEL_WIDTH), static_cast<float>(m_heigth) });
-	ImGui::Begin("##CanvasDropTarget", nullptr,
-		ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-		ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground |
-		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus |
-		ImGuiWindowFlags_NoNav);
+	m_menuBarHeight = ImGui::GetWindowSize().y;
 
-	ImGui::InvisibleButton("##CanvasDropArea", ImGui::GetContentRegionAvail());
-	if (ImGui::BeginDragDropTarget())
+	const SimulationStatus status = m_onGetSimulationStatus ? m_onGetSimulationStatus() : SimulationStatus::stopped;
+
+	if (ImGui::BeginMenu("File"))
 	{
-		if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(COMPONENT_DRAG_PAYLOAD))
-		{
-			ComponentType type = *static_cast<const ComponentType *>(payload->Data);
-			PlaceNewComponent(type, WorldPos(sf::Mouse::getPosition(m_window)));
-		}
-		ImGui::EndDragDropTarget();
+		if (ImGui::MenuItem("Nuovo", "Ctrl+N"))
+			NewCircuit();
+
+		// Le azioni su file aprono la finestra di scelta file di sistema (a fine frame, vedi
+		// ProcessPendingFileAction); "Salva" la salta se il file è già noto
+		if (ImGui::MenuItem("Apri...", "Ctrl+O"))
+			m_pendingFileAction = FileAction::open;
+		if (ImGui::MenuItem("Salva", "Ctrl+S"))
+			m_pendingFileAction = m_currentFilePath.empty() ? FileAction::saveAs : FileAction::save;
+		if (ImGui::MenuItem("Salva con nome...", "Ctrl+Maiusc+S"))
+			m_pendingFileAction = FileAction::saveAs;
+
+		ImGui::Separator();
+		if (ImGui::MenuItem("Esci"))
+			m_window.close();
+		ImGui::EndMenu();
 	}
+
+	if (ImGui::BeginMenu("Modifica"))
+	{
+		const bool canUndo = m_onCanUndo && m_onCanUndo();
+		const bool canRedo = m_onCanRedo && m_onCanRedo();
+		if (ImGui::MenuItem("Annulla", "Ctrl+Z", false, canUndo))
+			m_onUndo();
+		if (ImGui::MenuItem("Ripeti", "Ctrl+Y", false, canRedo))
+			m_onRedo();
+
+		ImGui::Separator();
+		const bool componentSelected = m_selectedComponent.state == SelectionState::componentSelected;
+		const bool anySelection = componentSelected || !m_selectedComponentIds.empty() || !m_selectedNodeViewIds.empty() ||
+			m_selectedComponent.state == SelectionState::nodeViewSelected || m_selectedComponent.state == SelectionState::linkSelected;
+		if (ImGui::MenuItem("Elimina selezione", "Canc", false, anySelection))
+			DeleteSelection();
+		if (ImGui::MenuItem("Ruota di 45 gradi", "Q", false, componentSelected))
+			RotateSelectedComponent();
+		if (ImGui::MenuItem("Specchia", "F", false, componentSelected))
+			MirrorComponent(m_selectedComponent.compId);
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("Componenti"))
+	{
+		ImGui::TextDisabled("Scegli un componente, poi click sul canvas per posarlo.");
+		constexpr float ICON_SIZE = 32.0f;
+		for (const auto &category : ComponentPalette())
+		{
+			ImGui::SeparatorText(category.name);
+			for (const auto &entry : category.entries)
+			{
+				ImGui::PushID(static_cast<int>(entry.type));
+				// L'intera riga (alta come l'icona) è cliccabile: icona ed etichetta si
+				// disegnano sopra la voce, che lascia sovrapporre gli elementi successivi
+				const ImVec2 rowStart = ImGui::GetCursorScreenPos();
+				const bool placing = m_placingType.has_value() && *m_placingType == entry.type;
+				if (ImGui::Selectable("##place", placing, ImGuiSelectableFlags_AllowOverlap, ImVec2(0.0f, ICON_SIZE)))
+					m_placingType = entry.type;
+				ImGui::SetCursorScreenPos(rowStart);
+				ImGui::Image(m_paletteIcons.at(entry.type), { ICON_SIZE, ICON_SIZE });
+				ImGui::SameLine();
+				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (ICON_SIZE - ImGui::GetTextLineHeight()) * 0.5f);
+				ImGui::TextUnformatted(entry.label);
+				ImGui::PopID();
+			}
+		}
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("Simulazione"))
+	{
+		if (ImGui::MenuItem("Avvia", "F5", false, status != SimulationStatus::running))
+			m_onSetSimulationStatus(SimulationStatus::running);
+		if (ImGui::MenuItem("Pausa", "F6", false, status == SimulationStatus::running))
+			m_onSetSimulationStatus(SimulationStatus::paused);
+		if (ImGui::MenuItem("Stop", "F7", false, status != SimulationStatus::stopped))
+			m_onSetSimulationStatus(SimulationStatus::stopped);
+
+		ImGui::Separator();
+		if (ImGui::BeginMenu("Passo di tempo"))
+		{
+			for (int i = 0; i < TIMESTEP_COUNT; i++)
+				if (ImGui::MenuItem(TIMESTEP_NAMES[i], nullptr, m_hSimIndex == i))
+				{
+					m_hSimIndex = i;
+					m_onSetHSim(m_hSimIndex);
+				}
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Velocita'"))
+		{
+			for (int i = 0; i < SPEED_COUNT; i++)
+				if (ImGui::MenuItem(SPEED_NAMES[i], nullptr, m_simSpeedIndex == i))
+				{
+					m_simSpeedIndex = i;
+					m_onSetSimSpeed(m_simSpeedIndex);
+				}
+			ImGui::EndMenu();
+		}
+
+		ImGui::Separator();
+		if (ImGui::MenuItem("Parti dal punto di lavoro DC", nullptr, &m_startFromDc))
+			m_onSetStartFromDc(m_startFromDc);
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("All'avvio (e dopo Apri o un cambio di timestep) i condensatori partono\n"
+				"gia' carichi e gli induttori gia' a regime, invece che scarichi:\n"
+				"niente transitorio di assestamento (es. 25 s di un amplificatore\n"
+				"accoppiato in alternata).\n"
+				"Lascialo spento per vedere la carica da zero e per gli oscillatori\n"
+				"(un multivibratore partendo dal regime resta fermo).");
+		if (ImGui::MenuItem("Riparti dal punto DC"))
+			m_onRestartFromDc();
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("Azzera il tempo e riparte adesso dallo stato di regime.");
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu("Visualizza"))
+	{
+		ImGui::MenuItem("Oscilloscopio", nullptr, &m_showOscilloscope);
+		ImGui::MenuItem("Risultati", nullptr, &m_showResults);
+
+		ImGui::Separator();
+		ImGui::MenuItem("Pallini della corrente", nullptr, &m_showParticles);
+
+		// Il moltiplicatore agisce sulla velocità con cui i pallini avanzano (che resta
+		// proporzionale alla corrente): con correnti alte, o che cambiano verso troppo in
+		// fretta, rallentarli permette di seguire il movimento. Scala logaritmica: i valori
+		// utili vanno da 1x (come prima) fino a mille volte più lenti.
+		ImGui::BeginDisabled(!m_showParticles);
+		ImGui::SetNextItemWidth(160.0f);
+		ImGui::SliderFloat("Velocita' pallini", &m_particleSpeed, 0.001f, 1.0f, "%.3fx", ImGuiSliderFlags_Logarithmic);
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("Rallenta il movimento dei pallini (1x = velocita' reale,\nsempre proporzionale alla corrente).");
+		ImGui::EndDisabled();
+
+		ImGui::Separator();
+		ImGui::MenuItem("Griglia", nullptr, &m_showGrid);
+		ImGui::MenuItem("Aggancia alla griglia", nullptr, &m_snapToGrid);
+		if (ImGui::BeginMenu("Passo griglia"))
+		{
+			for (const int size : { 10, 20, 40 })
+				if (ImGui::MenuItem(std::to_string(size).c_str(), nullptr, m_gridSize == size))
+					m_gridSize = size;
+			ImGui::EndMenu();
+		}
+
+		ImGui::Separator();
+		if (ImGui::MenuItem("Reimposta zoom"))
+			ResetZoom();
+		ImGui::EndMenu();
+	}
+
+	ImGui::EndMainMenuBar();
+}
+
+// Comandi di simulazione sempre a portata di mano, sotto il menu
+void CircuitLab::UI::DrawToolbar()
+{
+	ImGui::SetNextWindowPos({ 0.0f, m_menuBarHeight });
+	ImGui::SetNextWindowSize({ static_cast<float>(m_width), TOOLBAR_HEIGHT });
+	const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav;
+	if (!ImGui::Begin("##toolbar", nullptr, flags))
+	{
+		ImGui::End();
+		return;
+	}
+
+	const SimulationStatus status = m_onGetSimulationStatus ? m_onGetSimulationStatus() : SimulationStatus::stopped;
+
+	// Il pulsante dello stato attuale è evidenziato
+	auto stateButton = [&](const char *label, SimulationStatus target, bool enabled)
+	{
+		const bool active = status == target;
+		if (active)
+			ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+		ImGui::BeginDisabled(!enabled);
+		const bool clicked = ImGui::Button(label);
+		ImGui::EndDisabled();
+		if (active)
+			ImGui::PopStyleColor();
+		if (clicked)
+			m_onSetSimulationStatus(target);
+	};
+
+	stateButton("Avvia", SimulationStatus::running, status != SimulationStatus::running);
+	ImGui::SameLine();
+	stateButton("Pausa", SimulationStatus::paused, status == SimulationStatus::running);
+	ImGui::SameLine();
+	stateButton("Stop", SimulationStatus::stopped, status != SimulationStatus::stopped);
+
+	ImGui::SameLine(0.0f, 24.0f);
+	ImGui::AlignTextToFramePadding();
+	ImGui::TextUnformatted("Passo");
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(90.0f);
+	if (ImGui::Combo("##timestep", &m_hSimIndex, TIMESTEP_NAMES, TIMESTEP_COUNT))
+		m_onSetHSim(m_hSimIndex);
+
+	ImGui::SameLine(0.0f, 16.0f);
+	ImGui::AlignTextToFramePadding();
+	ImGui::TextUnformatted("Velocita'");
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(90.0f);
+	if (ImGui::Combo("##speed", &m_simSpeedIndex, SPEED_NAMES, SPEED_COUNT))
+		m_onSetSimSpeed(m_simSpeedIndex);
 
 	ImGui::End();
 }
 
-void CircuitLab::UI::DrawImageGuiPanel()
+// Barra in fondo: stato e tempo simulato, file corrente, eventuali errori, modalità di
+// piazzamento e zoom
+void CircuitLab::UI::DrawStatusBar()
 {
-	ImGui::SetNextWindowPos({ static_cast<float>(m_width - PANEL_WIDTH), 0.0f });
-	ImGui::SetNextWindowSize({ PANEL_WIDTH, static_cast<float>(m_heigth) });
-	// --- Pannello ImGui ---
-	ImGui::Begin("CircuitLab - Test", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+	ImGui::SetNextWindowPos({ 0.0f, static_cast<float>(m_heigth) - STATUS_BAR_HEIGHT });
+	ImGui::SetNextWindowSize({ static_cast<float>(m_width), STATUS_BAR_HEIGHT });
+	const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav;
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
+	if (!ImGui::Begin("##statusbar", nullptr, flags))
+	{
+		ImGui::End();
+		ImGui::PopStyleVar();
+		return;
+	}
 
-	DrawComponentPalette();
-	ImGui::Separator();
-
-	if (ImGui::Button("Start Simulation"))
-		m_onSetSimulationStatus(SimulationStatus::running);
-	if (ImGui::Button("Pause Simulation"))
-		m_onSetSimulationStatus(SimulationStatus::paused);
-	if (ImGui::Button("Stop Simulation"))
-		m_onSetSimulationStatus(SimulationStatus::stopped);
-
-	ImGui::Separator();
-
-	const char *timestepNames[] = {
-		"1 s", "100 ms", "10 ms", "1 ms",
-		"100 us", "10 us", "1 us", "100 ns", "10 ns", "1 ns", "100 ps", "10 ps", "1 ps"
-	};
-	constexpr int timestepCount = static_cast<int>(std::size(timestepNames));
-
-	if (ImGui::Combo("Timestep", &m_hSimIndex, timestepNames, timestepCount))
-		m_onSetHSim(m_hSimIndex);
-
-	const char *speedNames[] = {
-		"0.001x", "0.01x", "0.1x", "1x", "2x", "5x", "10x", "20x", "50x", "100x", "Massima"
-	};
-	constexpr int speedCount = static_cast<int>(std::size(speedNames));
-
-	if (ImGui::Combo("Velocita' simulazione", &m_simSpeedIndex, speedNames, speedCount))
-		m_onSetSimSpeed(m_simSpeedIndex);
+	const SimulationStatus status = m_onGetSimulationStatus ? m_onGetSimulationStatus() : SimulationStatus::stopped;
+	const char *statusName = status == SimulationStatus::running ? "In esecuzione" :
+		status == SimulationStatus::paused ? "In pausa" : "Fermo";
 
 	// Velocità effettiva misurata: quella richiesta è un tetto, non una
 	// garanzia — se il calcolo di uno step costa troppo (circuito pesante,
@@ -1284,115 +1469,55 @@ void CircuitLab::UI::DrawImageGuiPanel()
 		m_speedSampleSim = simNow;
 	}
 	// %.3g e non %.1f: alle velocità lente (0.01x) una sola cifra decimale mostrerebbe "0.0x"
-	ImGui::Text("Tempo simulato: %s  (%.3gx)", FormatEngineering(simNow, "s").c_str(), m_measuredSpeed);
+	ImGui::Text("%s  |  Tempo simulato: %s  (%.3gx)", statusName, FormatEngineering(simNow, "s").c_str(), m_measuredSpeed);
 
-	if (ImGui::Checkbox("Parti dal punto di lavoro DC", &m_startFromDc))
-		m_onSetStartFromDc(m_startFromDc);
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("All'avvio (e dopo Apri o un cambio di timestep) i condensatori partono\n"
-			"gia' carichi e gli induttori gia' a regime, invece che scarichi:\n"
-			"niente transitorio di assestamento (es. 25 s di un amplificatore\n"
-			"accoppiato in alternata).\n"
-			"Lascialo spento per vedere la carica da zero e per gli oscillatori\n"
-			"(un multivibratore partendo dal regime resta fermo).");
-	if (ImGui::Button("Riparti dal punto DC"))
-		m_onRestartFromDc();
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("Azzera il tempo e riparte adesso dallo stato di regime.");
-
-	ImGui::Separator();
-
-	if (ImGui::Button("New"))
-	{
-		m_onNew();
-		m_currentFilePath.clear();
-	}
-
+	ImGui::SameLine();
 	if (m_currentFilePath.empty())
-		ImGui::TextDisabled("File: (nessuno)");
+		ImGui::TextDisabled("|  File: (nessuno)");
 	else
 	{
-		ImGui::Text("File: %s", FileNameOf(m_currentFilePath).c_str());
+		ImGui::Text("|  File: %s", FileNameOf(m_currentFilePath).c_str());
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("%s", m_currentFilePath.c_str());
 	}
 
-	// Le tre azioni aprono la finestra di scelta file di sistema (a fine frame, vedi
-	// ProcessPendingFileAction); "Salva" la salta se il file è già noto
-	if (ImGui::Button("Apri... (Ctrl+O)"))
-		m_pendingFileAction = FileAction::open;
+	if (const char *message = SimulationMessage(m_simulationOutput.simRes))
+	{
+		ImGui::SameLine();
+		ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "|  %s", message);
+	}
+	else if (m_placingType.has_value())
+	{
+		ImGui::SameLine();
+		ImGui::TextColored(ImVec4(1.0f, 0.87f, 0.2f, 1.0f), "|  Posa il componente con un click, Esc o click destro per finire");
+	}
 
-	if (ImGui::Button("Salva (Ctrl+S)"))
-		m_pendingFileAction = m_currentFilePath.empty() ? FileAction::saveAs : FileAction::save;
+	// Zoom, allineato a destra
+	char zoomText[24];
+	std::snprintf(zoomText, sizeof(zoomText), "Zoom: %d%%", static_cast<int>(std::lround(m_zoom * 100.0f)));
+	ImGui::SameLine(static_cast<float>(m_width) - ImGui::CalcTextSize(zoomText).x - 16.0f);
+	ImGui::TextUnformatted(zoomText);
 
-	if (ImGui::Button("Salva con nome..."))
-		m_pendingFileAction = FileAction::saveAs;
+	ImGui::End();
+	ImGui::PopStyleVar();
+}
 
-	ImGui::Separator();
+// Tensioni dei nodi e correnti dei componenti dell'ultimo passo pubblicato
+void CircuitLab::UI::DrawResultsWindow()
+{
+	if (!m_showResults)
+		return;
 
-	bool canUndo = m_onCanUndo && m_onCanUndo();
-	bool canRedo = m_onCanRedo && m_onCanRedo();
+	ImGui::SetNextWindowPos({ static_cast<float>(m_width) - 300.0f, CanvasTop() + 10.0f }, ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize({ 280.0f, 360.0f }, ImGuiCond_FirstUseEver);
+	if (!ImGui::Begin("Risultati", &m_showResults))
+	{
+		ImGui::End();
+		return;
+	}
 
-	ImGui::BeginDisabled(!canUndo);
-	if (ImGui::Button("Undo"))
-		m_onUndo();
-	ImGui::EndDisabled();
-
-	ImGui::SameLine();
-	ImGui::BeginDisabled(!canRedo);
-	if (ImGui::Button("Redo"))
-		m_onRedo();
-	ImGui::EndDisabled();
-
-	ImGui::SameLine();
-	ImGui::TextDisabled("(Ctrl+Z / Ctrl+Y)");
-
-	ImGui::Separator();
-	if (ImGui::Button(m_showOscilloscope ? "Hide Oscilloscope" : "Show Oscilloscope"))
-		m_showOscilloscope = !m_showOscilloscope;
-	ImGui::Separator();
-
-	ImGui::Checkbox("Mostra pallini della corrente", &m_showParticles);
-
-	// Il moltiplicatore agisce sulla velocità con cui i pallini avanzano (che resta
-	// proporzionale alla corrente): con correnti alte, o che cambiano verso troppo in
-	// fretta, rallentarli permette di seguire il movimento. Scala logaritmica: i valori
-	// utili vanno da 1x (come prima) fino a mille volte più lenti.
-	ImGui::BeginDisabled(!m_showParticles);
-	ImGui::SliderFloat("Velocita' pallini", &m_particleSpeed, 0.001f, 1.0f, "%.3fx", ImGuiSliderFlags_Logarithmic);
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-		ImGui::SetTooltip("Rallenta il movimento dei pallini (1x = velocita' reale,\nsempre proporzionale alla corrente).");
-	ImGui::EndDisabled();
-
-	ImGui::Checkbox("Mostra griglia", &m_showGrid);
-	ImGui::Checkbox("Aggancia alla griglia", &m_snapToGrid);
-	const char *gridSizeNames[] = { "10", "20", "40" };
-	const int gridSizes[] = { 10, 20, 40 };
-	int gridSizeIndex = 1;
-	for (int i = 0; i < 3; i++)
-		if (gridSizes[i] == m_gridSize)
-			gridSizeIndex = i;
-	if (ImGui::Combo("Passo griglia", &gridSizeIndex, gridSizeNames, 3))
-		m_gridSize = gridSizes[gridSizeIndex];
-	ImGui::Text("Zoom: %d%%", static_cast<int>(std::lround(m_zoom * 100.0f)));
-	ImGui::SameLine();
-	if (ImGui::Button("Reset zoom"))
-		ResetZoom();
-	ImGui::Separator();
-
-	// Mostra il risultato della simulazione o un messaggio di errore
-	if (m_simulationOutput.simRes == SimulationResult::solve_error)
-		ImGui::Text("Circuito non risolvibile!");
-	else if (m_simulationOutput.simRes == SimulationResult::empty_circuit)
-		ImGui::Text("Il circuito non contiene componenti!");
-	else if (m_simulationOutput.simRes == SimulationResult::no_circuit)
-		ImGui::Text("Errore interno, puntatore a circuito nullo!");
-	else if (m_simulationOutput.simRes == SimulationResult::only_ground_circuit)
-		ImGui::Text("Il circuito contiene solo componenti ground!");
-	else if (m_simulationOutput.simRes == SimulationResult::disconnected_terminal)
-		ImGui::Text("Circuito non valido: c'e' un terminale scollegato o un ramo aperto. Simulazione interrotta.");
-	else if (m_simulationOutput.simRes == SimulationResult::no_convergence)
-		ImGui::Text("La simulazione non converge (componente non lineare).");
+	if (const char *message = SimulationMessage(m_simulationOutput.simRes))
+		ImGui::TextWrapped("%s", message);
 	else
 	{
 		// Valori con prefisso SI ("18.16 V", "184.2 mA", "4.3 uA"): std::to_string
@@ -1424,10 +1549,22 @@ void CircuitLab::UI::DrawImageGuiPanel()
 	}
 
 	ImGui::End();
+}
 
-	// Dopo ImGui::End() chiama DrawOscilloscope se visibile
-	if (m_showOscilloscope)
-		DrawOscilloscope();
+void CircuitLab::UI::DrawPlacementGhost()
+{
+	if (!m_placingType.has_value())
+		return;
+
+	const sf::Vector2i pixel = sf::Mouse::getPosition(m_window);
+	if (!IsInCanvas(pixel) || ImGui::GetIO().WantCaptureMouse)
+		return;
+
+	// Stessa posizione che avrà il componente una volta posato (vedi PlaceNewComponent)
+	const sf::Vector2i pos = WorldPos(pixel);
+	ComponentView ghost(0, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION, "", *m_placingType);
+	SnapComponentToGrid(ghost);
+	ghost.DrawSymbol(m_window, sf::Color(255, 255, 255, 130), WaveFormType::dcWaveForm, false);
 }
 
 // Finestra con i dati del componente selezionato (posizione, rotazione, specchio,
@@ -1460,10 +1597,10 @@ void CircuitLab::UI::DrawComponentPopup()
 	constexpr float POPUP_MARGIN = 8.0f;
 	const float reach = (static_cast<float>(std::max(des.compWidth, des.compHeight)) / 2.0f + des.terminalRadius + 10.0f) * m_zoom;
 	const sf::Vector2i center = m_window.mapCoordsToPixel({ view->GetPosition().x, view->GetPosition().y }, m_view);
-	const float canvasWidth = static_cast<float>(m_width - PANEL_WIDTH);
+	const float canvasWidth = CanvasWidth();
 	const float halfWidth = m_compPopupWidth / 2.0f;
 	const float x = std::clamp(static_cast<float>(center.x), halfWidth, std::max(halfWidth, canvasWidth - halfWidth));
-	const bool above = (static_cast<float>(center.y) - reach - m_compPopupHeight - POPUP_MARGIN) >= 0.0f;
+	const bool above = (static_cast<float>(center.y) - reach - m_compPopupHeight - POPUP_MARGIN) >= CanvasTop();
 	const float y = above ? static_cast<float>(center.y) - reach - POPUP_MARGIN : static_cast<float>(center.y) + reach + POPUP_MARGIN;
 
 	ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always, ImVec2(0.5f, above ? 1.0f : 0.0f));
@@ -1825,7 +1962,7 @@ void CircuitLab::UI::DrawOscilloscope()
 	// la prima volta (poi le ricorda imgui.ini); l'ID "##scope2" è nuovo apposta,
 	// così non si eredita la vecchia dimensione, molto più grande, già salvata lì.
 	ImGui::SetNextWindowSize(ImVec2(440.0f, 300.0f), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowPos(ImVec2(12.0f, static_cast<float>(m_heigth) - 312.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(ImVec2(12.0f, static_cast<float>(m_heigth) - STATUS_BAR_HEIGHT - 312.0f), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(400.0f, 180.0f), ImVec2(FLT_MAX, FLT_MAX));
 	if (!ImGui::Begin("Oscilloscope##scope2", &m_showOscilloscope))
 	{
@@ -2787,21 +2924,19 @@ CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &t
 	// concorrenza col thread di simulazione, che ne veniva rallentato.
 	m_window.setFramerateLimit(60);
 
-	// Sotto questa soglia il canvas (larghezza finestra - PANEL_WIDTH) potrebbe
-	// diventare troppo stretto o, ridimensionando ancora, sottrarre PANEL_WIDTH
-	// da un m_width che lo è già meno (unsigned: andrebbe in underflow). Vedi
-	// HandleResize.
-	m_window.setMinimumSize(sf::Vector2u{ static_cast<unsigned int>(PANEL_WIDTH) + 200u, 200u });
+	// Sotto questa soglia l'altezza del canvas (finestra meno barre) diventerebbe troppo
+	// piccola o, essendo unsigned il resto dei calcoli, negativa. Vedi HandleResize.
+	m_window.setMinimumSize(sf::Vector2u{ 640u, 420u });
 
 	ImPlot::CreateContext();
 
 	if (!m_font.openFromFile("JetBrainsMono-Regular.ttf"))
 		throw std::runtime_error("Impossibile caricare il font");
 
-	m_view = sf::View(sf::FloatRect({ 0.0f, 0.0f }, { static_cast<float>(m_width - PANEL_WIDTH), static_cast<float>(m_heigth) }));
+	m_view = sf::View(sf::FloatRect({ 0.0f, 0.0f }, { CanvasWidth(), CanvasHeight() }));
 	// Il viewport serve già prima del primo Render (WorldPos/mapPixelToCoords
 	// lo usano per convertire il mouse), quindi si imposta qui e non solo là.
-	m_view.setViewport(sf::FloatRect({ 0.f, 0.f }, { static_cast<float>(m_width - PANEL_WIDTH) / m_width, 1.f }));
+	UpdateCanvasView();
 
 	m_linkViewIdCount = 0;
 	m_nodeViewCount = 0;
@@ -2816,26 +2951,38 @@ sf::Vector2i CircuitLab::UI::WorldPos(sf::Vector2i pixelPos) const
 }
 
 // Chiamato quando l'utente ridimensiona la finestra trascinandone il bordo
-// (vedi HandleEvents, sf::Event::Resized). Il pannello resta largo PANEL_WIDTH
-// in pixel; il canvas prende tutto lo spazio restante e ne mostra di più (o di
-// meno), non lo stessa porzione ingrandita: si aggiorna la SIZE della vista (in
+// (vedi HandleEvents, sf::Event::Resized). Le barre mantengono la loro altezza in
+// pixel; il canvas prende tutto lo spazio restante e ne mostra di più (o di
+// meno), non la stessa porzione ingrandita: si aggiorna la SIZE della vista (in
 // unità mondo, secondo lo zoom corrente) esattamente come fa ResetZoom, ma
 // senza toccare centro o zoom, così la parte di circuito già inquadrata resta
 // dov'era. m_window.setMinimumSize (vedi costruttore) garantisce che
-// m_width - PANEL_WIDTH non vada mai sotto zero.
+// il canvas non abbia mai dimensioni negative.
 void CircuitLab::UI::HandleResize(unsigned int newWidth, unsigned int newHeight)
 {
 	m_width = newWidth;
 	m_heigth = newHeight;
 
-	m_view.setSize(sf::Vector2f(static_cast<float>(m_width - PANEL_WIDTH), static_cast<float>(m_heigth)) / m_zoom);
-	m_view.setViewport(sf::FloatRect({ 0.f, 0.f }, { static_cast<float>(m_width - PANEL_WIDTH) / m_width, 1.f }));
+	UpdateCanvasView();
+}
+
+void CircuitLab::UI::UpdateCanvasView()
+{
+	const float height = CanvasHeight();
+	m_view.setSize(sf::Vector2f(CanvasWidth(), height) / m_zoom);
+	m_view.setViewport(sf::FloatRect({ 0.f, CanvasTop() / static_cast<float>(m_heigth) }, { 1.f, height / static_cast<float>(m_heigth) }));
+}
+
+bool CircuitLab::UI::IsInCanvas(sf::Vector2i pixelPos) const
+{
+	return pixelPos.x >= 0 && pixelPos.x < static_cast<int>(m_width) &&
+		static_cast<float>(pixelPos.y) >= CanvasTop() && static_cast<float>(pixelPos.y) < CanvasTop() + CanvasHeight();
 }
 
 void CircuitLab::UI::ResetZoom()
 {
 	m_zoom = 1.0f;
-	m_view.setSize({ static_cast<float>(m_width - PANEL_WIDTH), static_cast<float>(m_heigth) });
+	UpdateCanvasView();
 	m_view.setCenter(m_view.getSize() / 2.0f);
 }
 
@@ -3169,13 +3316,18 @@ void CircuitLab::UI::Render()
 	// --- Aggiornamento ImGui ---
 	ImGui::SFML::Update(m_window, dt);
 
-	// Il viewport serve già alle finestre ImGui che si ancorano a punti del canvas
-	// (vedi DrawComponentPopup, che converte coordinate mondo in pixel con m_view)
-	m_view.setViewport(sf::FloatRect({ 0.f, 0.f }, { (static_cast<float>(m_width - PANEL_WIDTH) / m_width), 1.f }));
+	// La barra dei menu fissa l'altezza da cui parte il canvas; il viewport serve poi già alle
+	// finestre ImGui che si ancorano a punti del canvas (vedi DrawComponentPopup, che converte
+	// coordinate mondo in pixel con m_view)
+	DrawMainMenuBar();
+	UpdateCanvasView();
 
-	DrawImageGuiPanel();
+	DrawToolbar();
+	DrawStatusBar();
+	DrawResultsWindow();
+	if (m_showOscilloscope)
+		DrawOscilloscope();
 	DrawComponentPopup();
-	DrawCanvasDropTarget();
 
 	// --- Rendering canvas ---
 	m_window.clear(BACKGROUND_COLOR);
@@ -3188,6 +3340,8 @@ void CircuitLab::UI::Render()
 	DrawComponents();
 
 	DrawNodes();
+
+	DrawPlacementGhost();
 
 	// I pallini avanzano solo mentre la simulazione è effettivamente in esecuzione:
 	// altrimenti continuavano a muoversi anche a simulazione in pausa/stop, dando

@@ -2,6 +2,7 @@
 #include <SFML/Graphics.hpp>
 #include <functional>
 #include <map>
+#include <optional>
 #include <unordered_map>
 
 #include "Common/ComponentType.h"
@@ -98,7 +99,12 @@ namespace CircuitLab {
 		static constexpr float DEFAULT_ROTATION = 0.0f;    // Rotazione di default (gradi)
 		static constexpr int OUTLINE_THICKNESS = 2;        // Spessore outline selezione (pixel)
 		static constexpr int TEXT_COMPONENT_OFFSET = 15;   // Offset orizzontale etichetta rispetto al centro del componente (pixel)
-		static constexpr int PANEL_WIDTH = 300;
+		// Layout della finestra: barra dei menu in alto (altezza dettata da ImGui, vedi
+		// m_menuBarHeight), sotto la barra degli strumenti, in fondo la barra di stato; il canvas
+		// occupa tutto lo spazio in mezzo, a tutta larghezza.
+		static constexpr float TOOLBAR_HEIGHT = 36.0f;
+		static constexpr float STATUS_BAR_HEIGHT = 24.0f;
+		float m_menuBarHeight = 19.0f;
 		static constexpr int NODE_RADIUS = 4;
 		static constexpr float EPSILON = 1.5f;
 		static constexpr int PARTICLE_SIZE = 5;
@@ -139,6 +145,11 @@ namespace CircuitLab {
 
 		SimulationOutput m_simulationOutput;  // Ultimo risultato di simulazione ricevuto
 		bool m_showOscilloscope;
+		bool m_showResults = true;            // finestra "Risultati" (tensioni e correnti)
+
+		// Tipo di componente scelto dal menu Componenti: finché è impostato il simbolo segue il
+		// mouse sul canvas e ogni click sinistro ne posa uno (Esc o click destro per finire)
+		std::optional<ComponentType> m_placingType;
 		double m_windowTime;
 
 		int m_hSimIndex;
@@ -242,8 +253,8 @@ namespace CircuitLab {
 		sf::Vector2f m_selectionRectStart;         // angolo del rettangolo dove è iniziato il trascinamento (coordinate mondo)
 		sf::Vector2f m_selectionRectCurrent;       // angolo opposto, aggiornato ad ogni MouseMoved (coordinate mondo)
 
-		// Icone pre-renderizzate (una per tipo di componente della palette, vedi
-		// DrawComponentPalette) su una piccola RenderTexture: il simbolo è statico
+		// Icone pre-renderizzate (una per tipo di componente della palette, mostrate nel menu
+		// Componenti) su una piccola RenderTexture: il simbolo è statico
 		// (nessuna posa dipende dallo stato di un'istanza reale), quindi si
 		// disegna una sola volta, nel costruttore, invece che ogni frame.
 		std::map<ComponentType, sf::RenderTexture> m_paletteIcons;
@@ -323,6 +334,15 @@ namespace CircuitLab {
 		// Riporta lo zoom a 100% e la vista alla posizione iniziale
 		void ResetZoom();
 
+		// Geometria del canvas, in pixel della finestra (vedi TOOLBAR_HEIGHT)
+		float CanvasTop() const { return m_menuBarHeight + TOOLBAR_HEIGHT; }
+		float CanvasWidth() const { return static_cast<float>(m_width); }
+		float CanvasHeight() const { return static_cast<float>(m_heigth) - CanvasTop() - STATUS_BAR_HEIGHT; }
+		// Vero se il punto (pixel della finestra) cade sul canvas e non sulle barre
+		bool IsInCanvas(sf::Vector2i pixelPos) const;
+		// Porta dimensione (secondo lo zoom) e viewport della vista del canvas alla geometria corrente
+		void UpdateCanvasView();
+
 		// Aggiorna dimensioni finestra, vista del canvas e viewport dopo che
 		// l'utente ha ridimensionato la finestra trascinandone il bordo.
 		void HandleResize(unsigned int newWidth, unsigned int newHeight);
@@ -348,34 +368,34 @@ namespace CircuitLab {
 		// selezionato, non solo alla selezione singola.
 		void DeleteComponent(int id);
 
-		// Disegna il pannello laterale ImGui (proprietà componente selezionato, oscilloscopio, save/load)
-		void DrawImageGuiPanel();
+		// Interfaccia ImGui: barra dei menu (File, Modifica, Componenti, Simulazione, Visualizza),
+		// barra degli strumenti con i comandi di simulazione, barra di stato in fondo e finestra dei
+		// risultati. DrawMainMenuBar va chiamata per prima (aggiorna m_menuBarHeight).
+		void DrawMainMenuBar();
+		void DrawToolbar();
+		void DrawStatusBar();
+		void DrawResultsWindow();
 		void DrawComponentPopup();
+
+		// Azioni condivise da menu e scorciatoie
+		void NewCircuit();
+		void RotateSelectedComponent();
+		void DeleteSelection();
+		// Disegna in trasparenza, sotto il mouse, il componente che si sta per posare (m_placingType)
+		void DrawPlacementGhost();
 		void ProcessPendingFileAction();
 		void MirrorComponent(int compId);
 
 		// Crea un componente del tipo dato in posizione pos (coordinate mondo) e lo
 		// aggiunge al canvas con lo snap alla griglia già usato per i tasti R/V/G/C/
 		// L/S/D/T/Y: unico punto in cui passano sia il piazzamento da tastiera sia
-		// quello dalla palette laterale (click o drag&drop), vedi DrawComponentPalette.
+		// quello dal menu Componenti (modalità di piazzamento), vedi DrawMainMenuBar.
 		void PlaceNewComponent(ComponentType type, sf::Vector2i pos);
-
-		// Disegna la palette dei componenti nel pannello laterale, divisa per
-		// categoria: ogni voce è un pulsante che piazza il componente al centro
-		// della vista se cliccato, o si trascina sul canvas (vedi DrawCanvasDropTarget).
-		void DrawComponentPalette();
 
 		// Popola m_paletteIcons: per ogni tipo della palette disegna il simbolo
 		// IEC (ComponentView::DrawSymbol) su una RenderTexture dedicata. Chiamato
 		// una sola volta dal costruttore.
 		void BuildPaletteIcons();
-
-		// Overlay invisibile sopra il canvas, esistente solo mentre è in corso un
-		// drag dalla palette: intercetta il rilascio del drop e piazza il
-		// componente lì. Va chiamato ogni frame dopo DrawImageGuiPanel(); essendo
-		// creato solo durante il drag, non interferisce mai con le normali
-		// interazioni del canvas (che restano sugli eventi SFML grezzi in HandleEvents).
-		void DrawCanvasDropTarget();
 
 		// Disegna tutti i componenti (corpo + terminali + etichette) nel canvas
 		void DrawComponents();

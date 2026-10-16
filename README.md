@@ -10,7 +10,7 @@ correnti nei rami.
 - Canvas interattivo per posizionare e collegare componenti
 - Motore di simulazione basato sulla Modified Nodal Analysis (MNA)
 - Componenti supportati: resistenze, sorgenti di tensione, ground
-- Risultati visualizzati in tempo reale tramite pannello ImGui
+- Risultati visualizzati in tempo reale in una finestra ImGui dedicata
 - Separazione netta tra logica di simulazione e layer UI
 
 ## Struttura del progetto
@@ -102,14 +102,29 @@ normale: `CircuitLabTests.exe "[bench]"` stampa i microsecondi per passo su alcu
 
 ### Utilizzo
 
+L'interfaccia ha una barra dei menu in alto, una barra degli strumenti con i comandi di
+simulazione e una barra di stato in fondo; il canvas occupa tutto il resto.
+
+| Menu | Voci |
+|---|---|
+| **File** | Nuovo (`Ctrl+N`), Apri (`Ctrl+O`), Salva (`Ctrl+S`), Salva con nome (`Ctrl+Maiusc+S`), Esci |
+| **Modifica** | Annulla (`Ctrl+Z`), Ripeti (`Ctrl+Y`), Elimina selezione (`Canc`), Ruota di 45 gradi (`Q`), Specchia (`F`) |
+| **Componenti** | Tutti i componenti per categoria: si sceglie una voce, il simbolo segue il mouse e ogni click lo posa; `Esc` o click destro per finire |
+| **Simulazione** | Avvia (`F5`), Pausa (`F6`), Stop (`F7`), passo di tempo, velocita', partenza dal punto di lavoro DC |
+| **Visualizza** | Oscilloscopio, finestra Risultati, pallini della corrente e loro velocita', griglia, aggancio e passo della griglia, reset dello zoom |
+
+La barra degli strumenti ripete Avvia/Pausa/Stop e i selettori di passo di tempo e velocita'.
+
+Sul canvas:
+
 | Input | Azione |
 |---|---|
-| `R` + click sinistro | Posiziona una resistenza |
-| `V` + click sinistro | Posiziona una sorgente di tensione |
-| `G` + click sinistro | Posiziona un nodo di ground |
+| `R`, `C`, `L`, `V`, `G`, `S`, `Y`, `D`, `J`, `K`, `T` + click sinistro | Posa subito il componente (resistore, condensatore, induttore, generatore, massa, interruttore, deviatore, diodo, transistor NPN/PNP, trasformatore) |
+| `N` + click sinistro | Posa un nodo libero |
 | Click sinistro su un terminale | Seleziona il terminale |
 | Click sinistro su un secondo terminale | Collega i due terminali |
-| Pulsante `RunSimulation` | Esegue la simulazione MNA e mostra i risultati |
+| Trascinamento col tasto destro | Sposta componenti e nodi |
+| Rotella / tasto centrale | Zoom / spostamento della vista |
 
 ## Architettura
 
@@ -117,7 +132,7 @@ CircuitLab segue il pattern **Mediator**:
 
 - `Application` possiede sia `Circuit` che `UI` e li collega tramite callback
 - `Circuit` gestisce i componenti e costruisce il sistema MNA con lazy evaluation
-- `Solver` risolve il sistema lineare `A·x = b` tramite decomposizione QR
+- `Solver` risolve il sistema lineare `A·x = b` (equilibratura di Ruiz, LU con pivot parziale e ripiego sulla QR a pivot di colonna)
 - `UI` gestisce rendering e interazione utente, comunicando con `Application`
   tramite callback `std::function`
 - `ComponentView` mantiene i dati visivi (posizione, rotazione) separati dai dati
