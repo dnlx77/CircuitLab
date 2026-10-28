@@ -1,7 +1,7 @@
 #pragma once
 #include <vector>
 
-#include <SFML/System/Vector2.hpp>
+#include "Core/Vector2.h"
 
 namespace CircuitLab {
 
@@ -27,7 +27,7 @@ namespace CircuitLab {
 	struct NodeView {
 		int id;
 		int nodeId;                     // nodeId del circuito (Core) rappresentato da questo hub — vedi ATTENZIONE sopra
-		sf::Vector2f position;
+		Vec2 position;
 		std::vector<int> linkViewIds;   // LinkView (tap o tratti di bus) che toccano questo hub
 		int anchorCompId = -1;          // Terminale a cui è ancorato (-1 = NodeView libero)
 		int anchorTermIndex = -1;
@@ -49,8 +49,8 @@ namespace CircuitLab {
 	// nodeId (vedi CreateLinkViewCurrentList in UI.cpp).
 	struct LinkView {
 		int id;
-		sf::Vector2f startPos;
-		sf::Vector2f targetPos;
+		Vec2 startPos;
+		Vec2 targetPos;
 		int compIdA;    // ID del componente da cui parte il filo (-1 per un tratto di bus)
 		int termIndexA; // Indice del terminale del componente A (-1 per un tratto di bus)
 		int nodeViewId; // Hub (NodeView) a cui arriva il filo
@@ -81,7 +81,7 @@ namespace CircuitLab {
 		int linkId = -1;		// ID del link selezionato (-1 se nessuno)
 		int nodeViewId = -1;	// ID del nodeView selezionato (-1 se nessuno)
 		SelectionState state = SelectionState::none;
-		sf::Vector2f clickPos;
+		Vec2 clickPos;
 
 		// Nessuna selezione (clickPos resta: serve solo mentre si trascina)
 		void Reset()

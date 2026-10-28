@@ -35,7 +35,7 @@ namespace CircuitLab {
 	// Aggiunge un NodeView (hub) alla UI nella posizione data; restituisce l'ID assegnato.
 	// anchorCompId/anchorTermIndex/attached descrivono un NodeView ancorato a un terminale
 	// (anchorCompId = -1 per uno libero).
-	using fnNodeViewLoad = std::function<int(int nodeId, sf::Vector2f position, int anchorCompId, int anchorTermIndex, bool attached)>;
+	using fnNodeViewLoad = std::function<int(int nodeId, Vec2 position, int anchorCompId, int anchorTermIndex, bool attached)>;
 
 	using fnUpdateNodeViewLinkIds = std::function<void(int nodeViewId, std::vector<int> linkViewIds)>;
 

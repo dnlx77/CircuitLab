@@ -145,7 +145,7 @@ void CircuitLab::IOManager::Deserialize(const nlohmann::json &j)
 	// dopo che le LinkView (passo 5) avranno ricevuto i loro nuovi ID.
 	for (const auto &nodeViewJson : j["nodeView"])
 	{
-		sf::Vector2f pos = { nodeViewJson["position"][0], nodeViewJson["position"][1] };
+		Vec2 pos = { nodeViewJson["position"][0], nodeViewJson["position"][1] };
 
 		// NodeView ancorato a un terminale: l'id del componente è quello salvato, va tradotto
 		// in quello nuovo come per i link (-1 per un NodeView libero).

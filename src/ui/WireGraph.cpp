@@ -135,7 +135,7 @@ CircuitLab::TerminalRef CircuitLab::WireGraph::FindRealTapInGroup(int startNvId,
 
 // --- Costruzione ---
 
-int CircuitLab::WireGraph::AddNodeView(int nodeId, sf::Vector2f position,
+int CircuitLab::WireGraph::AddNodeView(int nodeId, Vec2 position,
 	int anchorCompId, int anchorTermIndex, bool attached)
 {
 	NodeView nv;
@@ -149,7 +149,7 @@ int CircuitLab::WireGraph::AddNodeView(int nodeId, sf::Vector2f position,
 	return nv.id;
 }
 
-int CircuitLab::WireGraph::AddTapLink(int compId, int termIndex, sf::Vector2f terminalPos, int nvId)
+int CircuitLab::WireGraph::AddTapLink(int compId, int termIndex, Vec2 terminalPos, int nvId)
 {
 	NodeView *nv = FindNodeView(nvId);
 	if (!nv)
@@ -191,7 +191,7 @@ int CircuitLab::WireGraph::AddBusEdge(int sourceNvId, int targetNvId)
 	return lv.id;
 }
 
-int CircuitLab::WireGraph::EnsureTerminalNodeView(int compId, int termIndex, sf::Vector2f terminalPos)
+int CircuitLab::WireGraph::EnsureTerminalNodeView(int compId, int termIndex, Vec2 terminalPos)
 {
 	int existing = NodeViewIdOfTerminal(compId, termIndex);
 	if (existing != -1)
@@ -202,7 +202,7 @@ int CircuitLab::WireGraph::EnsureTerminalNodeView(int compId, int termIndex, sf:
 	return nvId;
 }
 
-int CircuitLab::WireGraph::InsertNodeOnBusEdge(int linkId, sf::Vector2f clickPos)
+int CircuitLab::WireGraph::InsertNodeOnBusEdge(int linkId, Vec2 clickPos)
 {
 	const LinkView *edge = FindLinkView(linkId);
 	if (!edge || edge->sourceNodeViewId == -1)
@@ -210,16 +210,16 @@ int CircuitLab::WireGraph::InsertNodeOnBusEdge(int linkId, sf::Vector2f clickPos
 
 	const int sourceId = edge->sourceNodeViewId;
 	const int targetId = edge->nodeViewId;
-	const sf::Vector2f a = FindNodeView(sourceId)->position;
-	const sf::Vector2f b = FindNodeView(targetId)->position;
+	const Vec2 a = FindNodeView(sourceId)->position;
+	const Vec2 b = FindNodeView(targetId)->position;
 
 	// Punto del filo più vicino al click (proiezione sul segmento a-b)
-	const sf::Vector2f ab = b - a;
+	const Vec2 ab = b - a;
 	const float lengthSquared = ab.x * ab.x + ab.y * ab.y;
 	float t = 0.5f;
 	if (lengthSquared > 1e-9f)
 		t = std::clamp(((clickPos.x - a.x) * ab.x + (clickPos.y - a.y) * ab.y) / lengthSquared, 0.0f, 1.0f);
-	const sf::Vector2f point = a + ab * t;
+	const Vec2 point = a + ab * t;
 
 	// Da qui i puntatori a nodeViews/linkViews non sono più validi dopo ogni
 	// inserimento (i vettori possono riallocare): si rileggono per id.
@@ -241,7 +241,7 @@ int CircuitLab::WireGraph::InsertNodeOnBusEdge(int linkId, sf::Vector2f clickPos
 
 // --- Spostamento ---
 
-void CircuitLab::WireGraph::SetNodeViewPosition(int nvId, sf::Vector2f position)
+void CircuitLab::WireGraph::SetNodeViewPosition(int nvId, Vec2 position)
 {
 	NodeView *nv = FindNodeView(nvId);
 	if (!nv)
@@ -263,7 +263,7 @@ void CircuitLab::WireGraph::SetNodeViewPosition(int nvId, sf::Vector2f position)
 	}
 }
 
-void CircuitLab::WireGraph::MoveTerminal(int compId, int termIndex, sf::Vector2f terminalPos)
+void CircuitLab::WireGraph::MoveTerminal(int compId, int termIndex, Vec2 terminalPos)
 {
 	LinkView *tap = nullptr;
 	for (auto &lv : linkViews)
@@ -289,13 +289,13 @@ void CircuitLab::WireGraph::DetachIfAnchored(int nvId)
 		nv->attached = false;
 }
 
-bool CircuitLab::WireGraph::TryReattach(int nvId, sf::Vector2f terminalPos, float maxDistance)
+bool CircuitLab::WireGraph::TryReattach(int nvId, Vec2 terminalPos, float maxDistance)
 {
 	NodeView *nv = FindNodeView(nvId);
 	if (!nv || nv->anchorCompId == -1)
 		return false;
 
-	const sf::Vector2f delta = nv->position - terminalPos;
+	const Vec2 delta = nv->position - terminalPos;
 	if (std::sqrt(delta.x * delta.x + delta.y * delta.y) > maxDistance)
 		return false;
 
