@@ -39,7 +39,8 @@ namespace CircuitLab {
 
 		// Memorizza v1 - v2 come tensione del passo appena risolto, da usare
 		// come v(t-h) nel prossimo StampVector.
-		void UpdateState(double v1, double v2) override;
+		bool HasMemory() const override { return true; }
+		void UpdateState(const std::vector<double> &terminalVoltages) override;
 
 		// Tensione memorizzata al passo precedente (per il calcolo della corrente in Application::SimulateLocked).
 		double GetPreviousVoltage() const { return m_previousVoltage; }

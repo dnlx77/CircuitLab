@@ -16,6 +16,9 @@ namespace CircuitLab {
 		// Serializza i parametri specifici della forma d'onda (es. ampiezza, frequenza) in j["value"].
 		// Implementata da ogni derivata, chiamata da Save().
 		virtual void SaveSpecificData(nlohmann::json &j) const = 0;
+		// L'inverso di SaveSpecificData: legge i parametri specifici da j["value"][0].
+		// Chiamata da Load() dopo aver creato l'istanza del tipo giusto.
+		virtual void LoadSpecificData(const nlohmann::json &j) = 0;
 	public:
 		virtual ~WaveForm() = default;
 		// Restituisce il valore istantaneo della forma d'onda al tempo t.

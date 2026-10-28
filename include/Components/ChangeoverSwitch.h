@@ -26,11 +26,6 @@ namespace CircuitLab {
 			const std::map<int, int> &voltageSourceMap,
 			double h) override;
 
-		void StampVector(Eigen::VectorXd &B,
-			const std::map<int, int> &nodeMap,
-			const std::map<int, int> &voltageSourceMap,
-			const StampContext &ctx) override;
-
 		// Inverte la via collegata al comune. Chi lo chiama (Circuit) deve
 		// invalidare il circuito, perché la matrice va ristampata.
 		void ToggleSwitch() override;
@@ -46,7 +41,5 @@ namespace CircuitLab {
 
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;
-		std::map<ComponentValue, double> GetValues() const override;
-		void SetValues(const std::map<ComponentValue, double> &values) override;
 	};
 }

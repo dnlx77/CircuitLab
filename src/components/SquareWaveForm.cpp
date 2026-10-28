@@ -35,3 +35,9 @@ void CircuitLab::SquareWaveForm::SaveSpecificData(nlohmann::json & j) const
 	squareWaveFormValueJson["frequency"] = m_frequency;
 	j["value"].push_back(squareWaveFormValueJson);
 }
+
+void CircuitLab::SquareWaveForm::LoadSpecificData(const nlohmann::json &j)
+{
+	m_amplitude = j["value"][0]["amplitude"];
+	m_frequency = j["value"][0]["frequency"];
+}

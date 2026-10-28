@@ -13,24 +13,13 @@ CircuitLab::Inductor::Inductor(double value) : Component(2, ComponentType::induc
 // di dividere per zero — stesso approccio di Resistor::SetResistance.
 void CircuitLab::Inductor::StampMatrix(Eigen::MatrixXd &A,
 	const std::map<int, int> &nodeMap,
-	const std::map<int, int> &voltageSourceMap,
+	const std::map<int, int> &,
 	double h)
 {
-	(void)voltageSourceMap;
-
 	// DC: induttore in corto (a regime la tensione ai suoi capi è nulla)
 	m_conductance = (h == DC_ANALYSIS_STEP || m_inductance <= 1e-9) ? SHORT_CIRCUIT_CONDUCTANCE : (h / m_inductance);
 
-	int n1 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
-	int n2 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
-
-	if (n1 >= 0) A(n1, n1) += m_conductance;
-	if (n2 >= 0) A(n2, n2) += m_conductance;
-
-	if (n1 >= 0 && n2 >= 0) {
-		A(n1, n2) -= m_conductance;
-		A(n2, n1) -= m_conductance;
-	}
+	StampConductance(A, MatrixIndex(0, nodeMap), MatrixIndex(1, nodeMap), m_conductance);
 }
 
 // Ieq = i(t-h): a differenza del condensatore (dove Ieq = Geq*v_prev viene
@@ -40,26 +29,20 @@ void CircuitLab::Inductor::StampMatrix(Eigen::MatrixXd &A,
 // contribuisce con segno positivo, non negativo, alla corrente n1->n2.
 void CircuitLab::Inductor::StampVector(Eigen::VectorXd &B,
 	const std::map<int, int> &nodeMap,
-	const std::map<int, int> &voltageSourceMap,
+	const std::map<int, int> &,
 	const StampContext &ctx)
 {
-	(void)voltageSourceMap;
-
 	// DC: nessuna memoria del passo precedente
-	double iEq = (ctx.h == DC_ANALYSIS_STEP) ? 0.0 : m_previousCurrent;
+	const double iEq = (ctx.h == DC_ANALYSIS_STEP) ? 0.0 : m_previousCurrent;
 
-	int n1 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
-	int n2 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
-
-	if (n1 >= 0) B[n1] -= iEq;
-	if (n2 >= 0) B[n2] += iEq;
+	StampCurrent(B, MatrixIndex(0, nodeMap), MatrixIndex(1, nodeMap), -iEq);
 }
 
-void CircuitLab::Inductor::UpdateState(double v1, double v2)
+void CircuitLab::Inductor::UpdateState(const std::vector<double> &terminalVoltages)
 {
 	// i(t) = Geq*(v1-v2) + i(t-h): usa il valore VECCHIO di m_previousCurrent
 	// (letto qui prima dell'assegnazione) per calcolare quello nuovo.
-	m_previousCurrent += m_conductance * (v1 - v2);
+	m_previousCurrent += m_conductance * (terminalVoltages[0] - terminalVoltages[1]);
 }
 
 void CircuitLab::Inductor::SetStateFromDc(const std::vector<double> &terminalVoltages)

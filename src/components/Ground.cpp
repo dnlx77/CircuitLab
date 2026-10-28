@@ -7,40 +7,11 @@ CircuitLab::Ground::Ground() : Component(1, ComponentType::ground)
 	m_terminals[0].SetNodeId(0);
 }
 
-void CircuitLab::Ground::StampMatrix(Eigen::MatrixXd &A, const std::map<int, int> &nodeMap, const std::map<int, int> &voltageSourceMap, double h)
+void CircuitLab::Ground::SaveSpecificData(nlohmann::json &) const
 {
-	(void)A;
-	(void)nodeMap;
-	(void)voltageSourceMap;
-	(void)h;
 }
 
-void CircuitLab::Ground::StampVector(Eigen::VectorXd & B, const std::map<int, int>&nodeMap, const std::map<int, int>&voltageSourceMap, const StampContext & ctx)
+void CircuitLab::Ground::LoadSpecificData(const nlohmann::json &)
 {
-	(void)B;
-	(void)nodeMap;
-	(void)voltageSourceMap;
-	(void)ctx;
 }
 
-void CircuitLab::Ground::SaveSpecificData(nlohmann::json &j) const
-{
-	(void)j;
-}
-
-void CircuitLab::Ground::LoadSpecificData(const nlohmann::json &j)
-{
-	(void)j;
-}
-
-// GetValues/SetValues sono vuoti: il ground non ha parametri elettrici propri.
-std::map<CircuitLab::ComponentValue, double> CircuitLab::Ground::GetValues() const
-{
-	std::map<ComponentValue, double> map;
-	return map;
-}
-
-void CircuitLab::Ground::SetValues(const std::map<ComponentValue, double> &values)
-{
-	(void)values;
-}

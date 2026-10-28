@@ -32,3 +32,8 @@ void CircuitLab::DCWaveForm::SaveSpecificData(nlohmann::json &j) const
 	dcWaveFormValueJson["voltage"] = m_voltage;
 	j["value"].push_back(dcWaveFormValueJson);
 }
+
+void CircuitLab::DCWaveForm::LoadSpecificData(const nlohmann::json &j)
+{
+	m_voltage = j["value"][0]["voltage"];
+}

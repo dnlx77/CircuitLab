@@ -11,23 +11,11 @@ namespace CircuitLab {
 	public:
 		Ground();
 
-		// Non contribuisce alla matrice MNA
-		void StampMatrix(Eigen::MatrixXd &A,
-			const std::map<int, int> &nodeMap,
-			const std::map<int, int> &voltageSourceMap,
-			double h) override;
-
-		void StampVector(Eigen::VectorXd &B,
-			const std::map<int, int> &nodeMap,
-			const std::map<int, int> &voltageSourceMap,
-			const StampContext &ctx) override;
-
 		// Segnala che questo componente è il nodo di riferimento del circuito
-		bool IsGround() const { return true; }
+		bool IsGround() const override { return true; }
 
+		// Non contribuisce alla matrice MNA né ha parametri elettrici propri
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;
-		std::map<ComponentValue, double> GetValues() const override;
-		void SetValues(const std::map<ComponentValue, double> &values) override;
 	};
 }

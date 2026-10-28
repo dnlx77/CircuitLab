@@ -31,35 +31,14 @@ void CircuitLab::Resistor::SetResistance(double res)
 //
 // I nodi connessi a ground (nodeId == 0) hanno indice -1
 // e non vengono scritti nella matrice.
+// Il resistore è puramente resistivo: non ha comportamento dipendente dal tempo,
+// quindi non contribuisce al vettore B (StampVector resta quello vuoto di Component).
 void CircuitLab::Resistor::StampMatrix(Eigen::MatrixXd &A,
 	const std::map<int, int> &nodeMap,
-	const std::map<int, int> &voltageSourceMap,
-	double h)
+	const std::map<int, int> &,
+	double)
 {
-	(void)voltageSourceMap;
-	(void)h;
-
-	// Recupera gli indici nella matrice (-1 se il terminale è a ground)
-	int n1 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
-	int n2 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
-
-	if (n1 >= 0) A(n1, n1) += m_conductance;
-	if (n2 >= 0) A(n2, n2) += m_conductance;
-
-	if (n1 >= 0 && n2 >= 0) {
-		A(n1, n2) -= m_conductance;
-		A(n2, n1) -= m_conductance;
-	}
-}
-
-// Il resistore è puramente resistivo: non ha comportamento dipendente dal tempo,
-// quindi non contribuisce al vettore B (nessun termine da aggiornare ad ogni step).
-void CircuitLab::Resistor::StampVector(Eigen::VectorXd &B, const std::map<int, int> &nodeMap, const std::map<int, int> &voltageSourceMap, const StampContext &ctx)
-{
-	(void)B;
-	(void)nodeMap;
-	(void)voltageSourceMap;
-	(void)ctx;
+	StampConductance(A, MatrixIndex(0, nodeMap), MatrixIndex(1, nodeMap), m_conductance);
 }
 
 void CircuitLab::Resistor::SaveSpecificData(nlohmann::json &j) const

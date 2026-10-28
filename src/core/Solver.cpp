@@ -12,11 +12,11 @@
 // ricreare matrici temporanee ad ogni passata ne era la parte più costosa.
 // I massimi di righe e colonne si calcolano in un'unica passata sulla matrice (che è
 // per colonne: scorrere le righe una alla volta salta continuamente in memoria).
-// Con warmStart i fattori già presenti in rowScale/colScale (dell'ultima matrice, se ha la
-// stessa dimensione) sono il punto di partenza: le matrici di due iterazioni di Newton, o di
+// Se rowScale/colScale hanno già la dimensione giusta, i fattori che contengono (dell'ultima
+// matrice) sono il punto di partenza: le matrici di due iterazioni di Newton, o di
 // due step, sono molto simili, e di solito basta una o due passate invece di una decina.
 static void Equilibrate(const Eigen::MatrixXd &A, Eigen::VectorXd &rowScale, Eigen::VectorXd &colScale,
-	Eigen::VectorXd &dr, Eigen::VectorXd &dc, Eigen::MatrixXd &scaled, bool warmStart)
+	Eigen::VectorXd &dr, Eigen::VectorXd &dc, Eigen::MatrixXd &scaled)
 {
 	constexpr int MAX_ITERATIONS = 10;
 	// Fattori tutti entro questa distanza da 1: righe e colonne sono già a norma
@@ -27,7 +27,7 @@ static void Equilibrate(const Eigen::MatrixXd &A, Eigen::VectorXd &rowScale, Eig
 	const Eigen::Index rows = A.rows();
 	const Eigen::Index cols = A.cols();
 
-	warmStart = warmStart && rowScale.size() == rows && colScale.size() == cols;
+	const bool warmStart = rowScale.size() == rows && colScale.size() == cols;
 	if (!warmStart)
 	{
 		rowScale.setOnes(rows);
@@ -97,7 +97,7 @@ static void Equilibrate(const Eigen::MatrixXd &A, Eigen::VectorXd &rowScale, Eig
 // colonna, più robusta, che decide anche se la matrice è invertibile.
 void CircuitLab::Solver::Factorize(const Eigen::MatrixXd &A)
 {
-	Equilibrate(A, m_rowScale, m_colScale, m_dr, m_dc, m_scaled, true);
+	Equilibrate(A, m_rowScale, m_colScale, m_dr, m_dc, m_scaled);
 
 	constexpr double MIN_PIVOT_RATIO = 1e-8;
 

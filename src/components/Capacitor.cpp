@@ -11,11 +11,9 @@ CircuitLab::Capacitor::Capacitor(double value) : Component(2, ComponentType::cap
 // resistenza di conduttanza Geq (vedi Resistor::StampMatrix).
 void CircuitLab::Capacitor::StampMatrix(Eigen::MatrixXd &A,
 	const std::map<int, int> &nodeMap,
-	const std::map<int, int> &voltageSourceMap,
+	const std::map<int, int> &,
 	double h)
 {
-	(void)voltageSourceMap;
-
 	// DC: condensatore aperto, non stampa nulla (un nodo collegato solo a condensatori
 	// resta senza riferimento: ci pensa il piccolo shunt a massa di Circuit::ComputeMatrix)
 	if (h == DC_ANALYSIS_STEP)
@@ -26,40 +24,23 @@ void CircuitLab::Capacitor::StampMatrix(Eigen::MatrixXd &A,
 
 	m_conductance = (h > 1e-15) ? (m_capacitance / h) : SHORT_CIRCUIT_CONDUCTANCE;
 
-	int n1 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
-	int n2 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
-
-	if (n1 >= 0) A(n1, n1) += m_conductance;
-	if (n2 >= 0) A(n2, n2) += m_conductance;
-
-	if (n1 >= 0 && n2 >= 0) {
-		A(n1, n2) -= m_conductance;
-		A(n2, n1) -= m_conductance;
-	}
+	StampConductance(A, MatrixIndex(0, nodeMap), MatrixIndex(1, nodeMap), m_conductance);
 }
 
 // Ieq = Geq * v(t-h), iniettata in n1 e prelevata da n2 (stessa polarità
 // del termine v1-v2 usato in StampMatrix).
 void CircuitLab::Capacitor::StampVector(Eigen::VectorXd &B,
 	const std::map<int, int> &nodeMap,
-	const std::map<int, int> &voltageSourceMap,
-	const StampContext &ctx)
+	const std::map<int, int> &,
+	const StampContext &)
 {
-	(void)voltageSourceMap;
-	(void)ctx;
-
-	double iEq = m_conductance * m_previousVoltage;
-
-	int n1 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
-	int n2 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
-
-	if (n1 >= 0) B[n1] += iEq;
-	if (n2 >= 0) B[n2] -= iEq;
+	const double iEq = m_conductance * m_previousVoltage;
+	StampCurrent(B, MatrixIndex(0, nodeMap), MatrixIndex(1, nodeMap), iEq);
 }
 
-void CircuitLab::Capacitor::UpdateState(double v1, double v2)
+void CircuitLab::Capacitor::UpdateState(const std::vector<double> &terminalVoltages)
 {
-	m_previousVoltage = v1 - v2;
+	m_previousVoltage = terminalVoltages[0] - terminalVoltages[1];
 }
 
 void CircuitLab::Capacitor::SetStateFromDc(const std::vector<double> &terminalVoltages)

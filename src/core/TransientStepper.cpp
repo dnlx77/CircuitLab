@@ -2,7 +2,6 @@
 
 #include "Core/TransientStepper.h"
 #include "Core/NonlinearSolve.h"
-#include "Components/Transformer.h"
 
 CircuitLab::TransientStepper::TransientStepper(Circuit &circuit, Solver &solver) : m_circuit(circuit), m_solver(solver)
 {
@@ -45,22 +44,13 @@ void CircuitLab::TransientStepper::CommitState()
 {
 	for (const auto &component : m_circuit.GetComponentsVector())
 	{
-		const std::vector<Terminal> &terminals = component->GetTerminals();
-		switch (component->GetType())
-		{
-		case ComponentType::capacitor:
-		case ComponentType::inductor:
-			component->UpdateState(TerminalVoltage(terminals[0]), TerminalVoltage(terminals[1]));
-			break;
-		case ComponentType::transformer:
-			// 4 terminali: 0/1 primario, 2/3 secondario
-			static_cast<Transformer *>(component.get())->UpdateWindingState(
-				TerminalVoltage(terminals[0]) - TerminalVoltage(terminals[1]),
-				TerminalVoltage(terminals[2]) - TerminalVoltage(terminals[3]));
-			break;
-		default:
-			break;
-		}
+		if (!component->HasMemory())
+			continue;
+
+		m_terminalVoltages.clear();
+		for (const Terminal &terminal : component->GetTerminals())
+			m_terminalVoltages.push_back(TerminalVoltage(terminal));
+		component->UpdateState(m_terminalVoltages);
 	}
 }
 

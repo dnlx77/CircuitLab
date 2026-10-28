@@ -1,4 +1,6 @@
 #pragma once
+#include <vector>
+
 #include <Eigen/Dense>
 
 #include "Core/Circuit.h"
@@ -57,5 +59,6 @@ namespace CircuitLab {
 		Circuit &m_circuit;
 		Solver &m_solver;
 		Eigen::VectorXd m_solution;
+		std::vector<double> m_terminalVoltages; // spazio di lavoro di CommitState, riusato ad ogni passo
 	};
 }
