@@ -39,3 +39,13 @@ void CircuitLab::Switch::LoadSpecificData(const nlohmann::json &j)
 {
 	SetClosed(j["closed"]);
 }
+
+// Nessuna dipendenza dal tempo: la corrente è Geq*(v1-v2), con Geq alta se
+// chiuso e quasi zero se aperto. Senza una voce anche per lo switch, i fili
+// "ancorati" a lui restavano sempre a corrente 0 (pallini fermi e gialli).
+bool CircuitLab::Switch::ReportCurrents(const std::vector<double> &v, double, CurrentReport &report) const
+{
+	report.main = m_conductance * (v[0] - v[1]);
+	report.AddBranch(0, 1, report.main);
+	return true;
+}

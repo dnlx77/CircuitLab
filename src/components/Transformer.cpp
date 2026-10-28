@@ -154,3 +154,16 @@ void CircuitLab::Transformer::SetValues(const std::map<ComponentValue, double> &
 	m_l2 = std::max(values.at(ComponentValue::secondaryInductance), MIN_INDUCTANCE);
 	m_k = std::clamp(values.at(ComponentValue::couplingCoefficient), 0.0, MAX_COUPLING);
 }
+
+// 4 terminali: 0/1 = primario, 2/3 = secondario, ciascuna coppia con la propria corrente
+// indipendente (vedi Transformer.h). main tiene solo la corrente di primario (il probe
+// "corrente di componente" dell'oscilloscopio ha un solo valore per id); i rami ne hanno
+// uno per avvolgimento.
+bool CircuitLab::Transformer::ReportCurrents(const std::vector<double> &v, double, CurrentReport &report) const
+{
+	const auto [primaryCurrent, secondaryCurrent] = BranchCurrents(v[0] - v[1], v[2] - v[3]);
+	report.main = primaryCurrent;
+	report.AddBranch(0, 1, primaryCurrent);
+	report.AddBranch(2, 3, secondaryCurrent);
+	return true;
+}

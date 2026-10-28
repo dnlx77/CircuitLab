@@ -31,5 +31,14 @@ namespace CircuitLab {
         bool active = true;
         static constexpr int MAX_SAMPLES = 4096;
         Color channelColor;
+
+        // Aggiunge un campione (relativo al tempo simulato `time`) scartando il più vecchio oltre MAX_SAMPLES
+        void AddSample(double value, double time)
+        {
+            samples.push_back(value);
+            lastSampleTime = time;
+            if (static_cast<int>(samples.size()) > MAX_SAMPLES)
+                samples.pop_front();
+        }
     };
 }

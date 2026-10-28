@@ -105,6 +105,13 @@ namespace CircuitLab {
 		std::deque<nlohmann::json> m_redoStack;
 		static constexpr size_t MAX_UNDO_STEPS = 100;
 
+		// Serializza lo stato attuale (circuito e viste) prendendo il mutex del circuito
+		nlohmann::json TakeSnapshot();
+		// Aggiunge in cima alla pila scartando il più vecchio oltre MAX_UNDO_STEPS
+		void PushLimited(std::deque<nlohmann::json> &stack, nlohmann::json &&snapshot);
+		// Corpo comune di Undo e Redo: stato attuale su `to`, ricostruisce la cima di `from`
+		void RestoreFrom(std::deque<nlohmann::json> &from, std::deque<nlohmann::json> &to);
+
 		static constexpr int MAX_STEPS_PER_BATCH = 5000;     // anti-spirale della morte
 		static constexpr double MAX_BATCH_WALL_TIME = 0.008; // s reali max per batch (il rendering aspetta al più questo)
 		static constexpr double MAX_PACING_LAG = 0.25;       // s reali di ritardo oltre cui il debito si abbandona
@@ -136,6 +143,11 @@ namespace CircuitLab {
 		// notifica), azzerando poi il tempo virtuale: mostra i valori veri nel pannello senza
 		// aspettare l'avvio della simulazione continua. Chiamare con la simulazione ferma.
 		void PrimeOutput();
+
+		// Ferma la simulazione e aspetta un eventuale passo in corso (il thread di simulazione non
+		// deve vedere il circuito a metà di un caricamento o di un riavvio). Restituisce lo stato
+		// precedente, da ripristinare a operazione finita.
+		SimulationStatus StopAndWaitForStep();
 
 		void SimulationLoop();
 		void RenderLoop();

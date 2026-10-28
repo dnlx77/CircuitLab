@@ -1,7 +1,5 @@
 #include "Components/Component.h"
 
-int CircuitLab::Component::s_nextId = 1;
-
 std::vector<int> CircuitLab::Component::GetTerminalNodeIds() const
 {
 	std::vector<int> vecTerminal;

@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <map>
 #include <string>
 #include <vector>
@@ -36,13 +37,35 @@ namespace CircuitLab {
 		double h = 0.0;
 	};
 
+	// Correnti di un componente alla soluzione appena risolta, come le vuole la UI:
+	//  - main: il valore del probe "corrente di componente" dell'oscilloscopio (uno solo
+	//    per componente);
+	//  - branches: le correnti dei singoli rami, che la UI usa per animare i fili. Un ramo
+	//    va dal terminale `from` al terminale `to` (indici in GetTerminals()); con
+	//    to == SINGLE_TERMINAL è la corrente del solo terminale `from` (transistor, dove
+	//    le tre correnti sono indipendenti e non c'è una coppia di capi).
+	// Al massimo 3 rami (il deviatore e il transistor): niente allocazioni per step.
+	struct CurrentReport {
+		static constexpr int SINGLE_TERMINAL = -1;
+		struct Branch { int from; int to; double current; };
+
+		double main = 0.0;
+		std::array<Branch, 3> branches{};
+		int branchCount = 0;
+
+		void AddBranch(int from, int to, double current) { branches[branchCount++] = { from, to, current }; }
+	};
+
+	class Circuit;
+
 	// Classe base astratta per tutti i componenti elettrici.
 	// Ogni componente ha un ID univoco, un certo numero di terminali
 	// e contribuisce alla matrice MNA con StampMatrix/StampVector (o StampNonlinear).
 	class Component {
+		friend class Circuit; // assegna l'id in AddComponent
+
 	protected:
-		static int s_nextId;        // Contatore globale per assegnare ID univoci
-		int m_id;                   // ID univoco di questo componente
+		int m_id = 0;               // ID univoco nel circuito, assegnato da Circuit::AddComponent
 		std::vector<Terminal> m_terminals; // Lista dei terminali
 		ComponentType m_componentType;
 
@@ -60,13 +83,12 @@ namespace CircuitLab {
 
 	public:
 		// Il costruttore alloca automaticamente il numero corretto di terminali
-		Component(int terminalNumber, ComponentType compType) : m_id(s_nextId++), m_componentType(compType) {
+		Component(int terminalNumber, ComponentType compType) : m_componentType(compType) {
 			m_terminals.resize(terminalNumber);
 		}
 		virtual ~Component() = default;
 
 		int GetId() const { return m_id; }
-		static void Reset() { s_nextId = 1; }
 		const std::vector<Terminal> &GetTerminals() const { return m_terminals; }
 		Terminal &GetTerminal(int index) { return m_terminals[index]; }
 		// Restituisce il nodeId di ogni terminale del componente (non l'ID del terminale).
@@ -142,6 +164,13 @@ namespace CircuitLab {
 		// (es. condensatori: serve la tensione del passo precedente per il modello
 		// companion). Default: no-op.
 		virtual void UpdateState(const std::vector<double> &) {}
+
+		// Calcola le correnti del componente alla soluzione appena risolta (terminalVoltages:
+		// una per terminale, come in UpdateState; h: passo di integrazione). Va chiamata PRIMA
+		// di UpdateState, perché condensatore, induttore e trasformatore usano lo stato
+		// del passo precedente. Restituisce false se il componente non ha una corrente da
+		// mostrare qui (massa; il generatore di tensione ha la sua incognita nella soluzione).
+		virtual bool ReportCurrents(const std::vector<double> &, double, CurrentReport &) const { return false; }
 
 		// Azzera lo stato dinamico accumulato durante la simulazione (tensione/
 		// corrente del passo precedente per condensatori/induttori/trasformatore,

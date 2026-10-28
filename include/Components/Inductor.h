@@ -43,13 +43,14 @@ namespace CircuitLab {
 		bool HasMemory() const override { return true; }
 		void UpdateState(const std::vector<double> &terminalVoltages) override;
 
-		// Conduttanza equivalente e corrente memorizzata al passo precedente
-		// (per il calcolo della corrente in Application::SimulateLocked, prima di UpdateState).
-		double GetConductance() const { return m_conductance; }
+		// Corrente memorizzata al passo precedente
 		double GetPreviousCurrent() const { return m_previousCurrent; }
 
 		void ResetDynamicState() override { m_previousCurrent = 0.0; }
 		void SetStateFromDc(const std::vector<double> &terminalVoltages) override;
+
+		// Correnti per la UI (vedi Component::ReportCurrents)
+		bool ReportCurrents(const std::vector<double> &terminalVoltages, double h, CurrentReport &report) const override;
 
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;

@@ -265,20 +265,26 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			return m_simStatus;
 		});
 
-	m_ui->SetOnCircuitChange([this](CircuitLab::ComponentType type) -> int
+	// Aggiunta di componenti e collegamenti: la stessa logica serve alla UI (gesti dell'utente)
+	// e a IOManager (caricamento da file)
+	const auto addComponent = [this](CircuitLab::ComponentType type) -> int
 		{
 			UiLock lock(m_circuitMutex, m_uiWaiters);
-			m_circuit->InvalidateCircuit();
 			return m_circuit->AddComponent(MakeComponent(type));
-		});
-
-	m_ui->SetOnCreateLink([this](int compId1, int termIndex1, int compId2, int termIndex2) -> bool
+		};
+	// Propaga il risultato al chiamante: false indica un collegamento non valido o duplicato
+	const auto connectTerminals = [this](int compId1, int termIndex1, int compId2, int termIndex2) -> bool
 		{
 			UiLock lock(m_circuitMutex, m_uiWaiters);
-			m_circuit->InvalidateCircuit();
-			// Propaga il risultato al chiamante: false indica un collegamento non valido o duplicato
 			return m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
-		});
+		};
+	const auto newCircuit = [this]()
+		{
+			New();
+		};
+
+	m_ui->SetOnCircuitChange(addComponent);
+	m_ui->SetOnCreateLink(connectTerminals);
 
 	m_ui->SetOnGetCompTerminalId([this](int compId)
 		{
@@ -315,12 +321,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 	// IOManager non conosce né Circuit né UI direttamente.
 
 	// Crea un componente nel circuito durante il caricamento da file
-	m_ioManager->SetOnComponentLoad([this](CircuitLab::ComponentType type) -> int
-		{
-			UiLock lock(m_circuitMutex, m_uiWaiters);
-			m_circuit->InvalidateCircuit();
-			return m_circuit->AddComponent(MakeComponent(type));
-		});
+	m_ioManager->SetOnComponentLoad(addComponent);
 
 	m_ioManager->SetOnComponentLoadData([this](int compId, const nlohmann::json &j)
 		{
@@ -329,13 +330,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 		});
 
 	// Collega due terminali nel circuito durante il caricamento da file
-	m_ioManager->SetOnLoadLink([this](int compId1, int termIndex1, int compId2, int termIndex2) -> bool
-		{
-			UiLock lock(m_circuitMutex, m_uiWaiters);
-			m_circuit->InvalidateCircuit();
-			// Propaga il risultato al chiamante: false indica un collegamento non valido o duplicato
-			return m_circuit->ConnectTerminals(compId1, termIndex1, compId2, termIndex2);
-		});
+	m_ioManager->SetOnLoadLink(connectTerminals);
 
 	// Aggiunge la vista grafica di un componente alla UI durante il caricamento
 	m_ioManager->SetOnComponentViewLoad([this](int compId, const std::string &name, ComponentType type, Vec2 position, float rotation, bool mirrored)
@@ -391,11 +386,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			// iniziare il caricamento — aspettando, riprendendo brevemente
 			// m_circuitMutex, che un passo eventualmente già in corso finisca —
 			// e si ripristina lo stato precedente solo a caricamento completato.
-			SimulationStatus previousStatus = m_simStatus;
-			m_simStatus = SimulationStatus::stopped;
-			{
-				UiLock lock(m_circuitMutex, m_uiWaiters);
-			}
+			const SimulationStatus previousStatus = StopAndWaitForStep();
 
 			m_ioManager->LoadFromFile(path);
 
@@ -433,16 +424,10 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			m_simStatus = previousStatus;
 		});
 
-	m_ui->SetOnNew([this]()
-		{
-			New();
-		});
+	m_ui->SetOnNew(newCircuit);
 
 	// Resetta circuito e UI prima di caricare un nuovo file
-	m_ioManager->SetOnNew([this]()
-		{
-			New();
-		});
+	m_ioManager->SetOnNew(newCircuit);
 
 	m_ui->SetOnGetComponentValues([this](int compId) -> std::map<ComponentValue, double>
 		{
@@ -729,192 +714,30 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 		}
 	}
 
-	double v1, v2;
+	// Correnti dei componenti: ciascuno sa calcolare le proprie (Component::ReportCurrents),
+	// qui si traducono gli indici di terminale in nodeId per le mappe dell'output. Un ramo
+	// "di un solo terminale" (transistor) usa come secondo nodeId un valore sentinella
+	// (-1000-indice, mai un nodeId valido) solo per rendere unica la chiave; il ramo
+	// dedicato in UI::CreateLinkViewCurrentList lo sa e la interroga cosi'.
+	std::vector<double> terminalVoltages;
+	CurrentReport report;
 	for (auto &comp : compList)
 	{
-		if (comp->GetType() == ComponentType::resistor)
-		{
-			const std::array<int, 4> termList = TerminalNodeIds(*comp);
-			// <= 0 copre sia il ground (0) sia un terminale mai collegato (-1):
-			// in entrambi i casi non ha una riga nella matrice, quindi niente
-			// GetIndexFromNodes (che altrimenti lancerebbe std::out_of_range).
-			if (termList[0] <= 0)
-				v1 = 0.0;
-			else
-				v1 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[0])];
-			if (termList[1] <= 0)
-				v2 = 0.0;
-			else
-				v2 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[1])];
-			double current = (v1 - v2) / comp->GetValues().at(ComponentValue::resistance);
-			componentCurrent[comp->GetId()] = current;
-			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
-		}
-		else if (comp->GetType() == ComponentType::switchComponent)
-		{
-			// Stesso schema del resistore: nessuna dipendenza dal tempo, la
-			// corrente è semplicemente Geq*(v1-v2) (Geq alta se chiuso, quasi
-			// zero se aperto). Senza questo blocco, output.currentComp/currentBranch
-			// non avevano mai una voce per lo switch: i fili "ancorati" a lui
-			// restavano sempre a corrente 0 (pallini fermi e gialli).
-			const std::array<int, 4> termList = TerminalNodeIds(*comp);
-			if (termList[0] <= 0)
-				v1 = 0.0;
-			else
-				v1 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[0])];
-			if (termList[1] <= 0)
-				v2 = 0.0;
-			else
-				v2 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[1])];
+		const std::array<int, 4> termList = TerminalNodeIds(*comp);
+		terminalVoltages.clear();
+		for (const Terminal &terminal : comp->GetTerminals())
+			terminalVoltages.push_back(m_stepper->TerminalVoltage(terminal));
 
-			auto *sw = static_cast<Switch *>(comp.get());
-			double current = sw->GetConductance() * (v1 - v2);
-			componentCurrent[comp->GetId()] = current;
-			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
-		}
-		else if (comp->GetType() == ComponentType::capacitor)
-		{
-			const std::array<int, 4> termList = TerminalNodeIds(*comp);
-			// Vedi commento nel ramo resistor: <= 0 copre ground (0) e terminale
-			// mai collegato (-1), entrambi assenti da m_nodesMap.
-			if (termList[0] <= 0)
-				v1 = 0.0;
-			else
-				v1 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[0])];
-			if (termList[1] <= 0)
-				v2 = 0.0;
-			else
-				v2 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[1])];
+		report.branchCount = 0;
+		if (!comp->ReportCurrents(terminalVoltages, m_hSim, report))
+			continue;
 
-			// i = C * dv/dt = Geq * ((v1-v2) - v(t-h)), con v(t-h) letto PRIMA
-			// di aggiornare lo stato del condensatore (CommitState, a fine ciclo).
-			auto *cap = static_cast<Capacitor *>(comp.get());
-			double current = comp->GetValues().at(ComponentValue::capacitance) / m_hSim * ((v1 - v2) - cap->GetPreviousVoltage());
-			componentCurrent[comp->GetId()] = current;
-			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
-		}
-		else if (comp->GetType() == ComponentType::inductor)
+		componentCurrent[comp->GetId()] = report.main;
+		for (int i = 0; i < report.branchCount; i++)
 		{
-			const std::array<int, 4> termList = TerminalNodeIds(*comp);
-			// Vedi commento nel ramo resistor: <= 0 copre ground (0) e terminale
-			// mai collegato (-1), entrambi assenti da m_nodesMap.
-			if (termList[0] <= 0)
-				v1 = 0.0;
-			else
-				v1 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[0])];
-			if (termList[1] <= 0)
-				v2 = 0.0;
-			else
-				v2 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[1])];
-
-			// i(t) = Geq*(v1-v2) + i(t-h), con i(t-h) letta PRIMA di aggiornare
-			// lo stato dell'induttore per il prossimo step.
-			auto *ind = static_cast<Inductor *>(comp.get());
-			double current = ind->GetConductance() * (v1 - v2) + ind->GetPreviousCurrent();
-			componentCurrent[comp->GetId()] = current;
-			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
-		}
-		else if (comp->GetType() == ComponentType::diode)
-		{
-			const std::array<int, 4> termList = TerminalNodeIds(*comp);
-			// Vedi commento nel ramo resistor: <= 0 copre ground (0) e terminale
-			// mai collegato (-1), entrambi assenti da m_nodesMap.
-			if (termList[0] <= 0)
-				v1 = 0.0;
-			else
-				v1 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[0])];
-			if (termList[1] <= 0)
-				v2 = 0.0;
-			else
-				v2 = m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[1])];
-
-			// Corrente anodo->catodo dall'equazione di Shockley con la Vd
-			// convergente (stesso verso positivo del resistore: terminale 0 -> 1).
-			auto *diode = static_cast<Diode *>(comp.get());
-			double current = diode->Current(v1 - v2);
-			componentCurrent[comp->GetId()] = current;
-			branchCurrent[{termList[0], termList[1], comp->GetId()}] = current;
-		}
-		else if (comp->GetType() == ComponentType::transformer)
-		{
-			// 4 terminali: 0/1 = primario, 2/3 = secondario, ciascuna coppia con
-			// la propria corrente indipendente (vedi Transformer.h). componentCurrent
-			// tiene solo la corrente di primario (per il probe "corrente di
-			// componente" dell'oscilloscopio, che ha un solo valore per id);
-			// branchCurrent ha invece una voce per ciascun avvolgimento.
-			const std::array<int, 4> termList = TerminalNodeIds(*comp);
-			auto voltageAt = [&](int idx) -> double
-			{
-				if (termList[idx] <= 0)
-					return 0.0;
-				return m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[idx])];
-			};
-			double vPrimary = voltageAt(0) - voltageAt(1);
-			double vSecondary = voltageAt(2) - voltageAt(3);
-
-			// Correnti alla soluzione convergente, lette PRIMA di aggiornare lo
-			// stato (stesso schema di condensatore/induttore).
-			auto *transformer = static_cast<Transformer *>(comp.get());
-			auto [primaryCurrent, secondaryCurrent] = transformer->BranchCurrents(vPrimary, vSecondary);
-			componentCurrent[comp->GetId()] = primaryCurrent;
-			branchCurrent[{termList[0], termList[1], comp->GetId()}] = primaryCurrent;
-			branchCurrent[{termList[2], termList[3], comp->GetId()}] = secondaryCurrent;
-		}
-		else if (comp->GetType() == ComponentType::changeoverSwitch)
-		{
-			// 3 terminali: 0 = comune, 1/2 = vie. Stesso schema dello switch (Geq*(v1-v2),
-			// nessuna dipendenza dal tempo) applicato a due rami che condividono il
-			// comune. componentCurrent tiene la corrente totale al comune (somma dei
-			// due rami: quello inattivo vale ~0, quindi equivale alla corrente della
-			// via attiva); branchCurrent ha una voce per ciascuna via.
-			const std::array<int, 4> termList = TerminalNodeIds(*comp);
-			auto voltageAt = [&](int idx) -> double
-			{
-				if (termList[idx] <= 0)
-					return 0.0;
-				return m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[idx])];
-			};
-			double vCommon = voltageAt(0);
-			double vVia1 = voltageAt(1);
-			double vVia2 = voltageAt(2);
-
-			auto *devSwitch = static_cast<ChangeoverSwitch *>(comp.get());
-			double currentVia1 = devSwitch->GetConductanceVia1() * (vCommon - vVia1);
-			double currentVia2 = devSwitch->GetConductanceVia2() * (vCommon - vVia2);
-			componentCurrent[comp->GetId()] = currentVia1 + currentVia2;
-			branchCurrent[{termList[0], termList[1], comp->GetId()}] = currentVia1;
-			branchCurrent[{termList[0], termList[2], comp->GetId()}] = currentVia2;
-		}
-		else if (comp->GetType() == ComponentType::transistor || comp->GetType() == ComponentType::transistorPnp)
-		{
-			// 3 terminali: 0 = base, 1 = collettore, 2 = emettitore, ciascuno con
-			// una corrente PROPRIA (Transistor::Currents) — a differenza del
-			// deviatore, qui non c'è un terminale "comune" che accumula le altre:
-			// le tre correnti sono indipendenti, quindi non si prestano alla
-			// convenzione a coppie (nodoA, nodoB) usata per i rami degli altri
-			// componenti. Si usa perciò un secondo campo sentinella (-1000-indice,
-			// mai un nodeId valido) solo per rendere unica la chiave per terminale;
-			// il ramo dedicato in UI::CreateLinkViewCurrentList lo sa e la
-			// interroga così, invece di passare dal percorso generico a coppie.
-			// componentCurrent tiene la corrente di collettore (il probe più
-			// comune per un transistor nell'oscilloscopio).
-			const std::array<int, 4> termList = TerminalNodeIds(*comp);
-			auto voltageAt = [&](int idx) -> double
-			{
-				if (termList[idx] <= 0)
-					return 0.0;
-				return m_stepper->Solution()[m_circuit->GetIndexFromNodes(termList[idx])];
-			};
-			double vBase = voltageAt(0);
-			double vColl = voltageAt(1);
-			double vEmit = voltageAt(2);
-
-			auto *transistor = static_cast<Transistor *>(comp.get());
-			auto currents = transistor->Currents(vBase - vEmit, vBase - vColl);
-			componentCurrent[comp->GetId()] = currents.ic;
-			branchCurrent[{termList[0], -1000, comp->GetId()}] = currents.ib;
-			branchCurrent[{termList[1], -1001, comp->GetId()}] = currents.ic;
-			branchCurrent[{termList[2], -1002, comp->GetId()}] = currents.ie;
+			const CurrentReport::Branch &branch = report.branches[i];
+			const int nodeB = (branch.to == CurrentReport::SINGLE_TERMINAL) ? -1000 - branch.from : termList[branch.to];
+			branchCurrent[{termList[branch.from], nodeB, comp->GetId()}] = branch.current;
 		}
 	}
 
@@ -1021,10 +844,7 @@ bool CircuitLab::Application::SampleVoltageChannels(double sampleTime)
 		else if (nodeVoltage(channel.idA, a) && nodeVoltage(channel.idB, b))
 			value = a - b;
 
-		channel.samples.push_back(value);
-		channel.lastSampleTime = sampleTime;
-		if (static_cast<int>(channel.samples.size()) > OscilloscopeChannel::MAX_SAMPLES)
-			channel.samples.pop_front();
+		channel.AddSample(value, sampleTime);
 	}
 	return true;
 }
@@ -1065,12 +885,9 @@ void CircuitLab::Application::SampleChannels(const SimulationOutput &output)
 		}
 		}
 
-		channel.samples.push_back(value);
 		// Simulate() ha già avanzato m_simulationTime di h: il campione appena
 		// aggiunto appartiene allo step risolto a (m_simulationTime - h).
-		channel.lastSampleTime = m_simulationTime - m_hSim;
-		if (static_cast<int>(channel.samples.size()) > OscilloscopeChannel::MAX_SAMPLES)
-			channel.samples.pop_front();
+		channel.AddSample(value, m_simulationTime - m_hSim);
 	}
 }
 
@@ -1101,6 +918,15 @@ bool CircuitLab::Application::ApplyDcOperatingPointLocked()
 	return m_stepper->StartFromDcOperatingPoint();
 }
 
+CircuitLab::SimulationStatus CircuitLab::Application::StopAndWaitForStep()
+{
+	const SimulationStatus previousStatus = m_simStatus;
+	m_simStatus = SimulationStatus::stopped;
+	// Riprendere e rilasciare il mutex basta ad aspettare che un passo già in corso finisca
+	UiLock lock(m_circuitMutex, m_uiWaiters);
+	return previousStatus;
+}
+
 void CircuitLab::Application::PrimeOutput()
 {
 	Simulate();
@@ -1116,11 +942,7 @@ void CircuitLab::Application::RestartFromDc()
 {
 	// Come il Load: si ferma la simulazione e si aspetta un eventuale passo in corso, così
 	// il thread di simulazione non vede lo stato a metà
-	const SimulationStatus previousStatus = m_simStatus;
-	m_simStatus = SimulationStatus::stopped;
-	{
-		UiLock lock(m_circuitMutex, m_uiWaiters);
-	}
+	const SimulationStatus previousStatus = StopAndWaitForStep();
 
 	{
 		UiLock lock(m_circuitMutex, m_uiWaiters);
@@ -1231,17 +1053,22 @@ void CircuitLab::Application::New()
 	m_redoStack.clear();
 }
 
+nlohmann::json CircuitLab::Application::TakeSnapshot()
+{
+	UiLock lock(m_circuitMutex, m_uiWaiters);
+	return m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkViewList(), m_ui->GetNodeViewList());
+}
+
+void CircuitLab::Application::PushLimited(std::deque<nlohmann::json> &stack, nlohmann::json &&snapshot)
+{
+	stack.push_back(std::move(snapshot));
+	if (stack.size() > MAX_UNDO_STEPS)
+		stack.pop_front();
+}
+
 void CircuitLab::Application::PushUndoSnapshot()
 {
-	nlohmann::json snapshot;
-	{
-		UiLock lock(m_circuitMutex, m_uiWaiters);
-		snapshot = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkViewList(), m_ui->GetNodeViewList());
-	}
-
-	m_undoStack.push_back(std::move(snapshot));
-	if (m_undoStack.size() > MAX_UNDO_STEPS)
-		m_undoStack.pop_front();
+	PushLimited(m_undoStack, TakeSnapshot());
 
 	// Un nuovo gesto rende non ripetibili le modifiche annullate finora, come
 	// in qualunque editor: si annulla, si cambia idea e si fa qualcos'altro, i
@@ -1250,22 +1077,17 @@ void CircuitLab::Application::PushUndoSnapshot()
 	m_redoStack.clear();
 }
 
-void CircuitLab::Application::Undo()
+// Undo e Redo sono speculari: lo stato attuale va sull'altra pila e si ricostruisce quello
+// in cima a `from`.
+void CircuitLab::Application::RestoreFrom(std::deque<nlohmann::json> &from, std::deque<nlohmann::json> &to)
 {
-	if (m_undoStack.empty())
+	if (from.empty())
 		return;
 
-	nlohmann::json current;
-	{
-		UiLock lock(m_circuitMutex, m_uiWaiters);
-		current = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkViewList(), m_ui->GetNodeViewList());
-	}
-	m_redoStack.push_back(std::move(current));
-	if (m_redoStack.size() > MAX_UNDO_STEPS)
-		m_redoStack.pop_front();
+	PushLimited(to, TakeSnapshot());
 
-	nlohmann::json snapshot = std::move(m_undoStack.back());
-	m_undoStack.pop_back();
+	nlohmann::json snapshot = std::move(from.back());
+	from.pop_back();
 
 	// ClearState(), non New(): quest'ultimo svuoterebbe anche le due pile che
 	// si sta proprio maneggiando.
@@ -1273,25 +1095,14 @@ void CircuitLab::Application::Undo()
 	m_ioManager->Deserialize(snapshot);
 }
 
+void CircuitLab::Application::Undo()
+{
+	RestoreFrom(m_undoStack, m_redoStack);
+}
+
 void CircuitLab::Application::Redo()
 {
-	if (m_redoStack.empty())
-		return;
-
-	nlohmann::json current;
-	{
-		UiLock lock(m_circuitMutex, m_uiWaiters);
-		current = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkViewList(), m_ui->GetNodeViewList());
-	}
-	m_undoStack.push_back(std::move(current));
-	if (m_undoStack.size() > MAX_UNDO_STEPS)
-		m_undoStack.pop_front();
-
-	nlohmann::json snapshot = std::move(m_redoStack.back());
-	m_redoStack.pop_back();
-
-	ClearState();
-	m_ioManager->Deserialize(snapshot);
+	RestoreFrom(m_redoStack, m_undoStack);
 }
 
 // Delega il loop principale alla UI

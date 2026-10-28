@@ -2,6 +2,7 @@
 #include <cassert>
 #include <iostream>
 #include <set>
+#include <utility>
 
 #include "Core/Circuit.h"
 #include "Common/Logger.h"
@@ -157,10 +158,17 @@ const CircuitLab::Component *CircuitLab::Circuit::GetComponentById(int compId) c
 // Versione non-const: usata quando è necessario modificare il componente trovato
 CircuitLab::Component *CircuitLab::Circuit::GetComponentById(int compId)
 {
-	for (auto const &c : m_components)
-		if (c->GetId() == compId)
-			return c.get();
-	return nullptr;
+	return const_cast<Component *>(std::as_const(*this).GetComponentById(compId));
+}
+
+void CircuitLab::Circuit::RenameNode(int from, int to)
+{
+	if (from <= 0 || from == to)
+		return;
+	for (const auto &comp : m_components)
+		for (int i = 0; i < static_cast<int>(comp->GetTerminals().size()); i++)
+			if (comp->GetTerminal(i).GetNodeId() == from)
+				comp->GetTerminal(i).SetNodeId(to);
 }
 
 bool CircuitLab::Circuit::IsDuplicate(Link newLink) const
@@ -198,7 +206,7 @@ void CircuitLab::Circuit::Clear()
 	m_isDirty = true;
 	m_components.clear();
 	m_links.clear();
-	Component::Reset();
+	m_nextComponentId = 1;
 }
 
 void CircuitLab::Circuit::ResetDynamicState()
@@ -315,111 +323,49 @@ bool CircuitLab::Circuit::HasFloatingTerminal() const
 }
 
 // Collega due terminali tra loro, unificando i nodeId.
-// Gestisce tre casi:
-//   1. Entrambi i terminali sono liberi (-1): assegna un nuovo nodeId
-//   2. Uno dei due è ground (0): propaga lo 0 a tutti i terminali del vecchio nodo
-//   3. Uno dei due ha già un nodeId > 0: propaga quel nodeId all'altro e a tutti i collegati
+// Il nodo risultante è, in ordine di precedenza:
+//   1. la massa (0), se uno dei due terminali è a massa;
+//   2. il nodo già assegnato a uno dei due (il primo, se entrambi ne hanno uno);
+//   3. un nodo nuovo, se entrambi sono liberi (-1).
+// Il vecchio nodo di ciascun terminale (se reale) viene rinumerato in blocco, così tutti i
+// terminali già collegati a lui seguono il collegamento.
 bool CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2Id, int termComp2, bool addLink)
 {
 	if (comp1Id == comp2Id) return false;
 
-	Component *comp1 = nullptr;
-	Component *comp2 = nullptr;
-	int nodeId = -1;
-	int oldNodeId = -1;
-
-	for (const auto &comp : m_components) {
-		if (comp->GetId() == comp1Id) comp1 = comp.get();
-		if (comp->GetId() == comp2Id) comp2 = comp.get();
-	}
-
+	Component *comp1 = GetComponentById(comp1Id);
+	Component *comp2 = GetComponentById(comp2Id);
 	if (!comp1 || !comp2) return false;
 
-	// Evita di ricollegare terminali già sullo stesso nodo
-	if (comp1->GetTerminal(termComp1).GetId() == comp2->GetTerminal(termComp2).GetId()) return false;
-
+	InvalidateCircuit();
 
 	if (addLink)
 		if (!IsDuplicate(Link{ comp1Id, termComp1, comp2Id, termComp2 }))
 			m_links.emplace_back(Link{ comp1Id, termComp1, comp2Id, termComp2 });
 
-	// Caso 1: entrambi liberi -> nuovo nodo
-	if (comp1->GetTerminals()[termComp1].GetNodeId() < 0 && comp2->GetTerminals()[termComp2].GetNodeId() < 0)
-	{
+	Terminal &terminal1 = comp1->GetTerminal(termComp1);
+	Terminal &terminal2 = comp2->GetTerminal(termComp2);
+	const int id1 = terminal1.GetNodeId();
+	const int id2 = terminal2.GetNodeId();
+
+	int nodeId;
+	if (id1 == 0 || id2 == 0)
+		nodeId = 0;
+	else if (id1 > 0)
+		nodeId = id1;
+	else if (id2 > 0)
+		nodeId = id2;
+	else
 		nodeId = m_nextNodeId++;
-		comp1->GetTerminal(termComp1).SetNodeId(nodeId);
-		comp2->GetTerminal(termComp2).SetNodeId(nodeId);
 
-		// DEBUG
-		LOG_DEBUG("Collegamento di 2 terminali liberi");
-		LOG_DEBUG("Link tra comp" << comp1Id << " term" << termComp1 << " -> comp" << comp2Id << " term" << termComp2);
-		LOG_DEBUG("Link tra comp" << comp1Id << " term" << termComp1 << " (" << comp1->GetTerminal(termComp1).GetNodeId() <<
-			") -> comp" << comp2Id << " term" << termComp2 << " (" << comp2->GetTerminal(termComp2).GetNodeId() << ")");
-		return true;
-	}
+	RenameNode(id1, nodeId);
+	RenameNode(id2, nodeId);
+	terminal1.SetNodeId(nodeId);
+	terminal2.SetNodeId(nodeId);
 
-	// Caso 2: uno dei due è ground -> propaga 0 a tutti i terminali del vecchio nodo
-	if (comp1->GetTerminals()[termComp1].GetNodeId() == 0 || comp2->GetTerminals()[termComp2].GetNodeId() == 0)
-	{
-		int id1 = comp1->GetTerminals()[termComp1].GetNodeId();
-		int id2 = comp2->GetTerminals()[termComp2].GetNodeId();
-		if (id1 != 0) oldNodeId = id1;
-		if (id2 != 0) oldNodeId = id2;
-
-		comp1->GetTerminal(termComp1).SetNodeId(0);
-		comp2->GetTerminal(termComp2).SetNodeId(0);
-
-		if (oldNodeId > 0)
-			for (auto const &comp : m_components)
-				for (int i = 0; i < comp->GetTerminals().size(); i++)
-					if (comp->GetTerminal(i).GetNodeId() == oldNodeId)
-						comp->GetTerminal(i).SetNodeId(0);
-
-		// DEBUG
-		LOG_DEBUG("Collegamento di un terminale a ground");
-		LOG_DEBUG("Link tra comp" << comp1Id << " term" << termComp1 << " (" << comp1->GetTerminal(termComp1).GetNodeId() <<
-			") -> comp" << comp2Id << " term" << termComp2 << " (" << comp2->GetTerminal(termComp2).GetNodeId() << ")");
-		return true;
-	}
-
-	// Caso 3: almeno uno ha un nodeId > 0 -> propaga quel nodeId all'altro e ai collegati
-	if (comp1->GetTerminals()[termComp1].GetNodeId() > 0 || comp2->GetTerminals()[termComp2].GetNodeId() > 0)
-	{
-		int id1 = comp1->GetTerminals()[termComp1].GetNodeId();
-		int id2 = comp2->GetTerminals()[termComp2].GetNodeId();
-		if (id1 > 0)
-		{
-			oldNodeId = id2;
-			comp1->GetTerminal(termComp1).SetNodeId(id1);
-			comp2->GetTerminal(termComp2).SetNodeId(id1);
-
-			if (oldNodeId > 0)
-				for (auto const &comp : m_components)
-					for (int i = 0; i < comp->GetTerminals().size(); i++)
-						if (comp->GetTerminal(i).GetNodeId() == oldNodeId)
-							comp->GetTerminal(i).SetNodeId(id1);
-		}
-		else
-		{
-			oldNodeId = id1;
-			comp1->GetTerminal(termComp1).SetNodeId(id2);
-			comp2->GetTerminal(termComp2).SetNodeId(id2);
-
-			if (oldNodeId > 0)
-				for (auto const &comp : m_components)
-					for (int i = 0; i < comp->GetTerminals().size(); i++)
-						if (comp->GetTerminal(i).GetNodeId() == oldNodeId)
-							comp->GetTerminal(i).SetNodeId(id2);
-		}
-
-		// DEBUG
-		LOG_DEBUG("Collegamento a terminale esistente");
-		LOG_DEBUG("Link tra comp" << comp1Id << " term" << termComp1 << " (" << comp1->GetTerminal(termComp1).GetNodeId() <<
-			") -> comp" << comp2Id << " term" << termComp2 << " (" << comp2->GetTerminal(termComp2).GetNodeId() << ")");
-		return true;
-	}
-
-	return false;
+	LOG_DEBUG("Link tra comp" << comp1Id << " term" << termComp1 << " (" << nodeId <<
+		") -> comp" << comp2Id << " term" << termComp2 << " (" << nodeId << ")");
+	return true;
 }
 
 CircuitLab::Circuit::Circuit() : m_nextNodeId(1), m_isDirty(true), m_h(0.001)
@@ -440,8 +386,10 @@ const Eigen::VectorXd &CircuitLab::Circuit::GetCircuitVector()
 
 int CircuitLab::Circuit::AddComponent(std::unique_ptr<Component> comp)
 {
-	int id = comp->GetId();
+	const int id = m_nextComponentId++;
+	comp->m_id = id;
 	m_components.emplace_back(std::move(comp));
+	InvalidateCircuit();
 	return id;
 }
 

@@ -65,6 +65,24 @@ namespace test {
 		return true;
 	}
 
+	bool Simulation::StepAndReport(int component, CurrentReport &report)
+	{
+		if (m_stepper.Solve(m_time, m_h) != TransientStepper::Status::ok)
+			return false;
+
+		const Component *comp = m_circuit.GetComponentById(component);
+		std::vector<double> voltages;
+		for (const Terminal &terminal : comp->GetTerminals())
+			voltages.push_back(m_stepper.TerminalVoltage(terminal));
+		report.branchCount = 0;
+		if (!comp->ReportCurrents(voltages, m_h, report))
+			return false;
+
+		m_stepper.CommitState();
+		m_time += m_h;
+		return true;
+	}
+
 	CommonEmitterAmplifier BuildCommonEmitterAmplifier(Circuit &circuit, double supplyVolts, double signalAmplitude, double r2Ohms)
 	{
 		CommonEmitterAmplifier a;

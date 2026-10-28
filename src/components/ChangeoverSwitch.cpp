@@ -43,3 +43,17 @@ void CircuitLab::ChangeoverSwitch::LoadSpecificData(const nlohmann::json &j)
 {
 	SetViaSecond(j["viaSecond"]);
 }
+
+// 3 terminali: 0 = comune, 1/2 = vie. Stesso schema dello switch (Geq*(v1-v2), nessuna
+// dipendenza dal tempo) applicato a due rami che condividono il comune. main è la corrente
+// totale al comune (somma dei due rami: quello inattivo vale ~0, quindi equivale alla
+// corrente della via attiva); i rami ne hanno una per via.
+bool CircuitLab::ChangeoverSwitch::ReportCurrents(const std::vector<double> &v, double, CurrentReport &report) const
+{
+	const double currentVia1 = m_conductanceVia1 * (v[0] - v[1]);
+	const double currentVia2 = m_conductanceVia2 * (v[0] - v[2]);
+	report.main = currentVia1 + currentVia2;
+	report.AddBranch(0, 1, currentVia1);
+	report.AddBranch(0, 2, currentVia2);
+	return true;
+}

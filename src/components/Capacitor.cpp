@@ -77,3 +77,12 @@ void CircuitLab::Capacitor::SetValues(const std::map<ComponentValue, double> &va
 {
 	m_capacitance = values.at(ComponentValue::capacitance);
 }
+
+// i = C * dv/dt = Geq * ((v1-v2) - v(t-h)), con v(t-h) letto PRIMA di aggiornare
+// lo stato del condensatore (UpdateState, a fine ciclo).
+bool CircuitLab::Capacitor::ReportCurrents(const std::vector<double> &v, double h, CurrentReport &report) const
+{
+	report.main = m_capacitance / h * ((v[0] - v[1]) - m_previousVoltage);
+	report.AddBranch(0, 1, report.main);
+	return true;
+}

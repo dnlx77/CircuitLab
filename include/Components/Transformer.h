@@ -61,8 +61,7 @@ namespace CircuitLab {
 
 		// Correnti dei due avvolgimenti alla tensione convergente (vPrimary,
 		// vSecondary), usando lo stato ANCORA VECCHIO (va chiamata prima di
-		// UpdateState, come Inductor::GetConductance/GetPreviousCurrent
-		// usati insieme in Application::SimulateLocked).
+		// UpdateState, come Inductor::ReportCurrents).
 		std::pair<double, double> BranchCurrents(double vPrimary, double vSecondary) const;
 
 		// Aggiorna le correnti memorizzate dei due avvolgimenti, da usare come
@@ -72,6 +71,9 @@ namespace CircuitLab {
 
 		void ResetDynamicState() override { m_i1Prev = 0.0; m_i2Prev = 0.0; }
 		void SetStateFromDc(const std::vector<double> &terminalVoltages) override;
+
+		// Correnti per la UI (vedi Component::ReportCurrents)
+		bool ReportCurrents(const std::vector<double> &terminalVoltages, double h, CurrentReport &report) const override;
 
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;

@@ -63,3 +63,10 @@ void CircuitLab::Resistor::SetValues(const std::map<ComponentValue, double> &val
 {
 	SetResistance(values.at(ComponentValue::resistance));
 }
+
+bool CircuitLab::Resistor::ReportCurrents(const std::vector<double> &v, double, CurrentReport &report) const
+{
+	report.main = (v[0] - v[1]) / m_resistance;
+	report.AddBranch(0, 1, report.main);
+	return true;
+}

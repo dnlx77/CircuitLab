@@ -183,3 +183,17 @@ void CircuitLab::Transistor::SetValues(const std::map<ComponentValue, double> &v
 	m_saturationCurrent = std::max(values.at(ComponentValue::saturationCurrent), 1e-30);
 	m_forwardBeta = std::max(values.at(ComponentValue::forwardCurrentGain), 1.0);
 }
+
+// 3 terminali: 0 = base, 1 = collettore, 2 = emettitore, ciascuno con una corrente PROPRIA
+// (Currents) - a differenza del deviatore, qui non c'e' un terminale "comune" che accumula le
+// altre: le tre correnti sono indipendenti, quindi non si prestano alla convenzione a coppie.
+// main e' la corrente di collettore (il probe piu' comune per un transistor nell'oscilloscopio).
+bool CircuitLab::Transistor::ReportCurrents(const std::vector<double> &v, double, CurrentReport &report) const
+{
+	const auto currents = Currents(v[0] - v[2], v[0] - v[1]);
+	report.main = currents.ic;
+	report.AddBranch(0, CurrentReport::SINGLE_TERMINAL, currents.ib);
+	report.AddBranch(1, CurrentReport::SINGLE_TERMINAL, currents.ic);
+	report.AddBranch(2, CurrentReport::SINGLE_TERMINAL, currents.ie);
+	return true;
+}
