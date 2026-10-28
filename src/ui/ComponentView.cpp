@@ -56,11 +56,12 @@ namespace {
 	void DrawLocalSegments(sf::RenderTarget &target, const sf::RenderStates &states,
 		std::span<const sf::Vector2f> points, sf::PrimitiveType type, sf::Color color)
 	{
-		sf::VertexArray va(type, points.size());
-		std::size_t i = 0;
+		// Un buffer riusato per tutti i segmenti: ne vengono disegnati decine per fotogramma
+		thread_local std::vector<sf::Vertex> vertices;
+		vertices.clear();
 		for (const auto &p : points)
-			va[i++] = sf::Vertex{ p, color };
-		target.draw(va, states);
+			vertices.push_back(sf::Vertex{ p, color });
+		target.draw(vertices.data(), vertices.size(), type, states);
 	}
 
 	// Bobina verticale da yStart a yEnd: gobbe successive tutte dalla stessa parte

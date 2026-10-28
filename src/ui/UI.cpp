@@ -1652,7 +1652,12 @@ void CircuitLab::UI::MirrorComponent(int compId)
 
 void CircuitLab::UI::DrawComponents()
 {
-	// Disegna ogni componente: simbolo schematico per tipo + cerchi per i terminali + etichetta
+	// Disegna ogni componente: simbolo schematico per tipo + cerchi per i terminali + etichetta.
+	// Un solo sf::Text per tutto il fotogramma (terminali e componenti): crearne uno per ogni
+	// terminale e per ogni componente costava di più del disegno.
+	sf::Text label(m_font);
+	label.setCharacterSize(12);
+
 	for (const auto &comp : m_componentViewList)
 	{
 		const ComponentDesign &des = comp.GetComponentDesign();
@@ -1690,8 +1695,6 @@ void CircuitLab::UI::DrawComponents()
 
 		for (int i = 0; i < des.terminalOffset.size(); i++)
 		{
-			sf::Text termLabel(m_font);
-
 			sf::Vector2f rotTerm = GetRotatedTerminalPos(comp, i);
 
 			strPosX = (rotTerm.x >= 0) ? 1 : -1;
@@ -1716,10 +1719,10 @@ void CircuitLab::UI::DrawComponents()
 			if (des.isPositiveTerminal == i)
 				termString = "+ ";
 			termString += std::to_string(terminalsId[i]);
-			termLabel.setString(termString);
-			termLabel.setCharacterSize(12);
-			termLabel.setPosition({ comp.GetPosition().x + rotTerm.x + strPosX * TEXT_COMPONENT_OFFSET, comp.GetPosition().y + rotTerm.y + strPosY * TEXT_COMPONENT_OFFSET });
-			m_window.draw(termLabel);
+			label.setString(termString);
+			label.setOrigin({ 0.0f, 0.0f }); // l'etichetta del componente (sotto) imposta un'origine propria
+			label.setPosition({ comp.GetPosition().x + rotTerm.x + strPosX * TEXT_COMPONENT_OFFSET, comp.GetPosition().y + rotTerm.y + strPosY * TEXT_COMPONENT_OFFSET });
+			m_window.draw(label);
 		}
 
 		// Costruisce l'etichetta del componente nel formato "R3" / "V2" / "G1"
@@ -1737,9 +1740,7 @@ void CircuitLab::UI::DrawComponents()
 		float x1 = x * cosAngle - y * sinAngle;
 		float y1 = x * sinAngle + y * cosAngle;
 
-		sf::Text label(m_font);
 		label.setString(compString);
-		label.setCharacterSize(12);
 
 		sf::FloatRect bound = label.getLocalBounds();
 		float originX, originY;
