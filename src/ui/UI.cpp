@@ -637,7 +637,7 @@ void CircuitLab::UI::HandleEvents()
 						// un nodo vuoto non è un componente, è puramente un punto di aggancio
 						// visivo (nodeId -1, come un terminale mai collegato) a cui collegare
 						// dei fili in seguito, esattamente come ai terminali di un componente.
-						AddNodeView(-1, SnapToGrid(sf::Vector2f(static_cast<float>(pos.x), static_cast<float>(pos.y))), true);
+						AddNodeView(-1, SnapToGrid(sf::Vector2f(static_cast<float>(pos.x), static_cast<float>(pos.y))));
 						// Il nodo appena creato è esattamente sotto al cursore: senza questo
 						// flag, la CheckClick qui sotto lo selezionerebbe subito da solo
 						// (o, se un altro nodo era già selezionato da un click precedente,
@@ -2909,7 +2909,7 @@ int CircuitLab::UI::AddBusLinkView(int sourceNodeViewId, int targetNodeViewId)
 	return m_graph.AddBusEdge(sourceNodeViewId, targetNodeViewId);
 }
 
-int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position, bool manual, int anchorCompId, int anchorTermIndex, bool attached)
+int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position, int anchorCompId, int anchorTermIndex, bool attached)
 {
 	// Un NodeView agganciato sta per definizione sul suo terminale: lo si
 	// riallinea alla posizione attuale invece di fidarsi di quella salvata, che
@@ -2922,12 +2922,7 @@ int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position, bool manual, 
 		if (anchorTermIndex >= 0 && anchorTermIndex < static_cast<int>(terminals.size()))
 			position = terminals[anchorTermIndex];
 	}
-	return m_graph.AddNodeView(nodeId, position, manual, anchorCompId, anchorTermIndex, attached);
-}
-
-void CircuitLab::UI::ConvertLegacyNodeViews()
-{
-	m_graph.ConvertLegacy();
+	return m_graph.AddNodeView(nodeId, position, anchorCompId, anchorTermIndex, attached);
 }
 
 void CircuitLab::UI::FreeTerminals(const std::vector<TerminalRef> &terminals)

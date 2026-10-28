@@ -355,14 +355,9 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			return m_ui->AddBusLinkView(sourceNodeViewId, targetNodeViewId);
 		});
 
-	m_ioManager->SetOnNodeViewLoad([this](int nodeId, sf::Vector2f position, bool manual, int anchorCompId, int anchorTermIndex, bool attached) -> int
+	m_ioManager->SetOnNodeViewLoad([this](int nodeId, sf::Vector2f position, int anchorCompId, int anchorTermIndex, bool attached) -> int
 		{
-			return m_ui->AddNodeView(nodeId, position, manual, anchorCompId, anchorTermIndex, attached);
-		});
-
-	m_ioManager->SetOnConvertLegacyNodeViews([this]()
-		{
-			m_ui->ConvertLegacyNodeViews();
+			return m_ui->AddNodeView(nodeId, position, anchorCompId, anchorTermIndex, attached);
 		});
 
 	m_ioManager->SetOnUpdateNodeViewLinkIds([this](int nodeViewId, std::vector<int> linkViewIds)

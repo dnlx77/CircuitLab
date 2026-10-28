@@ -135,14 +135,13 @@ CircuitLab::TerminalRef CircuitLab::WireGraph::FindRealTapInGroup(int startNvId,
 
 // --- Costruzione ---
 
-int CircuitLab::WireGraph::AddNodeView(int nodeId, sf::Vector2f position, bool manual,
+int CircuitLab::WireGraph::AddNodeView(int nodeId, sf::Vector2f position,
 	int anchorCompId, int anchorTermIndex, bool attached)
 {
 	NodeView nv;
 	nv.id = static_cast<int>(++nodeViewCount);
 	nv.nodeId = nodeId;
 	nv.position = position;
-	nv.manual = manual;
 	nv.anchorCompId = anchorCompId;
 	nv.anchorTermIndex = anchorTermIndex;
 	nv.attached = attached;
@@ -198,7 +197,7 @@ int CircuitLab::WireGraph::EnsureTerminalNodeView(int compId, int termIndex, sf:
 	if (existing != -1)
 		return existing;
 
-	int nvId = AddNodeView(-1, terminalPos, false, compId, termIndex, true);
+	int nvId = AddNodeView(-1, terminalPos, compId, termIndex, true);
 	AddTapLink(compId, termIndex, terminalPos, nvId);
 	return nvId;
 }
@@ -224,7 +223,7 @@ int CircuitLab::WireGraph::InsertNodeOnBusEdge(int linkId, sf::Vector2f clickPos
 
 	// Da qui i puntatori a nodeViews/linkViews non sono più validi dopo ogni
 	// inserimento (i vettori possono riallocare): si rileggono per id.
-	const int newId = AddNodeView(-1, point, false);
+	const int newId = AddNodeView(-1, point);
 
 	// Il filo originale diventa il primo mezzo tratto: source -> nuovo nodo...
 	LinkView *first = FindLinkView(linkId);
@@ -450,61 +449,4 @@ int CircuitLab::WireGraph::PassThroughNodeOfEdge(int linkId) const
 			return nvId;
 	}
 	return -1;
-}
-
-// --- Conversione dei file vecchi ---
-
-// Nel vecchio modello ogni collegamento passava per un hub con un tap per
-// terminale (e, dopo lo split, tratti di bus tra hub). Qui ogni tap diventa un
-// NodeView ancorato al terminale collegato all'hub con un tratto di bus:
-//  - un hub "automatico" (2 tap, nessun bus, non manuale) era solo il punto medio
-//    di un filo: sparisce e i due NodeView ancorati si collegano direttamente;
-//  - qualunque altro hub resta come nodo libero, alla sua posizione, così una
-//    giunzione o un bus sistemati a mano si vedono come prima.
-void CircuitLab::WireGraph::ConvertLegacy()
-{
-	std::vector<int> hubIds;
-	for (const auto &nv : nodeViews)
-		if (nv.anchorCompId == -1)
-			hubIds.push_back(nv.id);
-
-	for (int hubId : hubIds)
-	{
-		const NodeView *hub = FindNodeView(hubId);
-		if (!hub)
-			continue;
-
-		struct Tap { int linkId, compId, termIndex; sf::Vector2f terminalPos; };
-		std::vector<Tap> taps;
-		for (int linkId : hub->linkViewIds)
-		{
-			const LinkView *lv = FindLinkView(linkId);
-			if (lv && lv->sourceNodeViewId == -1 && lv->nodeViewId == hubId)
-				taps.push_back({ linkId, lv->compIdA, lv->termIndexA, lv->startPos });
-		}
-		if (taps.empty())
-			continue; // un nodo già libero e senza tap: non è un hub vecchio
-
-		const bool automaticMidpoint = !hub->manual && taps.size() == 2 && BusDegree(hubId) == 0;
-
-		for (const Tap &tap : taps)
-			RemoveLinkRaw(tap.linkId);
-
-		std::vector<int> anchored;
-		for (const Tap &tap : taps)
-			anchored.push_back(EnsureTerminalNodeView(tap.compId, tap.termIndex, tap.terminalPos));
-
-		if (automaticMidpoint)
-		{
-			if (anchored[0] != anchored[1] && !SameGroup(anchored[0], anchored[1]))
-				AddBusEdge(anchored[0], anchored[1]);
-			EraseNodeViewRaw(hubId);
-		}
-		else
-		{
-			for (int anchoredId : anchored)
-				if (!SameGroup(anchoredId, hubId))
-					AddBusEdge(anchoredId, hubId);
-		}
-	}
 }

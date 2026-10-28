@@ -72,7 +72,7 @@ namespace CircuitLab {
 		TerminalRef FindRealTapInGroup(int startNvId, int excludeCompId = -1, int excludeTermIndex = -1) const;
 
 		// --- Costruzione ---
-		int AddNodeView(int nodeId, sf::Vector2f position, bool manual = false,
+		int AddNodeView(int nodeId, sf::Vector2f position,
 			int anchorCompId = -1, int anchorTermIndex = -1, bool attached = false);
 
 		// Aggiunge un tratto di bus sourceNvId -> targetNvId e lo registra su entrambi.
@@ -116,9 +116,6 @@ namespace CircuitLab {
 		// Se un estremo del tratto di bus è un nodo libero "di passaggio" (esattamente
 		// 2 tratti), restituisce il suo id: cancellarlo ricongiunge il filo. Altrimenti -1.
 		int PassThroughNodeOfEdge(int linkId) const;
-
-		// --- Conversione dei file salvati col vecchio modello a hub ---
-		void ConvertLegacy();
 
 	private:
 		int AddTapLink(int compId, int termIndex, sf::Vector2f terminalPos, int nvId);

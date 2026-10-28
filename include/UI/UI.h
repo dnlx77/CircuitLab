@@ -496,14 +496,9 @@ namespace CircuitLab {
 		// gruppo del Ground, raccolti prima della cancellazione.
 		void DetachSurvivingGroupsFromGround(const std::vector<TerminalRef> &candidates);
 
-		// Converte nel modello attuale i NodeView letti da un file vecchio (a hub).
-		// Chiamato da IOManager dopo il caricamento, solo per i file vecchi.
-		void ConvertLegacyNodeViews();
-
 		// Aggiunge un NodeView al canvas; restituisce l'ID assegnato. Con anchorCompId
-		// != -1 è ancorato a quel terminale (vedi NodeView). manual serve solo alla
-		// lettura dei file vecchi (vedi NodeView::manual).
-		int AddNodeView(int nodeId, sf::Vector2f position, bool manual, int anchorCompId = -1, int anchorTermIndex = -1, bool attached = false);
+		// != -1 è ancorato a quel terminale (vedi NodeView).
+		int AddNodeView(int nodeId, sf::Vector2f position, int anchorCompId = -1, int anchorTermIndex = -1, bool attached = false);
 
 		// Sostituisce la lista dei linkViewIds appartenenti al NodeView nodeViewId (usato da IOManager al caricamento)
 		void UpdateNodeViewLinkIds(int nodeViewId, std::vector<int> linkViewIds);

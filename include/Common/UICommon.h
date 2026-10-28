@@ -32,10 +32,6 @@ namespace CircuitLab {
 		int anchorCompId = -1;          // Terminale a cui è ancorato (-1 = NodeView libero)
 		int anchorTermIndex = -1;
 		bool attached = false;          // Solo se ancorato: true = sta sul terminale e lo segue
-		// Solo per leggere i file salvati col vecchio modello a hub (vedi
-		// WireGraph::ConvertLegacy): là distingueva un nodo voluto dall'utente da un
-		// punto medio automatico. Nel modello attuale non ha altri usi.
-		bool manual = false;
 	};
 
 	// Rappresentazione visiva di UN SOLO capo di un collegamento: un filo dal

@@ -5,6 +5,9 @@
 #include <filesystem>
 
 namespace {
+	// Versione del modello dei NodeView scritta nei file e minima accettata in lettura
+	constexpr int NODE_MODEL_VERSION = 2;
+
 	// I percorsi circolano in UTF-8 (finestre di scelta file, ImGui): su Windows un
 	// std::ifstream(std::string) li leggerebbe invece nella tabella di caratteri
 	// locale e non aprirebbe un file con accenti nel nome o nella cartella.
@@ -76,7 +79,6 @@ nlohmann::json CircuitLab::IOManager::Serialize(const Circuit &circ, const std::
 		nodeViewJson["id"] = nv.id;
 		nodeViewJson["nodeId"] = nv.nodeId;
 		nodeViewJson["position"] = { nv.position.x, nv.position.y };
-		nodeViewJson["manual"] = nv.manual;
 		nodeViewJson["anchorCompId"] = nv.anchorCompId;
 		nodeViewJson["anchorTermIndex"] = nv.anchorTermIndex;
 		nodeViewJson["attached"] = nv.attached;
@@ -90,8 +92,8 @@ nlohmann::json CircuitLab::IOManager::Serialize(const Circuit &circ, const std::
 
 	// Versione del modello dei NodeView: 2 = un NodeView per ogni terminale collegato
 	// e fili come tratti di bus. I file senza questo campo usano il vecchio modello
-	// (un hub per collegamento) e vengono convertiti al caricamento.
-	j["nodeModel"] = 2;
+	// (un hub per collegamento), che non si legge più (vedi LoadFromFile).
+	j["nodeModel"] = NODE_MODEL_VERSION;
 
 	return j;
 }
@@ -144,25 +146,16 @@ void CircuitLab::IOManager::Deserialize(const nlohmann::json &j)
 	for (const auto &nodeViewJson : j["nodeView"])
 	{
 		sf::Vector2f pos = { nodeViewJson["position"][0], nodeViewJson["position"][1] };
-		std::vector<int> lvIds;
-		for (const auto &linkViewIdJson : nodeViewJson["linksViewId"])
-			lvIds.emplace_back(linkViewIdJson);
-		// "manual" non esiste nei file salvati prima che le ancore automatiche fossero
-		// nascoste. Allora ogni NodeView con 2 fili era il punto medio automatico di un
-		// collegamento (nascosto), mentre uno con un numero diverso di fili era una
-		// giunzione o un nodo visibile, spesso già disposto a mano: così quei file si
-		// vedono come prima, senza che i nodi sistemati dall'utente spariscano.
-		bool manual = nodeViewJson.value("manual", lvIds.size() != 2);
 
-		// NodeView ancorato a un terminale (modello attuale): l'id del componente è
-		// quello salvato, va tradotto in quello nuovo come per i link. Assenti nei file vecchi.
+		// NodeView ancorato a un terminale: l'id del componente è quello salvato, va tradotto
+		// in quello nuovo come per i link (-1 per un NodeView libero).
 		int anchorCompId = nodeViewJson.value("anchorCompId", -1);
 		if (anchorCompId != -1)
 			anchorCompId = loadVsRealNodeMap.at(anchorCompId);
 		int anchorTermIndex = nodeViewJson.value("anchorTermIndex", -1);
 		bool attached = nodeViewJson.value("attached", false);
 
-		loadVsRealNodeViewMap[nodeViewJson["id"]] = m_onNodeViewLoad(nodeViewJson["nodeId"], pos, manual, anchorCompId, anchorTermIndex, attached);
+		loadVsRealNodeViewMap[nodeViewJson["id"]] = m_onNodeViewLoad(nodeViewJson["nodeId"], pos, anchorCompId, anchorTermIndex, attached);
 	}
 
 	// 5) Ricrea le viste grafiche dei fili (LinkView). sourceNodeViewId assente
@@ -197,11 +190,6 @@ void CircuitLab::IOManager::Deserialize(const nlohmann::json &j)
 
 		m_onUpdateNodeViewLinkIds(loadVsRealNodeViewMap.at(nodeViewJson["id"].get<int>()), remappedIds);
 	}
-
-	// 7) File del vecchio modello (un hub per collegamento): ora che tutto è caricato,
-	// lo si converte in un NodeView per terminale con fili come tratti di bus.
-	if (!j.contains("nodeModel") && m_onConvertLegacyNodeViews)
-		m_onConvertLegacyNodeViews();
 }
 
 void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
@@ -229,6 +217,14 @@ void CircuitLab::IOManager::LoadFromFile(const std::string &filePath)
 	if (!j.is_object() || !j.contains("components") || !j.contains("links"))
 	{
 		LOG_ERROR("Il file " << filePath << " non e' un circuito CircuitLab");
+		return;
+	}
+
+	// I file col vecchio modello a hub (senza "nodeModel") non si leggono più: come per un file
+	// sbagliato, si rifiuta prima di azzerare il circuito.
+	if (j.value("nodeModel", 0) < NODE_MODEL_VERSION)
+	{
+		LOG_ERROR("Il file " << filePath << " e' stato salvato con una versione precedente di CircuitLab e non si puo' piu' aprire");
 		return;
 	}
 
