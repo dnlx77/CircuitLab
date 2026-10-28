@@ -88,7 +88,7 @@ namespace CircuitLab {
 
 		// Correnti reali (non linearizzate) ai tre terminali per una data
 		// (VBE, VBC) = (V(base)-V(emettitore), V(base)-V(collettore)) VERE, cioè
-		// non specchiate per il PNP — usata da Application::SimulateLocked una volta
+		// non specchiate per il PNP — usata da ReportCurrents una volta
 		// convergita la soluzione, per fili e oscilloscopio (stesso ruolo di Diode::Current).
 		TerminalCurrents Currents(double vbe, double vbc) const;
 
@@ -98,6 +98,9 @@ namespace CircuitLab {
 			m_lastGpi = 0.0; m_lastGmu = 0.0; m_lastGm = 0.0; m_lastGo = 0.0;
 			m_lastIBeq = 0.0; m_lastICeq = 0.0;
 		}
+
+		// Correnti per la UI (vedi Component::ReportCurrents)
+		bool ReportCurrents(const std::vector<double> &terminalVoltages, double h, CurrentReport &report) const override;
 
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;

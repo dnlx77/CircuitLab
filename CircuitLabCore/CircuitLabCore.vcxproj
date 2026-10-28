@@ -101,7 +101,6 @@
     <ClCompile Include="..\src\components\SineWaveForm.cpp" />
     <ClCompile Include="..\src\components\SquareWaveForm.cpp" />
     <ClCompile Include="..\src\components\Switch.cpp" />
-    <ClCompile Include="..\src\components\Terminal.cpp" />
     <ClCompile Include="..\src\components\Transformer.cpp" />
     <ClCompile Include="..\src\components\Transistor.cpp" />
     <ClCompile Include="..\src\components\VoltageGenerator.cpp" />

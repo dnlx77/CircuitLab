@@ -116,3 +116,12 @@ void CircuitLab::Diode::SetValues(const std::map<ComponentValue, double> &values
 	m_saturationCurrent = std::max(values.at(ComponentValue::saturationCurrent), 1e-30);
 	m_emissionCoefficient = std::max(values.at(ComponentValue::emissionCoefficient), 0.1);
 }
+
+// Corrente anodo->catodo dall'equazione di Shockley con la Vd convergente (stesso
+// verso positivo del resistore: terminale 0 -> 1).
+bool CircuitLab::Diode::ReportCurrents(const std::vector<double> &v, double, CurrentReport &report) const
+{
+	report.main = Current(v[0] - v[1]);
+	report.AddBranch(0, 1, report.main);
+	return true;
+}

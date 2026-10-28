@@ -44,6 +44,11 @@ namespace test {
 		// stato non cambia, esattamente come nell'applicazione)
 		bool Step();
 
+		// Come Step(), ma prima di portare avanti lo stato dei componenti con memoria legge le
+		// correnti di `component` (Component::ReportCurrents), come fa l'applicazione. Restituisce
+		// false se il solver non converge.
+		bool StepAndReport(int component, CurrentReport &report);
+
 		// Tensione di un nodo rispetto a massa nell'ultima soluzione
 		double Voltage(int nodeId) const;
 		double Voltage(int component, int terminal) const;

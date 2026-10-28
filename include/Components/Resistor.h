@@ -25,6 +25,9 @@ namespace CircuitLab {
 			const std::map<int, int> &voltageSourceMap,
 			double h) override;
 
+		// Correnti per la UI (vedi Component::ReportCurrents)
+		bool ReportCurrents(const std::vector<double> &terminalVoltages, double h, CurrentReport &report) const override;
+
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;
 		std::map<ComponentValue, double> GetValues() const override;

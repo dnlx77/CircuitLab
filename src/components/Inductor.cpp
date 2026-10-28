@@ -78,3 +78,12 @@ void CircuitLab::Inductor::SetValues(const std::map<ComponentValue, double> &val
 {
 	m_inductance = values.at(ComponentValue::inductance);
 }
+
+// i(t) = Geq*(v1-v2) + i(t-h), con i(t-h) letta PRIMA di aggiornare lo stato
+// dell'induttore per il prossimo step.
+bool CircuitLab::Inductor::ReportCurrents(const std::vector<double> &v, double, CurrentReport &report) const
+{
+	report.main = m_conductance * (v[0] - v[1]) + m_previousCurrent;
+	report.AddBranch(0, 1, report.main);
+	return true;
+}

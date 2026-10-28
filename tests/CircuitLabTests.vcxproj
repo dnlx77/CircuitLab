@@ -88,6 +88,7 @@
     <ClCompile Include="test_circuit.cpp" />
     <ClCompile Include="test_dc_operating_point.cpp" />
     <ClCompile Include="test_nonlinear_solver.cpp" />
+    <ClCompile Include="test_report_currents.cpp" />
     <ClCompile Include="test_serialization.cpp" />
     <ClCompile Include="test_transistor.cpp" />
     <ClCompile Include="test_wire_graph.cpp" />

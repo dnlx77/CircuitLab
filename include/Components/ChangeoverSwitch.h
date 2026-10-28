@@ -34,10 +34,8 @@ namespace CircuitLab {
 		// per Switch indica aperto/chiuso, qui sceglie quale via disegnare).
 		bool IsSwitchClosed() const override { return m_viaSecond; }
 
-		// Conduttanze correnti dei due rami (comune-via1, comune-via2), per il
-		// calcolo delle correnti in Application::SimulateLocked, stesso ruolo di Switch::GetConductance.
-		double GetConductanceVia1() const { return m_conductanceVia1; }
-		double GetConductanceVia2() const { return m_conductanceVia2; }
+		// Correnti per la UI (vedi Component::ReportCurrents)
+		bool ReportCurrents(const std::vector<double> &terminalVoltages, double h, CurrentReport &report) const override;
 
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;

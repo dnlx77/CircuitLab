@@ -39,6 +39,7 @@ namespace CircuitLab {
 		std::vector<int> m_indexToSource;
 		std::vector<Link> m_links;             // Lista dei collegamenti tra terminali
 		int m_nextNodeId;  // Prossimo ID disponibile per i nodi
+		int m_nextComponentId = 1; // Prossimo ID disponibile per i componenti (vedi AddComponent)
 		bool m_isDirty;    // true se il circuito è stato modificato e va ricalcolato
 		// Analisi del punto di lavoro DC (vedi SetDcAnalysis): matrice e vettore si costruiscono
 		// con il modello a regime invece che con quello del passo di integrazione
@@ -51,6 +52,10 @@ namespace CircuitLab {
 		// Costruisce le mappe nodi/sorgenti e restituisce la dimensione della matrice MNA
 		int ComputeNodes();
 
+
+		// Porta al nodo `to` tutti i terminali che sono sul nodo `from` (da > 0: massa e
+		// terminali liberi non si rinumerano)
+		void RenameNode(int from, int to);
 
 		// Controlla se il collegamento esiste già nella lista dei link (in entrambe le direzioni)
 		bool IsDuplicate(Link newLink) const;

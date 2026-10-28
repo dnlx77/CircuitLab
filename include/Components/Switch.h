@@ -32,9 +32,8 @@ namespace CircuitLab {
 
 		bool IsSwitchClosed() const override { return m_closed; }
 
-		// Conduttanza corrente (per il calcolo della corrente in Application::SimulateLocked,
-		// stesso ruolo di Inductor::GetConductance).
-		double GetConductance() const { return m_conductance; }
+		// Correnti per la UI (vedi Component::ReportCurrents)
+		bool ReportCurrents(const std::vector<double> &terminalVoltages, double h, CurrentReport &report) const override;
 
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;

@@ -50,11 +50,14 @@ namespace CircuitLab {
 		// reale di Shockley alla Vd della nuova soluzione x.
 		bool HasConverged(const std::map<int, int> &nodeMap, const Eigen::VectorXd &x) const override;
 
-		// Corrente anodo->catodo per una data Vd (usata da Application::SimulateLocked
-		// una volta convergita la soluzione, per fili e oscilloscopio)
+		// Corrente anodo->catodo per una data Vd (usata da ReportCurrents una volta
+		// convergita la soluzione, per fili e oscilloscopio)
 		double Current(double vd) const;
 
 		void ResetDynamicState() override { m_lastVd = 0.0; m_lastG = 0.0; m_lastIeq = 0.0; }
+
+		// Correnti per la UI (vedi Component::ReportCurrents)
+		bool ReportCurrents(const std::vector<double> &terminalVoltages, double h, CurrentReport &report) const override;
 
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;
