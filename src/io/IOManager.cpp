@@ -128,24 +128,24 @@ void CircuitLab::IOManager::Deserialize(const nlohmann::json &j)
 	}
 
 	// 2) Crea le viste grafiche dei componenti, traducendo l'ID salvato con quello reale
-	for (auto const compViewJson : j["componentsView"])
+	for (const auto &compViewJson : j["componentsView"])
 	{
 		Vec2 vec(compViewJson["position"][0], compViewJson["position"][1]);
 		m_onComponentViewLoad(loadVsRealNodeMap.at(compViewJson["componentLink"]), compViewJson["name"].get<std::string>(), compViewJson["type"].get<ComponentType>(), vec, compViewJson["rotation"], compViewJson.value("mirrored", false));
 	}
 
 	// 3) Ricrea i link logici tra terminali nel circuito (Core, non UI)
-	for (auto const linkJson : j["links"])
+	for (const auto &linkJson : j["links"])
 		m_onLinkLoad(loadVsRealNodeMap.at(linkJson["compId1"]), linkJson["termIndex1"], loadVsRealNodeMap.at(linkJson["compId2"]), linkJson["termIndex2"]);
 
 	// 4) Ricrea gli hub NodeView (posizione + nodeId), registrando la corrispondenza ID salvato -> ID nuovo.
 	// I linkViewIds salvati non vengono ancora tradotti qui: verranno aggiornati al passo 6,
 	// dopo che le LinkView (passo 5) avranno ricevuto i loro nuovi ID.
-	for (auto const nodeViewJson : j["nodeView"])
+	for (const auto &nodeViewJson : j["nodeView"])
 	{
 		sf::Vector2f pos = { nodeViewJson["position"][0], nodeViewJson["position"][1] };
 		std::vector<int> lvIds;
-		for (auto const linkViewIdJson : nodeViewJson["linksViewId"])
+		for (const auto &linkViewIdJson : nodeViewJson["linksViewId"])
 			lvIds.emplace_back(linkViewIdJson);
 		// "manual" non esiste nei file salvati prima che le ancore automatiche fossero
 		// nascoste. Allora ogni NodeView con 2 fili era il punto medio automatico di un
@@ -169,7 +169,7 @@ void CircuitLab::IOManager::Deserialize(const nlohmann::json &j)
 	// (file salvati da versioni precedenti) o -1 indica un tap normale, tradotto
 	// come prima; se presente e != -1 è un tratto di bus tra due NodeView, senza
 	// alcun componente coinvolto — entrambi gli hub sono già stati creati al passo 4.
-	for (auto const linkViewJson : j["linksView"])
+	for (const auto &linkViewJson : j["linksView"])
 	{
 		int sourceNodeViewId = linkViewJson.value("sourceNodeViewId", -1);
 		int newNodeViewId = loadVsRealNodeViewMap.at(linkViewJson["nodeViewId"].get<int>());
@@ -189,10 +189,10 @@ void CircuitLab::IOManager::Deserialize(const nlohmann::json &j)
 
 	// 6) Ora che le LinkView hanno i loro ID reali, aggiorna ogni NodeView con la lista
 	// tradotta dei linkViewIds che gli appartengono (chiudendo il giro rimasto in sospeso al passo 4)
-	for (auto const nodeViewJson : j["nodeView"])
+	for (const auto &nodeViewJson : j["nodeView"])
 	{
 		std::vector<int> remappedIds;
-		for (auto const linkViewIdJson : nodeViewJson["linksViewId"])
+		for (const auto &linkViewIdJson : nodeViewJson["linksViewId"])
 			remappedIds.emplace_back(loadVsRealLinkViewMap.at(linkViewIdJson.get<int>()));
 
 		m_onUpdateNodeViewLinkIds(loadVsRealNodeViewMap.at(nodeViewJson["id"].get<int>()), remappedIds);

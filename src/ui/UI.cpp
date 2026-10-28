@@ -289,7 +289,7 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelectedComponent &selComp)
 
 	for (const auto &comp : m_componentViewList)
 	{
-		ComponentDesign des = comp.GetComponentDesign();
+		const ComponentDesign &des = comp.GetComponentDesign();
 
 		float cosAngle = static_cast<float>(std::cos(-1 * comp.GetRotation() * std::numbers::pi / 180.0));
 		float sinAngle = static_cast<float>(std::sin(-1 * comp.GetRotation() * std::numbers::pi / 180.0));
@@ -410,7 +410,7 @@ CircuitLab::LinkView CircuitLab::UI::GetLinkCoords(int comp1, int term1, NodeVie
 // tenendo conto del raggio per attaccare il filo al bordo del cerchio.
 sf::Vector2f CircuitLab::UI::GetRotatedTerminalPos(const ComponentView &cw, int termIndex) const
 {
-	ComponentDesign des = cw.GetComponentDesign();
+	const ComponentDesign &des = cw.GetComponentDesign();
 	float cosAngle = static_cast<float>(std::cos(cw.GetRotation() * std::numbers::pi / 180.0));
 	float sinAngle = static_cast<float>(std::sin(cw.GetRotation() * std::numbers::pi / 180.0));
 
@@ -442,7 +442,7 @@ void CircuitLab::UI::UpdateLinksForComponent(int compId)
 		if (cv.GetComponentLink() != compId)
 			continue;
 
-		ComponentDesign des = cv.GetComponentDesign();
+		const ComponentDesign &des = cv.GetComponentDesign();
 		for (int i = 0; i < static_cast<int>(des.terminalOffset.size()); i++)
 		{
 			sf::Vector2f rotTer = GetRotatedTerminalPos(cv, i);
@@ -464,7 +464,7 @@ std::vector<sf::Vector2f> CircuitLab::UI::GetTerminalPositionbyCompId(int compId
 	{
 		if (cv.GetComponentLink() == compId)
 		{
-			ComponentDesign des = cv.GetComponentDesign();
+			const ComponentDesign &des = cv.GetComponentDesign();
 			for (int i = 0; i < des.terminalOffset.size(); i++)
 			{
 				sf::Vector2f rotTer = GetRotatedTerminalPos(cv, i);
@@ -479,11 +479,10 @@ std::vector<sf::Vector2f> CircuitLab::UI::GetTerminalPositionbyCompId(int compId
 	return terminalsPos;
 }
 
-CircuitLab::NodeView CircuitLab::UI::GetNodeViewById(int nodeViewId) const
+const CircuitLab::NodeView &CircuitLab::UI::GetNodeViewById(int nodeViewId) const
 {
-	for (const auto &nv : m_nodeViewList)
-		if (nv.id == nodeViewId)
-			return nv;
+	if (const NodeView *nv = m_graph.FindNodeView(nodeViewId))
+		return *nv;
 
 	throw std::runtime_error("NodeView not found for id: " + std::to_string(nodeViewId));
 }
@@ -532,13 +531,35 @@ void CircuitLab::UI::DeleteComponent(int id)
 	m_onDeleteComponent(id);
 }
 
+// Offset tra il punto del click e il centro dell'elemento da trascinare, in modo che
+// durante il trascinamento l'elemento non "salti" sotto il cursore.
+void CircuitLab::UI::SetDragOffsetFromComponent(int compId, sf::Vector2i pos)
+{
+	for (auto const &comp : m_componentViewList)
+		if (comp.GetComponentLink() == compId)
+		{
+			m_compClickOffset.x = pos.x - comp.GetPosition().x;
+			m_compClickOffset.y = pos.y - comp.GetPosition().y;
+		}
+}
+
+void CircuitLab::UI::SetDragOffsetFromNodeView(int nodeViewId, sf::Vector2i pos)
+{
+	for (auto const &nv : m_nodeViewList)
+		if (nv.id == nodeViewId)
+		{
+			m_compClickOffset.x = pos.x - nv.position.x;
+			m_compClickOffset.y = pos.y - nv.position.y;
+		}
+}
+
 // Cancella la selezione corrente (gruppo scelto col rettangolo, componente, nodo o filo).
 // L'undo va spinto SOLO quando si sta davvero per cancellare, non ad ogni chiamata.
 void CircuitLab::UI::DeleteSelection()
 {
 	if (!m_selectedComponentIds.empty() || !m_selectedNodeViewIds.empty())
 	{
-		if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+		PushUndo();
 
 		// Cancella l'intero gruppo selezionato (componenti e NodeView liberi):
 		// stessa procedura del singolo elemento qui sotto, una volta per
@@ -550,21 +571,15 @@ void CircuitLab::UI::DeleteSelection()
 		m_selectedComponentIds.clear();
 		m_selectedNodeViewIds.clear();
 
-		m_selectedComponent.state = SelectionState::none;
-		m_selectedComponent.compId = -1;
-		m_selectedComponent.terminalIndex = -1;
-		m_selectedComponent.nodeViewId = -1;
+		m_selectedComponent.Reset();
 	}
 	else if (m_selectedComponent.state == SelectionState::componentSelected)
 	{
-		if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+		PushUndo();
 		DeleteComponent(m_selectedComponent.compId);
 
 		// Reset selezione
-		m_selectedComponent.state = SelectionState::none;
-		m_selectedComponent.compId = -1;
-		m_selectedComponent.terminalIndex = -1;
-		m_selectedComponent.nodeViewId = -1;
+		m_selectedComponent.Reset();
 	}
 	else if (m_selectedComponent.state == SelectionState::linkSelected)
 	{
@@ -575,7 +590,7 @@ void CircuitLab::UI::DeleteSelection()
 		int passThrough = m_graph.PassThroughNodeOfEdge(m_selectedComponent.linkId);
 		if (passThrough != -1)
 		{
-			if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+			PushUndo();
 			FreeTerminals(m_graph.RemoveFreeNodeView(passThrough));
 		}
 
@@ -584,7 +599,7 @@ void CircuitLab::UI::DeleteSelection()
 	}
 	else if (m_selectedComponent.state == SelectionState::nodeViewSelected)
 	{
-		if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+		PushUndo();
 
 		// Si cancellano solo i nodi liberi (i loro vicini restano collegati tra
 		// loro). Il NodeView di un terminale sparisce insieme al suo componente.
@@ -597,7 +612,7 @@ void CircuitLab::UI::DeleteSelection()
 
 void CircuitLab::UI::RotateSelectedComponent()
 {
-	if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+	PushUndo();
 
 	for (auto &cw : m_componentViewList)
 		if (cw.GetComponentLink() == m_selectedComponent.compId)
@@ -613,7 +628,7 @@ void CircuitLab::UI::RotateSelectedComponent()
 
 void CircuitLab::UI::PlaceNewComponent(ComponentType type, sf::Vector2i pos)
 {
-	if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+	PushUndo();
 
 	int id = m_onCircuitChange(type);
 	AddViewComponent(id, ComponentDisplayName(type), type, Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y)), DEFAULT_ROTATION);
@@ -721,7 +736,7 @@ void CircuitLab::UI::HandleEvents()
 					if (m_selectedComponent.state == SelectionState::componentSelected &&
 						IsToggleableByClick(m_onGetComponentTypeById(m_selectedComponent.compId)))
 					{
-						if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+						PushUndo();
 						m_onToggleSwitch(m_selectedComponent.compId);
 					}
 					else if (m_selectedComponent.state == SelectionState::none)
@@ -754,11 +769,7 @@ void CircuitLab::UI::HandleEvents()
 					{
 						ConnectSelections(m_selectedComponent, second);
 
-						m_selectedComponent.state = SelectionState::none;
-						m_selectedComponent.compId = -1;
-						m_selectedComponent.terminalIndex = -1;
-						m_selectedComponent.linkId = -1;
-						m_selectedComponent.nodeViewId = -1;
+						m_selectedComponent.Reset();
 					}
 				}
 			}
@@ -801,7 +812,7 @@ void CircuitLab::UI::HandleEvents()
 
 				if (clickedInSelection)
 				{
-					if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+					PushUndo();
 
 					// L'ancora (il componente o il NodeView sotto il click) fa da
 					// riferimento: in MouseMoved lo spostamento si calcola su di lei e
@@ -809,21 +820,11 @@ void CircuitLab::UI::HandleEvents()
 					// la disposizione relativa.
 					if (m_selectedComponent.compId != -1)
 					{
-						for (auto const &comp : m_componentViewList)
-							if (comp.GetComponentLink() == m_selectedComponent.compId)
-							{
-								m_compClickOffset.x = pos.x - comp.GetPosition().x;
-								m_compClickOffset.y = pos.y - comp.GetPosition().y;
-							}
+						SetDragOffsetFromComponent(m_selectedComponent.compId, pos);
 					}
 					else
 					{
-						for (auto const &nv : m_nodeViewList)
-							if (nv.id == m_selectedComponent.nodeViewId)
-							{
-								m_compClickOffset.x = pos.x - nv.position.x;
-								m_compClickOffset.y = pos.y - nv.position.y;
-							}
+						SetDragOffsetFromNodeView(m_selectedComponent.nodeViewId, pos);
 					}
 					m_selectedComponent.state = SelectionState::draggingSelection;
 				}
@@ -832,7 +833,7 @@ void CircuitLab::UI::HandleEvents()
 					// Split: Ctrl+drag destro su un filo lo stacca dal suo NodeView
 					// in un nuovo hub (stesso nodo elettrico, nessuna chiamata al
 					// Circuit), e inizia subito a trascinarlo come un nodo normale.
-					if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+					PushUndo();
 					m_selectedComponentIds.clear();
 					m_selectedNodeViewIds.clear();
 					int newNodeViewId = m_graph.InsertNodeOnBusEdge(m_selectedComponent.linkId, m_selectedComponent.clickPos);
@@ -843,12 +844,7 @@ void CircuitLab::UI::HandleEvents()
 						m_selectedComponent.linkId = -1;
 						m_selectedComponent.nodeViewId = newNodeViewId;
 
-						for (auto const &nv : m_nodeViewList)
-							if (nv.id == newNodeViewId)
-							{
-								m_compClickOffset.x = pos.x - nv.position.x;
-								m_compClickOffset.y = pos.y - nv.position.y;
-							}
+						SetDragOffsetFromNodeView(newNodeViewId, pos);
 						m_selectedComponent.state = SelectionState::draggingNodeView;
 					}
 				}
@@ -857,28 +853,18 @@ void CircuitLab::UI::HandleEvents()
 				{
 					// Un componente fuori dal gruppo selezionato abbandona la selezione
 					// multipla (stessa logica del click sinistro, vedi sopra).
-					if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+					PushUndo();
 					m_selectedComponentIds.clear();
 					m_selectedNodeViewIds.clear();
-					for (auto const &comp : m_componentViewList)
-						if (comp.GetComponentLink() == m_selectedComponent.compId)
-						{
-							m_compClickOffset.x = pos.x - comp.GetPosition().x;
-							m_compClickOffset.y = pos.y - comp.GetPosition().y;
-						}
+					SetDragOffsetFromComponent(m_selectedComponent.compId, pos);
 					m_selectedComponent.state = SelectionState::draggingComponent;
 				}
 				else if (m_selectedComponent.state == SelectionState::nodeViewSelected)
 				{
-					if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+					PushUndo();
 					m_selectedComponentIds.clear();
 					m_selectedNodeViewIds.clear();
-					for (auto const &nv : m_nodeViewList)
-						if (nv.id == m_selectedComponent.nodeViewId)
-						{
-							m_compClickOffset.x = pos.x - nv.position.x;
-							m_compClickOffset.y = pos.y - nv.position.y;
-						}
+					SetDragOffsetFromNodeView(m_selectedComponent.nodeViewId, pos);
 					m_selectedComponent.state = SelectionState::draggingNodeView;
 				}
 			}
@@ -1075,14 +1061,6 @@ void CircuitLab::UI::HandleEvents()
 				}
 			}
 		}
-		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Delete) && (m_selectedComponent.state != SelectionState::draggingComponent && m_selectedComponent.state != SelectionState::draggingNodeView && m_selectedComponent.state != SelectionState::draggingSelection))
-		{
-			// Eliminazione con tasto Delete (il corpo è in DeleteSelection). Il tasto è controllato con
-			// isKeyPressed (vero ogni frame finché resta premuto): DeleteSelection svuota la selezione
-			// che ha appena cancellato, quindi ai frame successivi non fa più nulla finché non si
-			// seleziona di nuovo qualcosa.
-			DeleteSelection();
-		}
 		else if (const auto *keyboardEvent = event->getIf<sf::Event::KeyPressed>())
 		{
 			if (m_selectedComponent.state == SelectionState::componentSelected && keyboardEvent->code == sf::Keyboard::Key::Q)
@@ -1091,6 +1069,16 @@ void CircuitLab::UI::HandleEvents()
 			// Esc termina la modalità di piazzamento
 			if (keyboardEvent->code == sf::Keyboard::Key::Escape)
 				m_placingType.reset();
+
+			// Canc elimina la selezione (il corpo è in DeleteSelection), una volta per pressione:
+			// DeleteSelection svuota la selezione che ha appena cancellato, quindi le ripetizioni
+			// del tasto tenuto premuto non fanno più nulla. Non si attiva mentre si scrive in un
+			// campo di testo né durante un trascinamento.
+			if (keyboardEvent->code == sf::Keyboard::Key::Delete && !ImGui::GetIO().WantTextInput &&
+				m_selectedComponent.state != SelectionState::draggingComponent &&
+				m_selectedComponent.state != SelectionState::draggingNodeView &&
+				m_selectedComponent.state != SelectionState::draggingSelection)
+				DeleteSelection();
 
 			// F = specchia (flip) il componente selezionato. Non si attiva mentre si scrive in
 			// un campo di testo (es. il nome del file, che può contenere una "f").
@@ -1105,7 +1093,7 @@ void CircuitLab::UI::HandleEvents()
 				keyboardEvent->code == sf::Keyboard::Key::Space &&
 				IsToggleableByClick(m_onGetComponentTypeById(m_selectedComponent.compId)))
 			{
-				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+				PushUndo();
 				m_onToggleSwitch(m_selectedComponent.compId);
 			}
 
@@ -1627,7 +1615,7 @@ void CircuitLab::UI::DrawComponentPopup()
 		ImGui::InputFloat("Rotazione", &rot); if (ImGui::IsItemDeactivatedAfterEdit()) edited = true;
 		if (edited)
 		{
-			if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+			PushUndo();
 
 			view->SetRotation(rot);
 			view->SetPosition(Vec2(posX, posY));
@@ -1654,7 +1642,7 @@ void CircuitLab::UI::DrawComponentPopup()
 			ImGui::InputDouble(label.c_str(), &value, 0.0, 0.0, "%.6g");
 			if (ImGui::IsItemDeactivatedAfterEdit())
 			{
-				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+				PushUndo();
 				values.at(key) = value;
 				m_onSetComponentValues(compId, values);
 			}
@@ -1686,7 +1674,7 @@ void CircuitLab::UI::DrawComponentPopup()
 
 			if (ImGui::Combo("Waveform", &currentIndex, waveFormNames, waveFormCount))
 			{
-				if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+				PushUndo();
 				m_onSetWaveFormType(compId, waveFormValues[currentIndex]);
 			}
 		}
@@ -1699,9 +1687,7 @@ void CircuitLab::UI::DrawComponentPopup()
 	// Chiusa con la X: deseleziona il componente
 	if (!open)
 	{
-		m_selectedComponent.state = SelectionState::none;
-		m_selectedComponent.compId = -1;
-		m_selectedComponent.terminalIndex = -1;
+		m_selectedComponent.Reset();
 	}
 }
 
@@ -1715,7 +1701,7 @@ void CircuitLab::UI::MirrorComponent(int compId)
 		if (cw.GetComponentLink() != compId || !cw.IsMirrorable())
 			continue;
 
-		if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+		PushUndo();
 		cw.SetMirrored(!cw.IsMirrored());
 		SnapComponentToGrid(cw);
 		UpdateLinksForComponent(compId);
@@ -1728,7 +1714,7 @@ void CircuitLab::UI::DrawComponents()
 	// Disegna ogni componente: simbolo schematico per tipo + cerchi per i terminali + etichetta
 	for (const auto &comp : m_componentViewList)
 	{
-		ComponentDesign des = comp.GetComponentDesign();
+		const ComponentDesign &des = comp.GetComponentDesign();
 
 		// Selezionato = corpo (non terminale) del componente corrente, oppure
 		// parte del gruppo scelto col rettangolo (resta evidenziato anche durante
@@ -2887,9 +2873,6 @@ CircuitLab::UI::UI(unsigned int width, unsigned int height, const std::string &t
 	// lo usano per convertire il mouse), quindi si imposta qui e non solo là.
 	UpdateCanvasView();
 
-	m_linkViewIdCount = 0;
-	m_nodeViewCount = 0;
-
 	BuildPaletteIcons();
 }
 
@@ -3033,43 +3016,12 @@ int CircuitLab::UI::AddViewLink(int comp1, int term1, int nodeViewId)
 	return newLink.id;
 }
 
-// Crea un tratto di bus (NodeView -> NodeView, nessun componente coinvolto).
-// Non aggiorna i linkViewIds dei due hub: è responsabilità del chiamante
-// (lo split interattivo lo fa esplicitamente su entrambi, come già fanno gli
-// scenari di collegamento normale; il caricamento da file sovrascrive comunque
-// la lista intera al passo 6 di IOManager::LoadFromFile).
+// Crea un tratto di bus (NodeView -> NodeView, nessun componente coinvolto), vedi
+// WireGraph::AddBusEdge. Il caricamento da file sovrascrive comunque la lista dei fili di
+// ogni hub al passo 6 di IOManager::LoadFromFile.
 int CircuitLab::UI::AddBusLinkView(int sourceNodeViewId, int targetNodeViewId)
 {
-	NodeView sourceNv = GetNodeViewById(sourceNodeViewId);
-	NodeView targetNv = GetNodeViewById(targetNodeViewId);
-
-	LinkView link;
-	link.id = ++m_linkViewIdCount;
-	link.startPos = sourceNv.position;
-	link.targetPos = targetNv.position;
-	link.compIdA = -1;
-	link.termIndexA = -1;
-	link.nodeViewId = targetNv.id;
-	link.sourceNodeViewId = sourceNv.id;
-
-	m_linkViewList.emplace_back(link);
-	return link.id;
-}
-
-int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position, bool manual, int anchorCompId, int anchorTermIndex, bool attached)
-{
-	// Un NodeView agganciato sta per definizione sul suo terminale: lo si
-	// riallinea alla posizione attuale invece di fidarsi di quella salvata, che
-	// nei file vecchi può essere quella di quando il terminale era disegnato
-	// altrove (vedi GetRotatedTerminalPos). Le viste dei componenti sono già state
-	// create a questo punto del caricamento (IOManager::Deserialize, passo 2).
-	if (attached && anchorCompId != -1)
-	{
-		const std::vector<sf::Vector2f> terminals = GetTerminalPositionbyCompId(anchorCompId);
-		if (anchorTermIndex >= 0 && anchorTermIndex < static_cast<int>(terminals.size()))
-			position = terminals[anchorTermIndex];
-	}
-	return m_graph.AddNodeView(nodeId, position, manual, anchorCompId, anchorTermIndex, attached);
+	return m_graph.AddBusEdge(sourceNodeViewId, targetNodeViewId);
 }
 
 void CircuitLab::UI::ConvertLegacyNodeViews()
@@ -3121,7 +3073,7 @@ void CircuitLab::UI::ConnectSelections(const SelectedComponent &first, const Sel
 	// AddBusEdge) e un singolo punto sicuro per entrambi deve precederli tutti.
 	// Un secondo click che finisce rifiutato (stesso elemento, nodi già uniti,
 	// ...) spinge comunque una voce che si annulla su sé stessa: innocuo.
-	if (m_onPushUndoSnapshot) m_onPushUndoSnapshot();
+	PushUndo();
 
 	// NodeView che rappresenta il gruppo (il nodo elettrico) di un elemento
 	// selezionato, -1 se non ne ha ancora uno (un terminale mai collegato) o
@@ -3241,17 +3193,10 @@ void CircuitLab::UI::ConnectSelections(const SelectedComponent &first, const Sel
 void CircuitLab::UI::Clear()
 {
 	m_componentViewList.clear();
-	m_linkViewList.clear();
-	m_nodeViewList.clear();
+	m_graph.Clear();
 
-	m_selectedComponent.compId = -1;
-	m_selectedComponent.terminalIndex = -1;
-	m_selectedComponent.linkId = -1;
-	m_selectedComponent.nodeViewId = -1;
-	m_selectedComponent.state = SelectionState::none;
+	m_selectedComponent.Reset();
 	m_selectedComponent.clickPos = sf::Vector2f(0.0f, 0.0f);
-	m_linkViewIdCount = 0;
-	m_nodeViewCount = 0;
 
 	m_selectedComponentIds.clear();
 	m_selectedNodeViewIds.clear();

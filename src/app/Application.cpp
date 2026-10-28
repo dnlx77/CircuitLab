@@ -213,9 +213,11 @@ void CircuitLab::Application::RenderLoop()
 			SimulationOutput localOutput;
 			{
 				std::lock_guard<std::mutex> lock(m_swapMutex);
-				localOutput = m_buffers[m_frontIndex];
+				// Si porta via il contenuto del front buffer invece di copiarlo: il thread di
+				// simulazione lo riempie da capo (vedi SimulateLocked) prima di pubblicarlo ancora
+				std::swap(localOutput, m_buffers[m_frontIndex]);
 			}
-			m_ui->UpdateSimulation(localOutput);
+			m_ui->UpdateSimulation(std::move(localOutput));
 			m_ui->CreateLinkViewCurrentList();
 			m_newOutputReady = false;
 		}
@@ -231,7 +233,11 @@ void CircuitLab::Application::RenderLoop()
 // (vedi UiLock) ed esegue l'operazione richiesta.
 CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 }, m_windowTime{ 1.0 }, m_decimationFactor{ 1 }, m_sampleCounter{ 0 }
 {
+#ifdef NDEBUG
+	Logger::GetInstance().SetMinLogLevel(LogLevel::Info);
+#else
 	Logger::GetInstance().SetMinLogLevel(LogLevel::Debug);
+#endif
 	Logger::GetInstance().SetLogToFile("circuitlab.log");
 
 	m_ui = std::make_unique<UI>(1280, 720, "CircuitLab main window");
