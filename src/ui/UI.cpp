@@ -1893,8 +1893,14 @@ void CircuitLab::UI::DrawOscilloscope()
 	// resta fermo sull'ultimo dato ricevuto (vedi commento su m_frozenChannels in UI.h).
 	// Usato SOLO per il plot: la lista di gestione canali (checkbox/rimozione) sotto
 	// continua a leggere i dati live, così restano utilizzabili anche da congelato.
+	// Una sola lettura per frame: da non congelati la copia aggiorna lo snapshot e
+	// serve anche alla legenda; da congelati serve una lettura live a parte.
+	std::vector<OscilloscopeChannel> liveWhileFrozen;
 	if (!m_oscFrozen)
 		m_frozenChannels = m_onGetOscilloscopeChannels();
+	else
+		liveWhileFrozen = m_onGetOscilloscopeChannels();
+	const std::vector<OscilloscopeChannel> &channels = m_oscFrozen ? liveWhileFrozen : m_frozenChannels;
 
 	// Nodi e componenti disponibili come sorgente di un canale
 	std::vector<int> nodeIds;
@@ -2106,7 +2112,6 @@ void CircuitLab::UI::DrawOscilloscope()
 
 	// --- Legenda dei canali: una "pillola" per canale (attiva, nome, rimuovi) ---
 	// Le pillole vanno a capo da sole quando non c'è più spazio in riga.
-	auto channels = m_onGetOscilloscopeChannels();
 	bool removedChannel = false;
 	int activeCount = 0;
 	for (int i = 0; i < static_cast<int>(channels.size()); i++)
