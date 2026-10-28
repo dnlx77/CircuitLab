@@ -13,7 +13,7 @@ namespace CircuitLab {
 	// A differenza di resistenza/condensatore/induttore il diodo è NON LINEARE:
 	// la sua conduttanza dipende dalla tensione che si sta cercando, quindi non
 	// può essere stampata una volta sola in A (StampMatrix/StampVector, qui
-	// vuoti). Application risolve ogni step con Newton-Raphson: ad ogni
+	// vuoti). Il solver (SolveNonlinearStep) risolve ogni step con Newton-Raphson: ad ogni
 	// iterazione il diodo viene linearizzato attorno alla tensione corrente Vk,
 	//
 	//   I ≈ g*Vd + Ieq,   g = dI/dV|Vk,   Ieq = I(Vk) - g*Vk
@@ -80,8 +80,8 @@ namespace CircuitLab {
 		// reale di Shockley alla Vd della nuova soluzione x.
 		bool HasConverged(const std::map<int, int> &nodeMap, const Eigen::VectorXd &x) const override;
 
-		// Corrente anodo->catodo per una data Vd (usata da Application una volta
-		// convergita la soluzione, per fili e oscilloscopio)
+		// Corrente anodo->catodo per una data Vd (usata da Application::SimulateLocked
+		// una volta convergita la soluzione, per fili e oscilloscopio)
 		double Current(double vd) const;
 
 		void ResetDynamicState() override { m_lastVd = 0.0; m_lastG = 0.0; m_lastIeq = 0.0; }

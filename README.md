@@ -8,34 +8,44 @@ correnti nei rami.
 ## Funzionalità
 
 - Canvas interattivo per posizionare e collegare componenti
-- Motore di simulazione basato sulla Modified Nodal Analysis (MNA)
-- Componenti supportati: resistenze, sorgenti di tensione, ground
-- Risultati visualizzati in tempo reale in una finestra ImGui dedicata
-- Separazione netta tra logica di simulazione e layer UI
+- Simulazione nel tempo basata sulla Modified Nodal Analysis (MNA), con modelli companion per i
+  componenti dinamici e Newton-Raphson per quelli non lineari
+- Componenti supportati: resistore, generatore di tensione (continua, sinusoidale, onda quadra),
+  condensatore, induttore, interruttore, deviatore, diodo, transistor bipolare NPN e PNP,
+  trasformatore, massa
+- Oscilloscopio (ImPlot) con sonde di tensione e di corrente, pallini della corrente sui fili
+  e finestra dei risultati in tempo reale
+- Salvataggio e caricamento dei circuiti in JSON, annulla e ripeti
+- Separazione netta tra logica di simulazione (`CircuitLabCore`) e layer UI
 
 ## Struttura del progetto
 CircuitLab/
 ├── include/
 │   ├── App/            # Mediator dell'applicazione
-│   ├── Common/         # Tipi condivisi (ComponentType, SimulationOutput)
-│   ├── Components/     # Modelli dei componenti (Resistor, VoltageSource, Ground)
-│   ├── Core/           # Motore MNA (Circuit, Solver, Vector2)
-│   └── UI/             # Layer UI (UI, ComponentView)
+│   ├── Common/         # Tipi condivisi (ComponentType, SimulationOutput, Logger)
+│   ├── Components/     # Modelli dei componenti (Resistor, Capacitor, Diode, Transistor...)
+│   ├── Core/           # Motore MNA (Circuit, Solver, NonlinearSolve, TransientStepper)
+│   ├── IO/             # Salvataggio e caricamento JSON (IOManager)
+│   └── UI/             # Layer UI (UI, ComponentView, WireGraph)
 ├── src/
 │   ├── app/            # Application.cpp
 │   ├── components/     # Implementazioni dei componenti
-│   ├── core/           # Circuit.cpp, Solver.cpp
-│   └── ui/             # UI.cpp, ComponentView.cpp
+│   ├── core/           # Circuit.cpp, Solver.cpp, NonlinearSolve.cpp, TransientStepper.cpp
+│   ├── io/             # IOManager.cpp
+│   └── ui/             # UI.cpp, ComponentView.cpp, WireGraph.cpp, FileDialog.cpp
 ├── CircuitLabCore/     # Libreria statica del nucleo di simulazione (core/, components/, Logger)
 ├── tests/              # Test automatici (Catch2) del nucleo di simulazione
 ├── external/           # Librerie di terze parti (submodules)
 │   ├── SFML/
 │   ├── imgui/
 │   ├── imgui-sfml/
+│   ├── implot/
 │   ├── eigen/
-│   └── nlohmann-json/
-├── lib/                # Librerie precompilate (SFML, imgui-sfml)
-├── CircuitLab/         # File di progetto Visual Studio
+│   ├── nlohmann-json/
+│   └── catch2/
+├── lib/                # Librerie SFML precompilate
+├── assets/             # Font dell'interfaccia
+├── CircuitLab/         # File di progetto Visual Studio dell'applicazione
 └── CircuitLab.slnx     # File di soluzione Visual Studio
 
 ## Dipendenze
@@ -44,9 +54,10 @@ CircuitLab/
 |---|---|---|
 | [SFML](https://www.sfml-dev.org/) | 3.0.2 | Finestra, rendering, eventi |
 | [ImGui](https://github.com/ocornut/imgui) | 1.91.9 | Pannelli GUI |
-| [imgui-sfml](https://github.com/SFML/imgui-sfml) | latest | Backend ImGui per SFML |
+| [imgui-sfml](https://github.com/SFML/imgui-sfml) | latest | Backend ImGui per SFML (compilato dai sorgenti) |
+| [ImPlot](https://github.com/epezent/implot) | latest | Grafici dell'oscilloscopio |
 | [Eigen](https://eigen.tuxfamily.org/) | 3.x (header-only) | Algebra lineare (solver MNA) |
-| [nlohmann-json](https://github.com/nlohmann/json) | 3.x | Salvataggio/caricamento JSON (pianificato) |
+| [nlohmann-json](https://github.com/nlohmann/json) | 3.x | Salvataggio/caricamento JSON |
 | [Catch2](https://github.com/catchorg/Catch2) | 3.16.1 (single header, in `external/catch2`) | Test automatici |
 
 ## Per iniziare
@@ -54,7 +65,7 @@ CircuitLab/
 ### Prerequisiti
 
 - Windows 10/11
-- Visual Studio 2022 con supporto C++20
+- Visual Studio con supporto C++20 e ai file di soluzione `.slnx`
 - Git (per clonare i submodule)
 
 ### Clonare il repository
@@ -67,13 +78,13 @@ git submodule update --init --recursive
 
 ### Compilazione
 
-1. Aprire `CircuitLab.slnx` con Visual Studio 2022
+1. Aprire `CircuitLab.slnx` con Visual Studio
 2. Selezionare la configurazione `Debug | x64` oppure `Release | x64`
 3. Compilare la soluzione (`Ctrl+Shift+B`)
 
-> **Nota:** Le librerie precompilate di SFML e imgui-sfml devono essere collocate
-> rispettivamente in `lib/SFML/` e `lib/imgui-sfml/`, rispettando la struttura
-> delle sottocartelle `Debug/` e `Release/` attesa dal progetto.
+> **Nota:** Le librerie precompilate di SFML devono essere collocate in `lib/SFML/`
+> (le DLL in `lib/SFML/bin/`), rispettando la struttura delle sottocartelle `Debug/` e
+> `Release/` attesa dal progetto. imgui-sfml e ImPlot si compilano dai sorgenti in `external/`.
 
 ### Test
 
@@ -140,11 +151,6 @@ CircuitLab segue il pattern **Mediator**:
 
 ## Roadmap
 
-- [ ] Salvataggio e caricamento dei circuiti in JSON
-- [ ] Rotazione dei componenti sul canvas
-- [ ] Spostamento dei componenti tramite drag
-- [ ] Eliminazione di componenti e collegamenti
-- [ ] Componenti non lineari (diodi, transistor) tramite Newton-Raphson
 - [ ] File di configurazione per dimensioni finestra e preferenze UI
 
 ## Licenza

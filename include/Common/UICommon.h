@@ -77,7 +77,7 @@ namespace CircuitLab {
 
 	// Tiene traccia del componente (o terminale) attualmente selezionato.
 	// Usato per gestire il doppio click sui terminali per creare un collegamento.
-	struct SelecetedComponent {
+	struct SelectedComponent {
 		int compId = -1;        // ID del componente selezionato (-1 se nessuno)
 		int terminalIndex = -1; // Indice del terminale selezionato (-1 se nessuno o se è il corpo)
 		int linkId = -1;		// ID del link selezionato (-1 se nessuno)
@@ -88,7 +88,7 @@ namespace CircuitLab {
 
 	// Usata per l'animazione delle particelle di corrente (stile Falstad) lungo un filo:
 	// offset = posizione della particella lungo il filo, count = numero di particelle attive.
-	struct LinkPararticles {
+	struct LinkParticles {
 		int linkViewId;
 		float offset;
 		int count;

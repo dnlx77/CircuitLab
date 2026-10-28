@@ -1,5 +1,7 @@
-#include <set>
+#include <algorithm>
+#include <cassert>
 #include <iostream>
+#include <set>
 
 #include "Core/Circuit.h"
 #include "Common/Logger.h"
@@ -91,7 +93,7 @@ void CircuitLab::Circuit::ComputeMatrix()
 
 void CircuitLab::Circuit::ComputeVector(const StampContext &ctx)
 {
-	assert(!m_isDirty && "ComputerVector called before ComputeMatrix");
+	assert(!m_isDirty && "ComputeVector called before ComputeMatrix");
 	m_circuitVector.setZero(m_circuitMatrix.rows());
 
 	StampContext stampCtx = ctx;
@@ -142,24 +144,6 @@ bool CircuitLab::Circuit::NonlinearConverged(const Eigen::VectorXd &x) const
 	return true;
 }
 
-// Restituisce l'ID del terminale dato il componente e l'indice del terminale (-1 se non trovato)
-int CircuitLab::Circuit::GetTerminalId(int compId, int termIndex) const
-{
-	for (const auto &comp : m_components)
-		if (comp->GetId() == compId)
-			return comp->GetTerminal(termIndex).GetId();
-	return -1;
-}
-
-// Restituisce l'ID del componente che possiede il terminale con l'ID dato (-1 se non trovato)
-int CircuitLab::Circuit::GetComponentId(int terminalId) const
-{
-	for (const auto &comp : m_components)
-		for (const auto &term : comp->GetTerminals())
-			if (term.GetId() == terminalId)
-				return comp->GetId();
-	return -1;
-}
 
 // Restituisce un puntatore costante al componente con l'ID dato (nullptr se non trovato)
 const CircuitLab::Component *CircuitLab::Circuit::GetComponentById(int compId) const
@@ -188,23 +172,6 @@ bool CircuitLab::Circuit::IsDuplicate(Link newLink) const
 	return duplicate;
 }
 
-double CircuitLab::Circuit::GetMinFrequency() const
-{
-	double minFrequency = 0.0;
-	for (auto const &comp : m_components)
-	{
-		if (comp->GetType() == ComponentType::voltageGenerator && comp->GetWaveFormType() != WaveFormType::none && comp->GetWaveFormType() != WaveFormType::dcWaveForm)
-		{
-			auto value = comp->GetValues();
-
-			double freq = value.at(ComponentValue::frequency);
-			if (freq > 0.0 && (minFrequency == 0.0 || freq < minFrequency))
-				minFrequency = freq;
-		}
-	}
-
-	return minFrequency;
-}
 
 double CircuitLab::Circuit::GetMaxFrequency() const
 {
@@ -224,17 +191,6 @@ double CircuitLab::Circuit::GetMaxFrequency() const
 	return maxFrequency;
 }
 
-// Stampa a console lo stato di ogni componente e dei suoi terminali (debug)
-void CircuitLab::Circuit::PrintCircuit()
-{
-	LOG_INFO("Circuito:");
-	for (const auto &comp : m_components)
-	{
-		LOG_INFO("Component id: " << comp->GetId());
-		for (int i = 0; i < comp->GetTerminals().size(); i++)
-			LOG_INFO("Terminale " << i << " nodeId: " << comp->GetTerminal(i).GetNodeId());
-	}
-}
 
 void CircuitLab::Circuit::Clear()
 {
@@ -308,23 +264,6 @@ void CircuitLab::Circuit::ToggleSwitch(int compId)
 	InvalidateCircuit();
 }
 
-std::vector<int> CircuitLab::Circuit::GetComponentsByNodeId(int nodeId) const
-{
-	std::vector<int> connectComp;
-	for (const auto &comp : m_components)
-	{
-		std::vector<int> terms = comp->GetTerminalNodeIds();
-		for (const auto term : terms)
-		{
-			if (term == nodeId)
-			{
-				connectComp.emplace_back(comp->GetId());
-				break;
-			}
-		}
-	}
-	return connectComp;
-}
 
 CircuitLab::ComponentType CircuitLab::Circuit::GetComponentType(int compId) const
 {
@@ -483,10 +422,11 @@ bool CircuitLab::Circuit::ConnectTerminals(int comp1Id, int termComp1, int comp2
 	return false;
 }
 
-CircuitLab::Circuit::Circuit() : m_isDirty(true), m_nextNodeId(1), m_h(0.001)
+CircuitLab::Circuit::Circuit() : m_nextNodeId(1), m_isDirty(true), m_h(0.001)
 {}
 
-// I getter usano lazy evaluation: delegano a ComputeCircuit() che agisce solo se dirty
+// GetCircuitMatrix usa lazy evaluation: delega a ComputeMatrix() che agisce solo se dirty.
+// Il vettore, invece, va ricalcolato ad ogni step con ComputeVector()
 const Eigen::MatrixXd &CircuitLab::Circuit::GetCircuitMatrix()
 {
 	ComputeMatrix();

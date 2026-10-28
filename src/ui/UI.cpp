@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "UI/Ui.h"
+#include "UI/UI.h"
 #include "UI/FileDialog.h"
 #include <filesystem>
 #include "Core/Vector2.h"
@@ -260,11 +260,11 @@ namespace {
 // Controlla in quest'ordine: i NodeView (compresi quelli ancorati a un terminale,
 // che stanno sopra di esso), poi i terminali e il corpo dei componenti, infine i fili.
 // Aggiorna selComp con il risultato; se nulla è trovato, imposta state = none.
-void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
+void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelectedComponent &selComp)
 {
 	// pos è in coordinate mondo; la tolleranza è definita in pixel di SCHERMO,
 	// quindi va divisa per lo zoom (a zoom 2x, 7 px a schermo sono 3.5 unità mondo).
-	const float tol = CLICK_TOLLERANCE / m_zoom;
+	const float tol = CLICK_TOLERANCE / m_zoom;
 	sf::Vector2f posF(static_cast<float>(pos.x), static_cast<float>(pos.y));
 
 	// NodeView per primi, sia liberi sia ancorati a un terminale: un NodeView appena
@@ -289,7 +289,7 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelecetedComponent &selComp)
 
 	for (const auto &comp : m_componentViewList)
 	{
-		ComponentDesign des = comp.GetComponetDesign();
+		ComponentDesign des = comp.GetComponentDesign();
 
 		float cosAngle = static_cast<float>(std::cos(-1 * comp.GetRotation() * std::numbers::pi / 180.0));
 		float sinAngle = static_cast<float>(std::sin(-1 * comp.GetRotation() * std::numbers::pi / 180.0));
@@ -410,7 +410,7 @@ CircuitLab::LinkView CircuitLab::UI::GetLinkCoords(int comp1, int term1, NodeVie
 // tenendo conto del raggio per attaccare il filo al bordo del cerchio.
 sf::Vector2f CircuitLab::UI::GetRotatedTerminalPos(const ComponentView &cw, int termIndex) const
 {
-	ComponentDesign des = cw.GetComponetDesign();
+	ComponentDesign des = cw.GetComponentDesign();
 	float cosAngle = static_cast<float>(std::cos(cw.GetRotation() * std::numbers::pi / 180.0));
 	float sinAngle = static_cast<float>(std::sin(cw.GetRotation() * std::numbers::pi / 180.0));
 
@@ -442,7 +442,7 @@ void CircuitLab::UI::UpdateLinksForComponent(int compId)
 		if (cv.GetComponentLink() != compId)
 			continue;
 
-		ComponentDesign des = cv.GetComponetDesign();
+		ComponentDesign des = cv.GetComponentDesign();
 		for (int i = 0; i < static_cast<int>(des.terminalOffset.size()); i++)
 		{
 			sf::Vector2f rotTer = GetRotatedTerminalPos(cv, i);
@@ -464,7 +464,7 @@ std::vector<sf::Vector2f> CircuitLab::UI::GetTerminalPositionbyCompId(int compId
 	{
 		if (cv.GetComponentLink() == compId)
 		{
-			ComponentDesign des = cv.GetComponetDesign();
+			ComponentDesign des = cv.GetComponentDesign();
 			for (int i = 0; i < des.terminalOffset.size(); i++)
 			{
 				sf::Vector2f rotTer = GetRotatedTerminalPos(cv, i);
@@ -477,14 +477,6 @@ std::vector<sf::Vector2f> CircuitLab::UI::GetTerminalPositionbyCompId(int compId
 		}
 	}
 	return terminalsPos;
-}
-
-int CircuitLab::UI::GetNodeViewIdByLinkId(int linkId) const
-{
-	for (const auto lv : m_linkViewList)
-		if (lv.id == linkId)
-			return lv.nodeViewId;
-	return -1;
 }
 
 CircuitLab::NodeView CircuitLab::UI::GetNodeViewById(int nodeViewId) const
@@ -753,7 +745,7 @@ void CircuitLab::UI::HandleEvents()
 					// un secondo elemento dello stesso tipo li collega con un filo. Se il
 					// secondo click cade su altro (spazio vuoto, un corpo di componente) non
 					// succede nulla e la prima selezione resta.
-					SelecetedComponent second;
+					SelectedComponent second;
 					CheckClick(pos, second);
 
 					if (second.state == SelectionState::terminalSelected ||
@@ -1040,7 +1032,7 @@ void CircuitLab::UI::HandleEvents()
 					{
 						const std::vector<sf::Vector2f> terminals = GetTerminalPositionbyCompId(dragged->anchorCompId);
 						if (dragged->anchorTermIndex >= 0 && dragged->anchorTermIndex < static_cast<int>(terminals.size()))
-							m_graph.TryReattach(dragged->id, terminals[dragged->anchorTermIndex], (CLICK_TOLLERANCE + NODE_RADIUS) / m_zoom);
+							m_graph.TryReattach(dragged->id, terminals[dragged->anchorTermIndex], (CLICK_TOLERANCE + NODE_RADIUS) / m_zoom);
 					}
 				}
 				m_selectedComponent.state = SelectionState::none;
@@ -1197,7 +1189,6 @@ namespace {
 		{
 		case SimulationResult::solve_error:           return "Circuito non risolvibile!";
 		case SimulationResult::empty_circuit:         return "Il circuito non contiene componenti!";
-		case SimulationResult::no_circuit:            return "Errore interno, puntatore a circuito nullo!";
 		case SimulationResult::only_ground_circuit:   return "Il circuito contiene solo componenti ground!";
 		case SimulationResult::disconnected_terminal: return "Circuito non valido: c'e' un terminale scollegato o un ramo aperto. Simulazione interrotta.";
 		case SimulationResult::no_convergence:        return "La simulazione non converge (componente non lineare).";
@@ -1439,7 +1430,7 @@ void CircuitLab::UI::DrawToolbar()
 // piazzamento e zoom
 void CircuitLab::UI::DrawStatusBar()
 {
-	ImGui::SetNextWindowPos({ 0.0f, static_cast<float>(m_heigth) - STATUS_BAR_HEIGHT });
+	ImGui::SetNextWindowPos({ 0.0f, static_cast<float>(m_height) - STATUS_BAR_HEIGHT });
 	ImGui::SetNextWindowSize({ static_cast<float>(m_width), STATUS_BAR_HEIGHT });
 	const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav;
@@ -1587,7 +1578,7 @@ void CircuitLab::UI::DrawComponentPopup()
 		return;
 
 	const int compId = m_selectedComponent.compId;
-	const ComponentDesign &des = view->GetComponetDesign();
+	const ComponentDesign &des = view->GetComponentDesign();
 
 	// Ancoraggio: sopra il bordo alto del componente (con un margine per i
 	// terminali e le etichette), nel riferimento della finestra (pixel). La vista del
@@ -1737,7 +1728,7 @@ void CircuitLab::UI::DrawComponents()
 	// Disegna ogni componente: simbolo schematico per tipo + cerchi per i terminali + etichetta
 	for (const auto &comp : m_componentViewList)
 	{
-		ComponentDesign des = comp.GetComponetDesign();
+		ComponentDesign des = comp.GetComponentDesign();
 
 		// Selezionato = corpo (non terminale) del componente corrente, oppure
 		// parte del gruppo scelto col rettangolo (resta evidenziato anche durante
@@ -1962,7 +1953,7 @@ void CircuitLab::UI::DrawOscilloscope()
 	// la prima volta (poi le ricorda imgui.ini); l'ID "##scope2" è nuovo apposta,
 	// così non si eredita la vecchia dimensione, molto più grande, già salvata lì.
 	ImGui::SetNextWindowSize(ImVec2(440.0f, 300.0f), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowPos(ImVec2(12.0f, static_cast<float>(m_heigth) - STATUS_BAR_HEIGHT - 312.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(ImVec2(12.0f, static_cast<float>(m_height) - STATUS_BAR_HEIGHT - 312.0f), ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(400.0f, 180.0f), ImVec2(FLT_MAX, FLT_MAX));
 	if (!ImGui::Begin("Oscilloscope##scope2", &m_showOscilloscope))
 	{
@@ -2227,8 +2218,7 @@ void CircuitLab::UI::DrawOscilloscope()
 	}
 
 	// Ricava l'asse X (scorrevole o congelato)
-	// Bug 1 fix — xscale corretto: distanza reale tra campioni
-	// Ogni campione dista h_sim * decimationFactor secondi simulati
+	// xscale = distanza reale tra campioni: ogni campione dista h_sim * decimationFactor secondi simulati
 	const double hSim = m_onGetHSim();
 	const int decimationFactor = m_onGetDecimationFactor();
 	const double xscale = hSim * static_cast<double>(decimationFactor);
@@ -2242,7 +2232,7 @@ void CircuitLab::UI::DrawOscilloscope()
 	}
 	else
 	{
-		// Bug 2 fix — asse X scorrevole aggiornato ogni frame
+		// Asse X scorrevole, aggiornato ogni frame
 		tMax = m_onGetSimulationTime();
 		double fMax = m_onGetMaxFrequency();
 
@@ -2377,8 +2367,8 @@ void CircuitLab::UI::DrawOscilloscope()
 			ImPlot::SetupAxisFormat(ImAxis_Y1, FormatAxisTick, &yNotation);
 		}
 
-		// Bug 2 fix — ImPlotCond_Always per aggiornare ogni frame.
-		// Quando l'oscilloscopio è congelato (m_oscFrozen), NON forziamo più i limiti
+		// ImPlotCond_Always per aggiornare l'asse ogni frame.
+		// Quando l'oscilloscopio è congelato (m_oscFrozen), NON si forzano i limiti
 		// dell'asse X ad ogni frame: così ImPlot mantiene l'ultimo stato (compreso
 		// pan/zoom manuale dell'utente), esattamente come già fa per l'asse Y sotto.
 		// In sweep l'asse X è fisso: sempre [0, finestra], la traccia si sposta dentro.
@@ -2409,8 +2399,7 @@ void CircuitLab::UI::DrawOscilloscope()
 				channel.channelColor.b,
 				1.0f);
 
-			// Bug 3 fix — passa direttamente il deque convertito in vector<double>
-			// senza conversione a float
+			// Copia del deque in un vector<double> (ImPlot vuole un array contiguo)
 			std::vector<double> samples(
 				channel.samples.begin(),
 				channel.samples.end());
@@ -2612,27 +2601,6 @@ float CircuitLab::UI::PointToStraightDistance(const sf::Vector2f &A, const sf::V
 	float dot = AB.x * AP.y - AP.x * AB.y;
 	float distAB = std::sqrt((A.x - B.x) * (A.x - B.x) + (A.y - B.y) * (A.y - B.y));
 	return std::abs(dot) / distAB;
-}
-
-int CircuitLab::UI::RemoveLinkFromNodeView(int nodeViewId, int linkViewId)
-{
-	for (auto &nv : m_nodeViewList)
-	{
-		LOG_DEBUG("linkViewId in list: " << nv.id);
-		if (nv.id == nodeViewId)
-		{
-			nv.linkViewIds.erase(
-				std::remove_if(nv.linkViewIds.begin(), nv.linkViewIds.end(),
-					[linkViewId](const int id) {
-						return id == linkViewId;
-					}),
-				nv.linkViewIds.end()
-			);
-
-			return static_cast<int>(nv.linkViewIds.size());
-		}
-	}
-	return -1;
 }
 
 void CircuitLab::UI::CreateLinkViewCurrentList()
@@ -2843,11 +2811,11 @@ void CircuitLab::UI::CreateLinkParticlesList()
 	for (const auto &lv : m_linkViewList)
 	{
 		sf::Vector2f nodeViewPos = GetNodeviewPositionByNodeViewId(lv.nodeViewId);
-		LinkPararticles newLinkParticles;
-		float linkLenght = std::sqrt(((nodeViewPos.x - lv.startPos.x) * (nodeViewPos.x - lv.startPos.x)) + ((nodeViewPos.y - lv.startPos.y) * (nodeViewPos.y - lv.startPos.y)));
+		LinkParticles newLinkParticles;
+		float linkLength = std::sqrt(((nodeViewPos.x - lv.startPos.x) * (nodeViewPos.x - lv.startPos.x)) + ((nodeViewPos.y - lv.startPos.y) * (nodeViewPos.y - lv.startPos.y)));
 		newLinkParticles.linkViewId = lv.id;
 		newLinkParticles.offset = 0.0f;
-		newLinkParticles.count = static_cast<int>(linkLenght / (PARTICLE_SIZE * PARTICLE_SPACING_FACTOR));
+		newLinkParticles.count = static_cast<int>(linkLength / (PARTICLE_SIZE * PARTICLE_SPACING_FACTOR));
 		m_linkParticlesList.emplace_back(newLinkParticles);
 	}
 }
@@ -2871,17 +2839,6 @@ void CircuitLab::UI::UpdateParticles(float dt)
 	}
 }
 
-CircuitLab::NodeView CircuitLab::UI::GetNodeViewFromLInkId(int linkViewId)
-{
-	for (auto &nv : m_nodeViewList)
-		for (const auto &lv : nv.linkViewIds)
-			if (lv == linkViewId)
-				return nv;
-
-	// non dovrebbe mai succedere se i dati sono consistenti
-	throw std::runtime_error("NodeView not found for linkViewId: " + std::to_string(linkViewId));
-}
-
 sf::Vector2f CircuitLab::UI::GetNodeviewPositionByNodeViewId(int nodeViewId)
 {
 	for (const auto &nv : m_nodeViewList)
@@ -2891,14 +2848,6 @@ sf::Vector2f CircuitLab::UI::GetNodeviewPositionByNodeViewId(int nodeViewId)
 	throw std::runtime_error("NodeView not found for id: " + std::to_string(nodeViewId));
 }
 
-int CircuitLab::UI::GetNodeViewIdByTerminal(int compId, int termIndex) const
-{
-	for (const auto &lv : m_linkViewList)
-		if (lv.compIdA == compId && lv.termIndexA == termIndex)
-			return lv.nodeViewId;
-	return -1;
-}
-
 void CircuitLab::UI::UpdateLinksForNodeView(int nodeViewId, sf::Vector2f newPos)
 {
 	m_graph.SetNodeViewPosition(nodeViewId, newPos);
@@ -2906,15 +2855,15 @@ void CircuitLab::UI::UpdateLinksForNodeView(int nodeViewId, sf::Vector2f newPos)
 
 // Inizializza la finestra SFML e ImGui-SFML.
 // Lancia un'eccezione se ImGui o il font non riescono ad inizializzarsi.
-CircuitLab::UI::UI(unsigned int width, unsigned int heigth, const std::string &title) :
+CircuitLab::UI::UI(unsigned int width, unsigned int height, const std::string &title) :
 	m_width{ width },
-	m_heigth{ heigth },
+	m_height{ height },
 	m_title{ title },
-	m_window{ sf::VideoMode({ m_width, m_heigth }), m_title },
 	m_showOscilloscope{ false },
+	m_windowTime{ 1.0 },
 	m_hSimIndex{ 3 },
 	m_simSpeedIndex{ 3 }, // 1x (vedi SPEED_VALUES in Application.cpp)
-	m_windowTime{ 1.0 }
+	m_window{ sf::VideoMode({ m_width, m_height }), m_title }
 {
 	if (!ImGui::SFML::Init(m_window))
 		throw std::runtime_error("Impossibile inizializzare ImGui-SFML");
@@ -2961,7 +2910,7 @@ sf::Vector2i CircuitLab::UI::WorldPos(sf::Vector2i pixelPos) const
 void CircuitLab::UI::HandleResize(unsigned int newWidth, unsigned int newHeight)
 {
 	m_width = newWidth;
-	m_heigth = newHeight;
+	m_height = newHeight;
 
 	UpdateCanvasView();
 }
@@ -2970,7 +2919,7 @@ void CircuitLab::UI::UpdateCanvasView()
 {
 	const float height = CanvasHeight();
 	m_view.setSize(sf::Vector2f(CanvasWidth(), height) / m_zoom);
-	m_view.setViewport(sf::FloatRect({ 0.f, CanvasTop() / static_cast<float>(m_heigth) }, { 1.f, height / static_cast<float>(m_heigth) }));
+	m_view.setViewport(sf::FloatRect({ 0.f, CanvasTop() / static_cast<float>(m_height) }, { 1.f, height / static_cast<float>(m_height) }));
 }
 
 bool CircuitLab::UI::IsInCanvas(sf::Vector2i pixelPos) const
@@ -3002,7 +2951,7 @@ sf::Vector2f CircuitLab::UI::SnapToGrid(sf::Vector2f p) const
 // volta sulla griglia (finché il passo divide la distanza tra i terminali).
 void CircuitLab::UI::SnapComponentToGrid(ComponentView &cw)
 {
-	if (!m_snapToGrid || cw.GetComponetDesign().terminalOffset.empty())
+	if (!m_snapToGrid || cw.GetComponentDesign().terminalOffset.empty())
 		return;
 
 	const sf::Vector2f rot = GetRotatedTerminalPos(cw, 0);
@@ -3164,7 +3113,7 @@ void CircuitLab::UI::DetachSurvivingGroupsFromGround(const std::vector<TerminalR
 	}
 }
 
-void CircuitLab::UI::ConnectSelections(const SelecetedComponent &first, const SelecetedComponent &second)
+void CircuitLab::UI::ConnectSelections(const SelectedComponent &first, const SelectedComponent &second)
 {
 	// Spinto qui, prima di ogni controllo di validità, perché la funzione ha
 	// due percorsi di mutazione indipendenti più sotto (il collegamento nel
@@ -3177,7 +3126,7 @@ void CircuitLab::UI::ConnectSelections(const SelecetedComponent &first, const Se
 	// NodeView che rappresenta il gruppo (il nodo elettrico) di un elemento
 	// selezionato, -1 se non ne ha ancora uno (un terminale mai collegato) o
 	// se l'elemento non esiste più.
-	auto groupNodeView = [this](const SelecetedComponent &sel) -> int
+	auto groupNodeView = [this](const SelectedComponent &sel) -> int
 	{
 		switch (sel.state)
 		{
@@ -3224,7 +3173,7 @@ void CircuitLab::UI::ConnectSelections(const SelecetedComponent &first, const Se
 	// libero senza nessun componente) non ne ha: il collegamento resta puramente
 	// visivo finché non arriva un secondo terminale, come un componente appena
 	// piazzato e non ancora collegato.
-	auto representativeTap = [this](const SelecetedComponent &sel, int group) -> TerminalRef
+	auto representativeTap = [this](const SelectedComponent &sel, int group) -> TerminalRef
 	{
 		if (sel.state == SelectionState::terminalSelected)
 			return { sel.compId, sel.terminalIndex };
@@ -3254,7 +3203,7 @@ void CircuitLab::UI::ConnectSelections(const SelecetedComponent &first, const Se
 
 	// Ogni lato diventa un NodeView: quello del terminale (creato se manca), il nodo
 	// scelto, oppure un nodo libero nuovo sul filo nel punto cliccato.
-	auto resolve = [this](const SelecetedComponent &sel) -> int
+	auto resolve = [this](const SelectedComponent &sel) -> int
 	{
 		switch (sel.state)
 		{
@@ -3353,7 +3302,7 @@ void CircuitLab::UI::Render()
 
 	DrawSelectionRect();
 
-	m_window.setView(sf::View(sf::FloatRect({ 0.0f, 0.0f }, { static_cast<float>(m_width), static_cast<float>(m_heigth) })));
+	m_window.setView(sf::View(sf::FloatRect({ 0.0f, 0.0f }, { static_cast<float>(m_width), static_cast<float>(m_height) })));
 
 	// Render ImGui sopra il canvas
 	ImGui::SFML::Render(m_window);

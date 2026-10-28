@@ -64,10 +64,6 @@ namespace CircuitLab {
 
 		void Log(std::string logMsg, LogLevel level);
 
-		LogLevel GetLogMinLevel() const { return m_minLevel; }
-		bool IsLogToConsole() const { return m_logToConsole; }
-		const std::string &GetFilePath() const { return m_filePath; }
-
 		void SetMinLogLevel(LogLevel newMinLevel) { m_minLevel = newMinLevel; }
 		void SetLogToConsole(bool logToConsole) { m_logToConsole = logToConsole; }
 		void SetLogToFile(const std::string &path);

@@ -21,7 +21,7 @@ namespace CircuitLab {
         int idB = -1;
         int compId = -1;
         std::string label;
-        std::deque<double> samples;  // sempre 512 campioni max
+        std::deque<double> samples;  // al massimo MAX_SAMPLES campioni
         // Tempo simulato dell'ULTIMO campione in samples, scritto da SampleChannels
         // sotto lo stesso mutex che protegge samples. Serve alla modalità "sweep"
         // dell'oscilloscopio: leggere il tempo di simulazione a parte, in un altro

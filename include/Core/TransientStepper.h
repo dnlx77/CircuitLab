@@ -45,7 +45,6 @@ namespace CircuitLab {
 		bool StartFromDcOperatingPoint();
 
 		const Eigen::VectorXd &Solution() const { return m_solution; }
-		void SetSolution(Eigen::VectorXd solution) { m_solution = std::move(solution); }
 		// Dimentica la soluzione: il prossimo passo non lineare riparte da zero
 		void ClearSolution() { m_solution = Eigen::VectorXd(); }
 

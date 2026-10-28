@@ -1,4 +1,6 @@
 #pragma once
+#include <functional>
+#include <map>
 #include <vector>
 #include <Eigen/Dense>
 #include <memory>
@@ -49,11 +51,6 @@ namespace CircuitLab {
 		// Costruisce le mappe nodi/sorgenti e restituisce la dimensione della matrice MNA
 		int ComputeNodes();
 
-		// Restituisce l'ID del terminale dato il componente e l'indice del terminale
-		int GetTerminalId(int compId, int termIndex) const;
-
-		// Restituisce l'ID del componente che possiede il terminale con l'ID dato
-		int GetComponentId(int terminalId) const;
 
 		// Controlla se il collegamento esiste già nella lista dei link (in entrambe le direzioni)
 		bool IsDuplicate(Link newLink) const;
@@ -157,13 +154,12 @@ namespace CircuitLab {
 		void ComputeMatrix();
 		void ComputeVector(const StampContext &ctx);
 
-		void PrintCircuit();
 
 		void Clear();
 
 		// Azzera lo stato dinamico di ogni componente (vedi Component::ResetDynamicState)
 		// senza toccare topologia o valori — usato quando cambia il timestep di
-		// simulazione (vedi Application::SetOnSetHSim).
+		// simulazione (vedi UI::SetOnSetHSim).
 		void ResetDynamicState();
 
 		// Restituisce la lista dei nodeId dei terminali del componente dato
@@ -197,15 +193,12 @@ namespace CircuitLab {
 
 		void SetOnFactorize(const fnOnFactorize &func) { m_onFactorize = func; }
 
-		std::vector<int> GetComponentsByNodeId(int nodeId) const;
 
 		ComponentType GetComponentType(int compId) const;
 
-		// Frequenza minima/massima tra le sorgenti di tensione non-DC del circuito.
-		// 0.0 se non ci sono sorgenti AC. Usate dalla UI per calibrare l'oscilloscopio
-		// (es. "Auto Sync": windowTime = 4 / f_max).
-		double GetMinFrequency() const;
 
+		// Frequenza massima tra le sorgenti di tensione non-DC del circuito (0.0 se non ce ne sono).
+		// Usata dalla UI per calibrare l'oscilloscopio (es. "Auto Sync": windowTime = 4 / f_max).
 		double GetMaxFrequency() const;
 	};
 }

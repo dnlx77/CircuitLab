@@ -43,7 +43,7 @@ namespace CircuitLab {
 		void UpdateState(double v1, double v2) override;
 
 		// Conduttanza equivalente e corrente memorizzata al passo precedente
-		// (per il calcolo della corrente in Application, prima di UpdateState).
+		// (per il calcolo della corrente in Application::SimulateLocked, prima di UpdateState).
 		double GetConductance() const { return m_conductance; }
 		double GetPreviousCurrent() const { return m_previousCurrent; }
 

@@ -1,6 +1,10 @@
 #pragma once
-#include <vector>
+#include <map>
 #include <string>
+#include <tuple>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace CircuitLab {
 
@@ -11,13 +15,12 @@ namespace CircuitLab {
 		success,              // Simulazione completata con successo
 		empty_circuit,        // Il circuito non contiene componenti
 		only_ground_circuit,  // Il circuito contiene solo componenti ground (nessun nodo attivo)
-		no_circuit,           // Il puntatore al circuito è nullo (errore interno)
 		solve_error,          // La matrice MNA è singolare, sistema non risolvibile
 		disconnected_terminal, // Un componente ha un terminale non collegato a nulla
 		no_convergence        // Le iterazioni di Newton-Raphson (componenti non lineari, es. diodo) non convergono
 	};
 
-	// Struttura di output restituita da Application::RunSimulation() alla UI.
+	// Struttura di output che Application pubblica per la UI (doppio buffer in Application, passato alla UI con UI::UpdateSimulation).
 	// Contiene il codice di risultato e, in caso di successo,
 	// la lista delle variabili calcolate con i rispettivi valori.
 	// Ogni coppia è nella forma { "V1", 3.3 } o { "I(V1_0)", 0.01 }.

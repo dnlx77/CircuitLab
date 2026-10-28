@@ -29,7 +29,6 @@ namespace CircuitLab {
 		// Un passo di simulazione sul circuito; tiene anche l'ultimo vettore soluzione MNA
 		std::unique_ptr<TransientStepper> m_stepper;
 		std::unique_ptr<IOManager> m_ioManager;		// Gestisce salvataggio e caricamento su file JSON
-		sf::Clock m_deltaClock;
 		std::atomic<double> m_simulationTime;
 		double m_hSim;
 		// Moltiplicatore della velocità del tempo simulato (vedi SPEED_VALUES
@@ -151,9 +150,8 @@ namespace CircuitLab {
 		Application();
 		~Application();
 
-		// Esegue la simulazione MNA sull'attuale stato del circuito.
-		// Chiamato dalla UI tramite callback m_onRunSimulation.
-		// Restituisce un SimulationOutput con il risultato e i valori calcolati.
+		// Esegue un passo di simulazione MNA sull'attuale stato del circuito, prendendo il
+		// mutex del circuito. Il risultato va nel back buffer dell'output (vedi SimulateLocked).
 		void Simulate();
 
 		void UpdateDecimationFactor();
@@ -167,8 +165,6 @@ namespace CircuitLab {
 		// campiona nulla e restituisce false (si deve usare SampleChannels). sampleTime è il tempo
 		// simulato dello step risolto.
 		bool SampleVoltageChannels(double sampleTime);
-
-		const Eigen::VectorXd &GetResult() const { return m_stepper->Solution(); }
 
 		void SetSimulationStatus(SimulationStatus status);
 

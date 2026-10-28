@@ -1,3 +1,3 @@
-#include "components/terminal.h"
+#include "Components/Terminal.h"
 
 int CircuitLab::Terminal::s_nextId = 1;

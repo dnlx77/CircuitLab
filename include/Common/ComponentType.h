@@ -7,7 +7,7 @@ namespace CircuitLab {
 	// Usata sia dal circuito (per la factory in Application) che dalla UI
 	// (per determinare il design grafico in ComponentView).
 	enum class ComponentType {
-		node,          // Nodo generico (riservato per usi futuri)
+		node,          // Nessun componente: restituito da Circuit::GetComponentType per un id inesistente
 		ground,        // Nodo di riferimento (massa)
 		resistor,      // Resistenza ideale
 		voltageGenerator, // Sorgente di tensione ideale

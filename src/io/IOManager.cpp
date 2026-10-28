@@ -114,7 +114,6 @@ void CircuitLab::IOManager::Deserialize(const nlohmann::json &j)
 	// Mappe savedId -> newId: gli ID nel JSON sono quelli del momento in cui è
 	// stato costruito. Alla ricostruzione, gli oggetti ricevono nuovi ID
 	// progressivi. Queste mappe traducono i riferimenti salvati.
-	// Nota: nonostante il prefisso "m_", sono variabili locali, non membri della classe.
 	std::map<int, int> loadVsRealNodeMap;
 	std::map<int, int> loadVsRealNodeViewMap;
 	std::map<int, int> loadVsRealLinkViewMap;
@@ -129,10 +128,10 @@ void CircuitLab::IOManager::Deserialize(const nlohmann::json &j)
 	}
 
 	// 2) Crea le viste grafiche dei componenti, traducendo l'ID salvato con quello reale
-	for (auto const compViewJosn : j["componentsView"])
+	for (auto const compViewJson : j["componentsView"])
 	{
-		Vec2 vec(compViewJosn["position"][0], compViewJosn["position"][1]);
-		m_onComponentViewLoad(loadVsRealNodeMap.at(compViewJosn["componentLink"]), compViewJosn["name"].get<std::string>(), compViewJosn["type"].get<ComponentType>(), vec, compViewJosn["rotation"], compViewJosn.value("mirrored", false));
+		Vec2 vec(compViewJson["position"][0], compViewJson["position"][1]);
+		m_onComponentViewLoad(loadVsRealNodeMap.at(compViewJson["componentLink"]), compViewJson["name"].get<std::string>(), compViewJson["type"].get<ComponentType>(), vec, compViewJson["rotation"], compViewJson.value("mirrored", false));
 	}
 
 	// 3) Ricrea i link logici tra terminali nel circuito (Core, non UI)
