@@ -686,6 +686,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 	std::vector<std::pair<std::string, double>> outVec;
 	std::unordered_map<int, double> componentCurrent;
 	std::map<std::tuple<int, int, int>, double> branchCurrent;
+	std::map<std::pair<int, int>, double> terminalCurrent;
 	std::unordered_map<int, double> nodeToVoltage;
 	nodeToVoltage[0] = 0.0;
 	for (int i = 0; needOutput && i < m_stepper->Solution().size(); i++)
@@ -717,14 +718,15 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 			}
 			componentCurrent[iNode] = m_stepper->Solution()[i];
 			branchCurrent[{terminalsId[0], terminalsId[1], iNode}] = m_stepper->Solution()[i];
+			terminalCurrent[{iNode, 0}] = m_stepper->Solution()[i];
+			terminalCurrent[{iNode, 1}] = -m_stepper->Solution()[i];
 		}
 	}
 
-	// Correnti dei componenti: ciascuno sa calcolare le proprie (Component::ReportCurrents),
-	// qui si traducono gli indici di terminale in nodeId per le mappe dell'output. Un ramo
-	// "di un solo terminale" (transistor) usa come secondo nodeId un valore sentinella
-	// (-1000-indice, mai un nodeId valido) solo per rendere unica la chiave; il ramo
-	// dedicato in UI::CreateLinkViewCurrentList lo sa e la interroga cosi'.
+	// Correnti dei componenti: ciascuno sa calcolare le proprie (Component::ReportCurrents).
+	// Per l'oscilloscopio si traducono gli indici di terminale in nodeId (currentBranch, solo
+	// per i rami a due capi); per la UI si pubblica la corrente che entra da ogni terminale
+	// (terminalCurrent), qualunque sia il tipo di componente.
 	std::vector<double> terminalVoltages;
 	CurrentReport report;
 	for (auto &comp : compList)
@@ -742,8 +744,14 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 		for (int i = 0; i < report.branchCount; i++)
 		{
 			const CurrentReport::Branch &branch = report.branches[i];
-			const int nodeB = (branch.to == CurrentReport::SINGLE_TERMINAL) ? -1000 - branch.from : termList[branch.to];
-			branchCurrent[{termList[branch.from], nodeB, comp->GetId()}] = branch.current;
+			if (branch.to == CurrentReport::SINGLE_TERMINAL)
+			{
+				terminalCurrent[{comp->GetId(), branch.from}] = branch.current;
+				continue;
+			}
+			branchCurrent[{termList[branch.from], termList[branch.to], comp->GetId()}] = branch.current;
+			terminalCurrent[{comp->GetId(), branch.from}] += branch.current;
+			terminalCurrent[{comp->GetId(), branch.to}] -= branch.current;
 		}
 	}
 
@@ -754,6 +762,7 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 	output.res = std::move(outVec);
 	output.currentComp = std::move(componentCurrent);
 	output.currentBranch = std::move(branchCurrent);
+	output.terminalCurrent = std::move(terminalCurrent);
 	output.nodeVoltages = std::move(nodeToVoltage);
 
 	m_simulationTime += m_hSim;
@@ -977,13 +986,13 @@ void CircuitLab::Application::AddChannel(ProbeType type, int idA, int idB, int c
 	case ProbeType::componentCurrent:
 	{
 		UiLock lock(m_circuitMutex, m_uiWaiters);
-		label = "I(" + Component::ComponentTypeName(m_circuit->GetComponentType(compId)) + std::to_string(compId) + ")";
+		label = std::string("I(") + ComponentPrefix(m_circuit->GetComponentType(compId)) + std::to_string(compId) + ")";
 		break;
 	}
 	case ProbeType::branchCurrent:
 	{
 		UiLock lock(m_circuitMutex, m_uiWaiters);
-		label = "I(" + Component::ComponentTypeName(m_circuit->GetComponentType(compId)) + std::to_string(compId) +
+		label = std::string("I(") + ComponentPrefix(m_circuit->GetComponentType(compId)) + std::to_string(compId) +
 			": N" + std::to_string(idA) + "-N" + std::to_string(idB) + ")";
 		break;
 	}

@@ -9,6 +9,7 @@
 #include <cfloat>
 #include <cmath>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "UI/UI.h"
@@ -33,34 +34,13 @@ namespace {
 	std::string FileNameOf(const std::string &path) { return Utf8Of(PathFromUtf8(path).filename()); }
 	std::string DirectoryOf(const std::string &path) { return Utf8Of(PathFromUtf8(path).parent_path()); }
 
-	// Prefisso di una lettera per il tipo di componente ("R", "V", "G", ...),
-	// usato nelle etichette sul canvas e nei nomi dei canali dell'oscilloscopio.
-	const char *ComponentPrefix(CircuitLab::ComponentType type)
-	{
-		switch (type)
-		{
-		case CircuitLab::ComponentType::resistor:         return "R";
-		case CircuitLab::ComponentType::voltageGenerator: return "V";
-		case CircuitLab::ComponentType::ground:           return "G";
-		case CircuitLab::ComponentType::capacitor:        return "C";
-		case CircuitLab::ComponentType::inductor:         return "L";
-		case CircuitLab::ComponentType::switchComponent:  return "S";
-		case CircuitLab::ComponentType::diode:            return "D";
-		case CircuitLab::ComponentType::transformer:      return "T";
-		case CircuitLab::ComponentType::changeoverSwitch: return "Y";
-		case CircuitLab::ComponentType::transistor:       return "Q";
-		case CircuitLab::ComponentType::transistorPnp:    return "Q";
-		default:                                          return "";
-		}
-	}
-
 	// Vero per i componenti il cui stato si cambia con click/tasto invece che
 	// editando un valore numerico (Switch: aperto/chiuso; deviatore: via 1/via 2).
 	// Entrambi implementano Component::ToggleSwitch/IsSwitchClosed, riusati identici.
 	bool IsToggleableByClick(CircuitLab::ComponentType type)
 	{
-		return type == CircuitLab::ComponentType::switchComponent ||
-			type == CircuitLab::ComponentType::changeoverSwitch;
+		const CircuitLab::ComponentTypeInfo *info = CircuitLab::FindComponentType(type);
+		return info && info->toggleableByClick;
 	}
 
 	// Nome interno di un tipo di componente (salvato come "name" in ComponentView,
@@ -68,57 +48,32 @@ namespace {
 	// ComponentPrefix+id), quindi conta solo per coerenza tra le istanze.
 	const char *ComponentDisplayName(CircuitLab::ComponentType type)
 	{
-		switch (type)
-		{
-		case CircuitLab::ComponentType::resistor:         return "Resistor";
-		case CircuitLab::ComponentType::voltageGenerator: return "Voltage source";
-		case CircuitLab::ComponentType::ground:           return "Ground";
-		case CircuitLab::ComponentType::capacitor:        return "Capacitor";
-		case CircuitLab::ComponentType::inductor:         return "Inductor";
-		case CircuitLab::ComponentType::switchComponent:  return "Switch";
-		case CircuitLab::ComponentType::diode:            return "Diode";
-		case CircuitLab::ComponentType::transformer:      return "Transformer";
-		case CircuitLab::ComponentType::changeoverSwitch: return "Changeover switch";
-		case CircuitLab::ComponentType::transistor:       return "Transistor";
-		case CircuitLab::ComponentType::transistorPnp:    return "Transistor PNP";
-		default:                                          return "Component";
-		}
+		const CircuitLab::ComponentTypeInfo *info = CircuitLab::FindComponentType(type);
+		return info ? info->displayName : "Component";
 	}
 
 	// Una voce della palette componenti, mostrata nel menu Componenti (vedi
 	// UI::DrawMainMenuBar): l'etichetta include la scorciatoia da tastiera,
-	// così l'utente non deve più memorizzarle a parte.
+	// così l'utente non deve più memorizzarle a parte. Le categorie e le voci
+	// escono dalla tabella CircuitLab::COMPONENT_TYPES, nel suo ordine.
 	struct PaletteEntry { CircuitLab::ComponentType type; const char *label; };
 	struct PaletteCategory { const char *name; std::vector<PaletteEntry> entries; };
 
 	const std::vector<PaletteCategory> &ComponentPalette()
 	{
-		using CircuitLab::ComponentType;
-		static const std::vector<PaletteCategory> palette = {
-			{ "Passivi", {
-				{ ComponentType::resistor, "Resistore (R)" },
-				{ ComponentType::capacitor, "Condensatore (C)" },
-				{ ComponentType::inductor, "Induttore (L)" },
-			} },
-			{ "Sorgenti", {
-				{ ComponentType::voltageGenerator, "Generatore (V)" },
-			} },
-			{ "Commutazione", {
-				{ ComponentType::switchComponent, "Interruttore (S)" },
-				{ ComponentType::changeoverSwitch, "Deviatore (Y)" },
-			} },
-			{ "Semiconduttori", {
-				{ ComponentType::diode, "Diodo (D)" },
-				{ ComponentType::transistor, "Transistor NPN (J)" },
-				{ ComponentType::transistorPnp, "Transistor PNP (K)" },
-			} },
-			{ "Accoppiati", {
-				{ ComponentType::transformer, "Trasformatore (T)" },
-			} },
-			{ "Altro", {
-				{ ComponentType::ground, "Massa (G)" },
-			} },
-		};
+		static const std::vector<PaletteCategory> palette = []
+		{
+			std::vector<PaletteCategory> categories;
+			for (const CircuitLab::ComponentTypeInfo &info : CircuitLab::COMPONENT_TYPES)
+			{
+				auto it = std::find_if(categories.begin(), categories.end(),
+					[&](const PaletteCategory &c) { return std::string_view(c.name) == info.category; });
+				if (it == categories.end())
+					it = categories.insert(categories.end(), PaletteCategory{ info.category, {} });
+				it->entries.push_back({ info.type, info.paletteLabel });
+			}
+			return categories;
+		}();
 		return palette;
 	}
 
@@ -672,28 +627,10 @@ void CircuitLab::UI::HandleEvents()
 				}
 				else if (IsInCanvas(pixelPos) && !ImGui::GetIO().WantCaptureMouse)
 				{
-					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R))
-						PlaceNewComponent(ComponentType::resistor, pos);
-					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V))
-						PlaceNewComponent(ComponentType::voltageGenerator, pos);
-					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::G))
-						PlaceNewComponent(ComponentType::ground, pos);
-					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::C))
-						PlaceNewComponent(ComponentType::capacitor, pos);
-					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::L))
-						PlaceNewComponent(ComponentType::inductor, pos);
-					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S))
-						PlaceNewComponent(ComponentType::switchComponent, pos);
-					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D))
-						PlaceNewComponent(ComponentType::diode, pos);
-					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::T))
-						PlaceNewComponent(ComponentType::transformer, pos);
-					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Y))
-						PlaceNewComponent(ComponentType::changeoverSwitch, pos);
-					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::J))
-						PlaceNewComponent(ComponentType::transistor, pos);
-					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::K))
-						PlaceNewComponent(ComponentType::transistorPnp, pos);
+					for (const ComponentTypeInfo &info : COMPONENT_TYPES)
+						if (sf::Keyboard::isKeyPressed(static_cast<sf::Keyboard::Key>(
+							static_cast<int>(sf::Keyboard::Key::A) + (info.shortcut - 'A'))))
+							PlaceNewComponent(info.type, pos);
 					if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::N))
 					{
 						// A differenza degli altri tasti, non passa da m_onCircuitChange/Circuit:
@@ -2601,63 +2538,11 @@ void CircuitLab::UI::CreateLinkViewCurrentList()
 		if (lv.sourceNodeViewId != -1)
 			continue;
 
-		std::vector<int> termList = m_onGetCompTerminalId(lv.compIdA);
-
-		// Il deviatore ha 3 terminali che NON si raggruppano a coppie disgiunte
-		// (0,1)/(2,3): il comune (0) è condiviso dai due rami via1/via2, quindi va
-		// gestito a parte. Il tap sul comune raccoglie la somma dei due rami (accumulo
-		// KCL sul nodo interno: quello inattivo vale ~0), ognuna delle due vie ha
-		// invece la propria corrente di ramo — stesso segno "term pari = -current"
-		// del caso generico sotto, applicato via per via.
-		if (m_onGetComponentTypeById(lv.compIdA) == ComponentType::changeoverSwitch)
-		{
-			double currentVia1 = m_simulationOutput.currentBranch[{termList[0], termList[1], lv.compIdA}];
-			double currentVia2 = m_simulationOutput.currentBranch[{termList[0], termList[2], lv.compIdA}];
-			if (lv.termIndexA == 0)
-				m_linkViewCurrentList[lv.id] = -(currentVia1 + currentVia2);
-			else if (lv.termIndexA == 1)
-				m_linkViewCurrentList[lv.id] = currentVia1;
-			else
-				m_linkViewCurrentList[lv.id] = currentVia2;
-			continue;
-		}
-
-		// Il transistor ha 3 terminali (base, collettore, emettitore) con una
-		// corrente ciascuno DEL TUTTO indipendente dagli altri due (IB, IC, IE,
-		// vedi Transistor::Currents e il ramo dedicato in Application::Simulate,
-		// che le salva con un secondo campo sentinella invece della coppia di
-		// nodi): a differenza del deviatore non c'è un "comune" su cui accumulare,
-		// quindi il tap di ciascun terminale è semplicemente l'opposto della sua
-		// corrente (già "verso il componente" per costruzione).
-		const ComponentType linkCompType = m_onGetComponentTypeById(lv.compIdA);
-		if (linkCompType == ComponentType::transistor || linkCompType == ComponentType::transistorPnp)
-		{
-			double iInto;
-			if (lv.termIndexA == 0)
-				iInto = m_simulationOutput.currentBranch[{termList[0], -1000, lv.compIdA}];
-			else if (lv.termIndexA == 1)
-				iInto = m_simulationOutput.currentBranch[{termList[1], -1001, lv.compIdA}];
-			else
-				iInto = m_simulationOutput.currentBranch[{termList[2], -1002, lv.compIdA}];
-			m_linkViewCurrentList[lv.id] = -iInto;
-			continue;
-		}
-
-		// I terminali sono raggruppati a coppie (0,1), (2,3), ...: ogni coppia è un
-		// "ramo" con corrente propria e indipendente dalle altre (es. primario e
-		// secondario di un trasformatore). Il tap di termIndexA usa la sua coppia,
-		// non sempre (0,1) — un componente a 2 soli terminali ha una coppia sola,
-		// quindi il comportamento per resistori/diodi/ecc. resta invariato.
-		int pairBase = (lv.termIndexA / 2) * 2;
-		if (pairBase + 1 >= static_cast<int>(termList.size()))
-		{
-			m_linkViewCurrentList[lv.id] = 0.0;
-			continue;
-		}
-		int nodeId1 = termList[pairBase];
-		int nodeId2 = termList[pairBase + 1];
-		double current = m_simulationOutput.currentBranch[{nodeId1, nodeId2, lv.compIdA}];
-		m_linkViewCurrentList[lv.id] = (lv.termIndexA % 2 == 0) ? -current : current;
+		// Corrente che entra nel componente da questo terminale (la calcola Application per ogni tipo):
+		// il verso del filo e' l'opposto. Un componente senza voce (la massa) vale 0: la sua corrente
+		// si ricava al punto 2 dal bilancio del nodo.
+		const auto it = m_simulationOutput.terminalCurrent.find({ lv.compIdA, lv.termIndexA });
+		m_linkViewCurrentList[lv.id] = (it != m_simulationOutput.terminalCurrent.end()) ? -it->second : 0.0;
 	}
 
 	// 2) Correnti dei tratti di bus: ogni filo tra due terminali è un tratto di bus

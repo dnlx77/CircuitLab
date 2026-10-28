@@ -23,23 +23,3 @@ void CircuitLab::Component::Load(const nlohmann::json &j)
 {
 	LoadSpecificData(j);
 }
-
-std::string CircuitLab::Component::ComponentTypeName(ComponentType type)
-{
-	switch (type)
-	{
-	case ComponentType::resistor:			return "R";
-	case ComponentType::voltageGenerator:	return "V";
-	case ComponentType::ground:				return "G";
-	case ComponentType::capacitor:			return "C";
-	case ComponentType::inductor:			return "L";
-	case ComponentType::switchComponent:	return "S";
-	case ComponentType::diode:				return "D";
-	case ComponentType::transformer:		return "T";
-	case ComponentType::changeoverSwitch:	return "Y";
-	case ComponentType::transistor:		return "Q";
-	case ComponentType::transistorPnp:	return "Q";
-	default:								return "?";
-
-	}
-}
