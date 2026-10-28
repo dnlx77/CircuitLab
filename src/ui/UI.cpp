@@ -17,6 +17,7 @@
 #include <filesystem>
 #include "Core/Vector2.h"
 #include "Common/Logger.h"
+#include "Common/SimulationSettings.h"
 
 namespace {
 	// Nome e cartella di un percorso in UTF-8 (come arrivano dalla finestra di scelta file)
@@ -637,7 +638,7 @@ void CircuitLab::UI::HandleEvents()
 						// un nodo vuoto non è un componente, è puramente un punto di aggancio
 						// visivo (nodeId -1, come un terminale mai collegato) a cui collegare
 						// dei fili in seguito, esattamente come ai terminali di un componente.
-						AddNodeView(-1, SnapToGrid(sf::Vector2f(static_cast<float>(pos.x), static_cast<float>(pos.y))), true);
+						AddNodeView(-1, SnapToGrid(sf::Vector2f(static_cast<float>(pos.x), static_cast<float>(pos.y))));
 						// Il nodo appena creato è esattamente sotto al cursore: senza questo
 						// flag, la CheckClick qui sotto lo selezionerebbe subito da solo
 						// (o, se un altro nodo era già selezionato da un click precedente,
@@ -1093,19 +1094,6 @@ void CircuitLab::UI::BuildPaletteIcons()
 }
 
 namespace {
-	// Nomi dei passi di tempo e delle velocità (stesso ordine di TIMESTEP_VALUES e SPEED_VALUES
-	// in Application.cpp: la UI passa solo l'indice)
-	constexpr const char *TIMESTEP_NAMES[] = {
-		"1 s", "100 ms", "10 ms", "1 ms",
-		"100 us", "10 us", "1 us", "100 ns", "10 ns", "1 ns", "100 ps", "10 ps", "1 ps"
-	};
-	constexpr int TIMESTEP_COUNT = static_cast<int>(std::size(TIMESTEP_NAMES));
-
-	constexpr const char *SPEED_NAMES[] = {
-		"0.001x", "0.01x", "0.1x", "1x", "2x", "5x", "10x", "20x", "50x", "100x", "Massima"
-	};
-	constexpr int SPEED_COUNT = static_cast<int>(std::size(SPEED_NAMES));
-
 	// Messaggio per un esito di simulazione che non è un successo (nullptr se va tutto bene)
 	const char *SimulationMessage(CircuitLab::SimulationResult result)
 	{
@@ -1221,21 +1209,21 @@ void CircuitLab::UI::DrawMainMenuBar()
 		ImGui::Separator();
 		if (ImGui::BeginMenu("Passo di tempo"))
 		{
-			for (int i = 0; i < TIMESTEP_COUNT; i++)
-				if (ImGui::MenuItem(TIMESTEP_NAMES[i], nullptr, m_hSimIndex == i))
+			for (std::size_t i = 0; i < TIMESTEP_COUNT; i++)
+				if (ImGui::MenuItem(TIMESTEPS[i].name, nullptr, m_hSimIndex == static_cast<int>(i)))
 				{
-					m_hSimIndex = i;
-					m_onSetHSim(m_hSimIndex);
+					m_hSimIndex = static_cast<int>(i);
+					m_onSetHSim(TIMESTEPS[i].seconds);
 				}
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Velocita'"))
 		{
-			for (int i = 0; i < SPEED_COUNT; i++)
-				if (ImGui::MenuItem(SPEED_NAMES[i], nullptr, m_simSpeedIndex == i))
+			for (std::size_t i = 0; i < SPEED_COUNT; i++)
+				if (ImGui::MenuItem(SPEEDS[i].name, nullptr, m_simSpeedIndex == static_cast<int>(i)))
 				{
-					m_simSpeedIndex = i;
-					m_onSetSimSpeed(m_simSpeedIndex);
+					m_simSpeedIndex = static_cast<int>(i);
+					m_onSetSimSpeed(SPEEDS[i].multiplier);
 				}
 			ImGui::EndMenu();
 		}
@@ -1337,16 +1325,32 @@ void CircuitLab::UI::DrawToolbar()
 	ImGui::TextUnformatted("Passo");
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(90.0f);
-	if (ImGui::Combo("##timestep", &m_hSimIndex, TIMESTEP_NAMES, TIMESTEP_COUNT))
-		m_onSetHSim(m_hSimIndex);
+	if (ImGui::BeginCombo("##timestep", TIMESTEPS[m_hSimIndex].name))
+	{
+		for (std::size_t i = 0; i < TIMESTEP_COUNT; i++)
+			if (ImGui::Selectable(TIMESTEPS[i].name, m_hSimIndex == static_cast<int>(i)))
+			{
+				m_hSimIndex = static_cast<int>(i);
+				m_onSetHSim(TIMESTEPS[i].seconds);
+			}
+		ImGui::EndCombo();
+	}
 
 	ImGui::SameLine(0.0f, 16.0f);
 	ImGui::AlignTextToFramePadding();
 	ImGui::TextUnformatted("Velocita'");
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(90.0f);
-	if (ImGui::Combo("##speed", &m_simSpeedIndex, SPEED_NAMES, SPEED_COUNT))
-		m_onSetSimSpeed(m_simSpeedIndex);
+	if (ImGui::BeginCombo("##speed", SPEEDS[m_simSpeedIndex].name))
+	{
+		for (std::size_t i = 0; i < SPEED_COUNT; i++)
+			if (ImGui::Selectable(SPEEDS[i].name, m_simSpeedIndex == static_cast<int>(i)))
+			{
+				m_simSpeedIndex = static_cast<int>(i);
+				m_onSetSimSpeed(SPEEDS[i].multiplier);
+			}
+		ImGui::EndCombo();
+	}
 
 	ImGui::End();
 }
@@ -1648,7 +1652,12 @@ void CircuitLab::UI::MirrorComponent(int compId)
 
 void CircuitLab::UI::DrawComponents()
 {
-	// Disegna ogni componente: simbolo schematico per tipo + cerchi per i terminali + etichetta
+	// Disegna ogni componente: simbolo schematico per tipo + cerchi per i terminali + etichetta.
+	// Un solo sf::Text per tutto il fotogramma (terminali e componenti): crearne uno per ogni
+	// terminale e per ogni componente costava di più del disegno.
+	sf::Text label(m_font);
+	label.setCharacterSize(12);
+
 	for (const auto &comp : m_componentViewList)
 	{
 		const ComponentDesign &des = comp.GetComponentDesign();
@@ -1663,16 +1672,15 @@ void CircuitLab::UI::DrawComponents()
 				m_selectedComponent.state == SelectionState::componentSelected);
 		sf::Color symbolColor = isSelected ? sf::Color::Yellow : sf::Color::White;
 
-		WaveFormType waveForm = (comp.GetComponentType() == ComponentType::voltageGenerator && m_onGetWaveFormType)
-			? m_onGetWaveFormType(comp.GetComponentLink())
-			: WaveFormType::none;
-
-		// Riusato anche dal deviatore: per lui indica "via 2 attiva" invece di
-		// "chiuso" (vedi ChangeoverSwitch::IsSwitchClosed), ma il default (true)
-		// per gli altri tipi è comunque irrilevante, esattamente come per Switch.
-		bool switchClosed = (IsToggleableByClick(comp.GetComponentType()) && m_onIsSwitchClosed)
-			? m_onIsSwitchClosed(comp.GetComponentLink())
-			: true;
+		// Una sola lettura (e un solo lock del circuito) per componente e per frame.
+		// Per il deviatore switchClosed indica "via 2 attiva" invece di "chiuso"
+		// (vedi ChangeoverSwitch::IsSwitchClosed).
+		const ComponentDrawState drawState = m_onGetComponentDrawState(
+			comp.GetComponentLink(),
+			comp.GetComponentType() == ComponentType::voltageGenerator,
+			IsToggleableByClick(comp.GetComponentType()));
+		const WaveFormType waveForm = drawState.waveForm;
+		const bool switchClosed = drawState.switchClosed;
 
 		comp.DrawSymbol(m_window, symbolColor, waveForm, switchClosed);
 
@@ -1680,14 +1688,12 @@ void CircuitLab::UI::DrawComponents()
 		sf::CircleShape term(static_cast<float>(des.terminalRadius));
 		term.setFillColor(sf::Color::Blue);
 		term.setOrigin({ static_cast<float>(des.terminalRadius), static_cast<float>(des.terminalRadius) });
-		std::vector<int> terminalsId = m_onGetCompTerminalId(comp.GetComponentLink());
+		const std::vector<int> &terminalsId = drawState.terminalIds;
 
 		int strPosX = 0, strPosY = 0;
 
 		for (int i = 0; i < des.terminalOffset.size(); i++)
 		{
-			sf::Text termLabel(m_font);
-
 			sf::Vector2f rotTerm = GetRotatedTerminalPos(comp, i);
 
 			strPosX = (rotTerm.x >= 0) ? 1 : -1;
@@ -1712,10 +1718,10 @@ void CircuitLab::UI::DrawComponents()
 			if (des.isPositiveTerminal == i)
 				termString = "+ ";
 			termString += std::to_string(terminalsId[i]);
-			termLabel.setString(termString);
-			termLabel.setCharacterSize(12);
-			termLabel.setPosition({ comp.GetPosition().x + rotTerm.x + strPosX * TEXT_COMPONENT_OFFSET, comp.GetPosition().y + rotTerm.y + strPosY * TEXT_COMPONENT_OFFSET });
-			m_window.draw(termLabel);
+			label.setString(termString);
+			label.setOrigin({ 0.0f, 0.0f }); // l'etichetta del componente (sotto) imposta un'origine propria
+			label.setPosition({ comp.GetPosition().x + rotTerm.x + strPosX * TEXT_COMPONENT_OFFSET, comp.GetPosition().y + rotTerm.y + strPosY * TEXT_COMPONENT_OFFSET });
+			m_window.draw(label);
 		}
 
 		// Costruisce l'etichetta del componente nel formato "R3" / "V2" / "G1"
@@ -1733,9 +1739,7 @@ void CircuitLab::UI::DrawComponents()
 		float x1 = x * cosAngle - y * sinAngle;
 		float y1 = x * sinAngle + y * cosAngle;
 
-		sf::Text label(m_font);
 		label.setString(compString);
-		label.setCharacterSize(12);
 
 		sf::FloatRect bound = label.getLocalBounds();
 		float originX, originY;
@@ -1888,8 +1892,14 @@ void CircuitLab::UI::DrawOscilloscope()
 	// resta fermo sull'ultimo dato ricevuto (vedi commento su m_frozenChannels in UI.h).
 	// Usato SOLO per il plot: la lista di gestione canali (checkbox/rimozione) sotto
 	// continua a leggere i dati live, così restano utilizzabili anche da congelato.
+	// Una sola lettura per frame: da non congelati la copia aggiorna lo snapshot e
+	// serve anche alla legenda; da congelati serve una lettura live a parte.
+	std::vector<OscilloscopeChannel> liveWhileFrozen;
 	if (!m_oscFrozen)
 		m_frozenChannels = m_onGetOscilloscopeChannels();
+	else
+		liveWhileFrozen = m_onGetOscilloscopeChannels();
+	const std::vector<OscilloscopeChannel> &channels = m_oscFrozen ? liveWhileFrozen : m_frozenChannels;
 
 	// Nodi e componenti disponibili come sorgente di un canale
 	std::vector<int> nodeIds;
@@ -2101,7 +2111,6 @@ void CircuitLab::UI::DrawOscilloscope()
 
 	// --- Legenda dei canali: una "pillola" per canale (attiva, nome, rimuovi) ---
 	// Le pillole vanno a capo da sole quando non c'è più spazio in riga.
-	auto channels = m_onGetOscilloscopeChannels();
 	bool removedChannel = false;
 	int activeCount = 0;
 	for (int i = 0; i < static_cast<int>(channels.size()); i++)
@@ -2146,6 +2155,7 @@ void CircuitLab::UI::DrawOscilloscope()
 	const int decimationFactor = m_onGetDecimationFactor();
 	const double xscale = hSim * static_cast<double>(decimationFactor);
 
+	const double fMaxFrame = m_onGetMaxFrequency(); // una sola lettura per frame
 	double tMax;
 	if (m_oscFrozen)
 	{
@@ -2157,7 +2167,7 @@ void CircuitLab::UI::DrawOscilloscope()
 	{
 		// Asse X scorrevole, aggiornato ogni frame
 		tMax = m_onGetSimulationTime();
-		double fMax = m_onGetMaxFrequency();
+		double fMax = fMaxFrame;
 
 		// Trigger matematico — allinea tMin al multiplo del periodo
 		if (fMax > 0.0)
@@ -2196,7 +2206,7 @@ void CircuitLab::UI::DrawOscilloscope()
 	double sweepLength = m_windowTime;
 	if (sweepMode)
 	{
-		const double fMaxSweep = m_onGetMaxFrequency();
+		const double fMaxSweep = fMaxFrame;
 		if (fMaxSweep > 0.0)
 		{
 			const double period = 1.0 / fMaxSweep;
@@ -2552,6 +2562,18 @@ void CircuitLab::UI::CreateLinkViewCurrentList()
 	// filo. Nessuna ambiguità: il grafo dei tratti di bus di uno stesso nodo è
 	// sempre un albero (collegare due elementi già nello stesso nodo è rifiutato,
 	// vedi ConnectSelections), mai un ciclo di fili ideali paralleli.
+	// Ricerca per id in tempo costante: la visita sotto cerca un NodeView per ogni vertice e un
+	// filo per ogni id di ogni NodeView, e con le liste lineari il costo cresceva col quadrato
+	// del numero di fili.
+	std::unordered_map<int, const NodeView *> nodeViewById;
+	std::unordered_map<int, const LinkView *> linkViewById;
+	nodeViewById.reserve(m_nodeViewList.size());
+	linkViewById.reserve(m_linkViewList.size());
+	for (const auto &nv : m_nodeViewList)
+		nodeViewById.emplace(nv.id, &nv);
+	for (const auto &lv : m_linkViewList)
+		linkViewById.emplace(lv.id, &lv);
+
 	std::set<int> visited;
 	for (const auto &startNv : m_nodeViewList)
 	{
@@ -2573,29 +2595,27 @@ void CircuitLab::UI::CreateLinkViewCurrentList()
 			queue.pop_back();
 			groupNodeViewIds.push_back(currentId);
 
-			const NodeView &nv = GetNodeViewById(currentId);
+			const NodeView &nv = *nodeViewById.at(currentId);
 			for (int lvId : nv.linkViewIds)
 			{
-				for (const auto &lv : m_linkViewList)
-				{
-					if (lv.id != lvId) continue;
+				const auto lvIt = linkViewById.find(lvId);
+				if (lvIt == linkViewById.end()) continue;
+				const LinkView &lv = *lvIt->second;
 
-					if (lv.sourceNodeViewId == -1)
+				if (lv.sourceNodeViewId == -1)
+				{
+					if (lv.nodeViewId == currentId)
+						groupTapLinks.push_back(&lv);
+				}
+				else
+				{
+					groupBusEdges.push_back(&lv);
+					int neighborId = (lv.sourceNodeViewId == currentId) ? lv.nodeViewId : lv.sourceNodeViewId;
+					if (!visited.count(neighborId))
 					{
-						if (lv.nodeViewId == currentId)
-							groupTapLinks.push_back(&lv);
+						visited.insert(neighborId);
+						queue.push_back(neighborId);
 					}
-					else
-					{
-						groupBusEdges.push_back(&lv);
-						int neighborId = (lv.sourceNodeViewId == currentId) ? lv.nodeViewId : lv.sourceNodeViewId;
-						if (!visited.count(neighborId))
-						{
-							visited.insert(neighborId);
-							queue.push_back(neighborId);
-						}
-					}
-					break;
 				}
 			}
 		}
@@ -2732,8 +2752,8 @@ CircuitLab::UI::UI(unsigned int width, unsigned int height, const std::string &t
 	m_title{ title },
 	m_showOscilloscope{ false },
 	m_windowTime{ 1.0 },
-	m_hSimIndex{ 3 },
-	m_simSpeedIndex{ 3 }, // 1x (vedi SPEED_VALUES in Application.cpp)
+	m_hSimIndex{ static_cast<int>(DEFAULT_TIMESTEP_INDEX) },
+	m_simSpeedIndex{ static_cast<int>(DEFAULT_SPEED_INDEX) },
 	m_window{ sf::VideoMode({ m_width, m_height }), m_title }
 {
 	if (!ImGui::SFML::Init(m_window))
@@ -2909,7 +2929,7 @@ int CircuitLab::UI::AddBusLinkView(int sourceNodeViewId, int targetNodeViewId)
 	return m_graph.AddBusEdge(sourceNodeViewId, targetNodeViewId);
 }
 
-int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position, bool manual, int anchorCompId, int anchorTermIndex, bool attached)
+int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position, int anchorCompId, int anchorTermIndex, bool attached)
 {
 	// Un NodeView agganciato sta per definizione sul suo terminale: lo si
 	// riallinea alla posizione attuale invece di fidarsi di quella salvata, che
@@ -2922,12 +2942,7 @@ int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position, bool manual, 
 		if (anchorTermIndex >= 0 && anchorTermIndex < static_cast<int>(terminals.size()))
 			position = terminals[anchorTermIndex];
 	}
-	return m_graph.AddNodeView(nodeId, position, manual, anchorCompId, anchorTermIndex, attached);
-}
-
-void CircuitLab::UI::ConvertLegacyNodeViews()
-{
-	m_graph.ConvertLegacy();
+	return m_graph.AddNodeView(nodeId, position, anchorCompId, anchorTermIndex, attached);
 }
 
 void CircuitLab::UI::FreeTerminals(const std::vector<TerminalRef> &terminals)

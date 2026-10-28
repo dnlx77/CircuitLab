@@ -34,14 +34,8 @@ namespace CircuitLab {
 
 	// Aggiunge un NodeView (hub) alla UI nella posizione data; restituisce l'ID assegnato.
 	// anchorCompId/anchorTermIndex/attached descrivono un NodeView ancorato a un terminale
-	// (anchorCompId = -1 per uno libero); manual serve solo alla conversione dei file
-	// vecchi (vedi NodeView::manual).
-	using fnNodeViewLoad = std::function<int(int nodeId, sf::Vector2f position, bool manual, int anchorCompId, int anchorTermIndex, bool attached)>;
-
-	// Converte i NodeView appena letti dal vecchio modello (un hub per collegamento)
-	// nel modello attuale (un NodeView per terminale). Chiamata solo per i file senza
-	// il campo "nodeModel".
-	using fnConvertLegacyNodeViews = std::function<void()>;
+	// (anchorCompId = -1 per uno libero).
+	using fnNodeViewLoad = std::function<int(int nodeId, sf::Vector2f position, int anchorCompId, int anchorTermIndex, bool attached)>;
 
 	using fnUpdateNodeViewLinkIds = std::function<void(int nodeViewId, std::vector<int> linkViewIds)>;
 
@@ -59,7 +53,6 @@ namespace CircuitLab {
 		fnLinkViewLoad m_onLinkViewLoad;
 		fnBusLinkViewLoad m_onBusLinkViewLoad;
 		fnNodeViewLoad m_onNodeViewLoad;
-		fnConvertLegacyNodeViews m_onConvertLegacyNodeViews;
 		fnOnNew m_onNew;
 		fnUpdateNodeViewLinkIds m_onUpdateNodeViewLinkIds;
 		fnComponentLoadData m_onComponentLoadData;
@@ -94,7 +87,6 @@ namespace CircuitLab {
 		void SetOnLinkViewLoad(const fnLinkViewLoad &fn) { m_onLinkViewLoad = fn; }
 		void SetOnBusLinkViewLoad(const fnBusLinkViewLoad &fn) { m_onBusLinkViewLoad = fn; }
 		void SetOnNodeViewLoad(const fnNodeViewLoad &fn) { m_onNodeViewLoad = fn; }
-		void SetOnConvertLegacyNodeViews(const fnConvertLegacyNodeViews &fn) { m_onConvertLegacyNodeViews = fn; }
 		void SetOnNew(const fnOnNew &fn) { m_onNew = fn; }
 		void SetOnUpdateNodeViewLinkIds(const fnUpdateNodeViewLinkIds &fn) { m_onUpdateNodeViewLinkIds = fn; }
 		void SetOnComponentLoadData(const fnComponentLoadData &fn) { m_onComponentLoadData = fn; }

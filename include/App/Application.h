@@ -31,8 +31,8 @@ namespace CircuitLab {
 		std::unique_ptr<IOManager> m_ioManager;		// Gestisce salvataggio e caricamento su file JSON
 		std::atomic<double> m_simulationTime;
 		double m_hSim;
-		// Moltiplicatore della velocità del tempo simulato (vedi SPEED_VALUES
-		// in Application.cpp e SimulationLoop). Atomico: scritto dal thread di
+		// Moltiplicatore della velocità del tempo simulato (vedi SPEEDS in
+		// Common/SimulationSettings.h e SimulationLoop). Atomico: scritto dal thread di
 		// rendering (SetOnSetSimSpeed), letto dal thread di simulazione.
 		std::atomic<double> m_simSpeed{ 1.0 };
 		// Se vero, all'avvio da t=0 (e dopo Load o un cambio di timestep) lo stato di partenza è

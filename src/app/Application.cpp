@@ -20,6 +20,7 @@
 #include "Components/ChangeoverSwitch.h"
 #include "Components/Transistor.h"
 #include "Common/SimulationOutput.h"
+#include "Common/SimulationSettings.h"
 #include "UI/UI.h"
 #include "Common/Logger.h"
 
@@ -34,28 +35,6 @@ namespace {
 			ids[i] = terminals[i].GetNodeId();
 		return ids;
 	}
-
-	constexpr double TIMESTEP_VALUES[] = {
-		1.0, 0.1, 0.01, 0.001,
-		0.0001, 0.00001, 0.000001, 0.0000001, 0.00000001, 0.000000001, 0.0000000001, 0.00000000001, 0.000000000001,
-	};
-
-	// Moltiplicatore della velocità con cui il tempo simulato avanza rispetto
-	// al tempo reale (vedi SimulationLoop): 1.0 = tempo reale (il ritmo di
-	// default, utile per leggere l'oscilloscopio come uno strumento vero).
-	// L'ultimo valore (<= 0) è un segnale di "velocità massima": nessuna
-	// pausa tra un batch e l'altro, il tempo simulato avanza alla velocità
-	// con cui la CPU riesce a calcolare — utile per raggiungere in fretta un
-	// transitorio lungo (es. l'assestamento di un filtro passa-alto RC con
-	// costante di tempo di alcuni secondi) senza aspettare in tempo reale.
-	//
-	// Le velocità sotto 1 sono il "rallentatore": con segnali di decine o migliaia
-	// di Hz, a 1x un fotogramma (16 ms) copre più periodi e la corrente letta ad
-	// ogni fotogramma è di fatto casuale (aliasing), quindi i pallini saltano senza
-	// senso; a 0.01x un periodo di 40 Hz dura 2.5 s reali e il movimento si segue.
-	// L'ordine deve coincidere con SPEED_NAMES in UI.cpp (l'indice
-	// predefinito, 1x, è UI::m_simSpeedIndex).
-	constexpr double SPEED_VALUES[] = { 0.001, 0.01, 0.1, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, -1.0 };
 }
 
 // Crea il componente appropriato in base al tipo richiesto, con i valori di default:
@@ -231,7 +210,7 @@ void CircuitLab::Application::RenderLoop()
 // Costruisce UI, Circuit, IOManager e solver, poi collega le callback: la UI (e l'IOManager)
 // non conoscono Circuit, passano da Application che prende il mutex del circuito
 // (vedi UiLock) ed esegue l'operazione richiesta.
-CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 }, m_windowTime{ 1.0 }, m_decimationFactor{ 1 }, m_sampleCounter{ 0 }
+CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ TIMESTEPS[DEFAULT_TIMESTEP_INDEX].seconds }, m_windowTime{ 1.0 }, m_decimationFactor{ 1 }, m_sampleCounter{ 0 }
 {
 #ifdef NDEBUG
 	Logger::GetInstance().SetMinLogLevel(LogLevel::Info);
@@ -355,14 +334,9 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			return m_ui->AddBusLinkView(sourceNodeViewId, targetNodeViewId);
 		});
 
-	m_ioManager->SetOnNodeViewLoad([this](int nodeId, sf::Vector2f position, bool manual, int anchorCompId, int anchorTermIndex, bool attached) -> int
+	m_ioManager->SetOnNodeViewLoad([this](int nodeId, sf::Vector2f position, int anchorCompId, int anchorTermIndex, bool attached) -> int
 		{
-			return m_ui->AddNodeView(nodeId, position, manual, anchorCompId, anchorTermIndex, attached);
-		});
-
-	m_ioManager->SetOnConvertLegacyNodeViews([this]()
-		{
-			m_ui->ConvertLegacyNodeViews();
+			return m_ui->AddNodeView(nodeId, position, anchorCompId, anchorTermIndex, attached);
 		});
 
 	m_ioManager->SetOnUpdateNodeViewLinkIds([this](int nodeViewId, std::vector<int> linkViewIds)
@@ -477,6 +451,19 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			return m_circuit->GetComponentById(compId)->GetWaveFormType();
 		});
 
+	m_ui->SetOnGetComponentDrawState([this](int compId, bool wantWaveForm, bool wantSwitchState) -> UI::ComponentDrawState
+		{
+			UiLock lock(m_circuitMutex, m_uiWaiters);
+			UI::ComponentDrawState state;
+			state.terminalIds = m_circuit->GetNodesIdFromComponentId(compId);
+			Component *comp = m_circuit->GetComponentById(compId);
+			if (wantWaveForm)
+				state.waveForm = comp->GetWaveFormType();
+			if (wantSwitchState)
+				state.switchClosed = comp->IsSwitchClosed();
+			return state;
+		});
+
 	m_ui->SetOnSetWaveFormType([this](int compId, WaveFormType type)
 		{
 			UiLock lock(m_circuitMutex, m_uiWaiters);
@@ -514,9 +501,9 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			return m_hSim;
 		});
 
-	m_ui->SetOnSetHSim([this](int index)
+	m_ui->SetOnSetHSim([this](double seconds)
 		{
-			m_hSim = TIMESTEP_VALUES[index];
+			m_hSim = seconds;
 			{
 				UiLock lock(m_circuitMutex, m_uiWaiters);
 				m_circuit->SetTimestep(m_hSim);
@@ -554,9 +541,9 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			RestartFromDc();
 		});
 
-	m_ui->SetOnSetSimSpeed([this](int index)
+	m_ui->SetOnSetSimSpeed([this](double multiplier)
 		{
-			m_simSpeed = SPEED_VALUES[index];
+			m_simSpeed = multiplier;
 		});
 
 	m_ui->SetOnSetWindowTime([this](double windowTime)

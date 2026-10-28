@@ -48,14 +48,23 @@ namespace CircuitLab {
 		using fnGetSimulationStatus = std::function<SimulationStatus()>;
 		using fnGetComponentTypeById = std::function<ComponentType(int compId)>;
 		using fnGetWaveFormType = std::function<WaveFormType(int)>;
+
+		// Tutto ciò che serve a disegnare un componente, letto dal circuito con un solo lock
+		struct ComponentDrawState
+		{
+			std::vector<int> terminalIds;
+			WaveFormType waveForm = WaveFormType::none;
+			bool switchClosed = true;
+		};
+		using fnGetComponentDrawState = std::function<ComponentDrawState(int compId, bool wantWaveForm, bool wantSwitchState)>;
 		using fnSetWaveFormType = std::function<void(int, WaveFormType)>;
 		using fnGetOscilloscopeChannels = std::function<std::vector<OscilloscopeChannel>()>;
 		using fnAddChannel = std::function<void(ProbeType, int, int, int)>;
 		using fnSetChannelActive = std::function<void(int, bool)>;
 		using fnRemoveChannel = std::function<void(int)>;
 		using fnGetHSim = std::function<double()>;
-		using fnSetHSim = std::function<void(int)>;
-		using fnSetSimSpeed = std::function<void(int)>;
+		using fnSetHSim = std::function<void(double seconds)>;
+		using fnSetSimSpeed = std::function<void(double multiplier)>;
 		using fnSetStartFromDc = std::function<void(bool)>;
 		using fnRestartFromDc = std::function<void()>;
 		using fnSetWindowTime = std::function<void(double)>;
@@ -279,6 +288,7 @@ namespace CircuitLab {
 		fnGetSimulationStatus m_onGetSimulationStatus;
 		fnGetComponentTypeById m_onGetComponentTypeById;
 		fnGetWaveFormType m_onGetWaveFormType;
+		fnGetComponentDrawState m_onGetComponentDrawState;
 		fnSetWaveFormType m_onSetWaveFormType;
 		fnGetOscilloscopeChannels m_onGetOscilloscopeChannels;
 		fnAddChannel m_onAddChannel;
@@ -446,6 +456,7 @@ namespace CircuitLab {
 		void SetOnGetSimulationStatus(const fnGetSimulationStatus &func) { m_onGetSimulationStatus = func; }
 		void SetOnGetComponentTypeById(const fnGetComponentTypeById &func) { m_onGetComponentTypeById = func; }
 		void SetOnGetWaveFormType(const fnGetWaveFormType &func) { m_onGetWaveFormType = func; }
+		void SetOnGetComponentDrawState(const fnGetComponentDrawState &func) { m_onGetComponentDrawState = func; }
 		void SetOnSetWaveFormType(const fnSetWaveFormType &func) { m_onSetWaveFormType = func; }
 		void SetOnGetOscilloscopeChannels(const fnGetOscilloscopeChannels &func) { m_onGetOscilloscopeChannels = func; }
 		void SetOnAddChannel(const fnAddChannel &fn) { m_onAddChannel = fn; }
@@ -496,14 +507,9 @@ namespace CircuitLab {
 		// gruppo del Ground, raccolti prima della cancellazione.
 		void DetachSurvivingGroupsFromGround(const std::vector<TerminalRef> &candidates);
 
-		// Converte nel modello attuale i NodeView letti da un file vecchio (a hub).
-		// Chiamato da IOManager dopo il caricamento, solo per i file vecchi.
-		void ConvertLegacyNodeViews();
-
 		// Aggiunge un NodeView al canvas; restituisce l'ID assegnato. Con anchorCompId
-		// != -1 è ancorato a quel terminale (vedi NodeView). manual serve solo alla
-		// lettura dei file vecchi (vedi NodeView::manual).
-		int AddNodeView(int nodeId, sf::Vector2f position, bool manual, int anchorCompId = -1, int anchorTermIndex = -1, bool attached = false);
+		// != -1 è ancorato a quel terminale (vedi NodeView).
+		int AddNodeView(int nodeId, sf::Vector2f position, int anchorCompId = -1, int anchorTermIndex = -1, bool attached = false);
 
 		// Sostituisce la lista dei linkViewIds appartenenti al NodeView nodeViewId (usato da IOManager al caricamento)
 		void UpdateNodeViewLinkIds(int nodeViewId, std::vector<int> linkViewIds);
