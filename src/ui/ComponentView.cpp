@@ -1,5 +1,8 @@
 #include "UI/ComponentView.h"
+#include <cmath>
 #include <numbers>
+#include <span>
+#include <vector>
 
 // Definizione della mappa statica dei design grafici per ogni tipo di componente.
 // Gli offset dei terminali sono relativi al centro del componente.
@@ -51,13 +54,35 @@ namespace {
 	// componente. "type" è LineStrip per un percorso continuo (es. lo zigzag)
 	// o Lines per segmenti indipendenti a coppie di punti (es. i due lead).
 	void DrawLocalSegments(sf::RenderTarget &target, const sf::RenderStates &states,
-		std::initializer_list<sf::Vector2f> points, sf::PrimitiveType type, sf::Color color)
+		std::span<const sf::Vector2f> points, sf::PrimitiveType type, sf::Color color)
 	{
 		sf::VertexArray va(type, points.size());
 		std::size_t i = 0;
 		for (const auto &p : points)
 			va[i++] = sf::Vertex{ p, color };
 		target.draw(va, states);
+	}
+
+	// Bobina verticale da yStart a yEnd: gobbe successive tutte dalla stessa parte
+	// (verso destra se sign > 0), approssimate campionando una curva, attorno a x = baseX.
+	void DrawCoil(sf::RenderTarget &target, const sf::RenderStates &states,
+		float baseX, float sign, float yStart, float yEnd, float amplitude, sf::Color color)
+	{
+		constexpr int HUMPS = 3;
+		constexpr int SAMPLES_PER_HUMP = 8;
+
+		std::vector<sf::Vector2f> points;
+		points.reserve(HUMPS * SAMPLES_PER_HUMP + 1);
+		for (int i = 0; i <= HUMPS * SAMPLES_PER_HUMP; i++)
+		{
+			float t = static_cast<float>(i) / (HUMPS * SAMPLES_PER_HUMP); // 0..1 lungo tutta la bobina
+			float humpPhase = std::fmod(t * HUMPS, 1.0f);
+			points.push_back({
+				baseX + sign * amplitude * std::sin(humpPhase * std::numbers::pi_v<float>),
+				yStart + t * (yEnd - yStart)
+				});
+		}
+		DrawLocalSegments(target, states, points, sf::PrimitiveType::LineStrip, color);
 	}
 }
 
@@ -82,7 +107,7 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderTarget &target, sf::Color c
 
 	auto draw = [&](std::initializer_list<sf::Vector2f> points, sf::PrimitiveType type)
 	{
-		DrawLocalSegments(target, states, points, type, color);
+		DrawLocalSegments(target, states, std::span<const sf::Vector2f>(points.begin(), points.size()), type, color);
 	};
 
 	switch (GetComponentType())
@@ -118,27 +143,7 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderTarget &target, sf::Color c
 		draw({ {0,-20}, {0,-10} }, sf::PrimitiveType::Lines);
 		draw({ {0,10}, {0,20} }, sf::PrimitiveType::Lines);
 
-		constexpr int HUMPS = 3;
-		constexpr int SAMPLES_PER_HUMP = 8;
-		constexpr float COIL_Y_START = -10.0f;
-		constexpr float COIL_Y_END = 10.0f;
-		constexpr float COIL_AMPLITUDE = 8.0f;
-
-		std::vector<sf::Vector2f> coilPoints;
-		coilPoints.reserve(HUMPS * SAMPLES_PER_HUMP + 1);
-		for (int i = 0; i <= HUMPS * SAMPLES_PER_HUMP; i++)
-		{
-			float t = static_cast<float>(i) / (HUMPS * SAMPLES_PER_HUMP); // 0..1 lungo tutta la bobina
-			float humpPhase = std::fmod(t * HUMPS, 1.0f);
-			coilPoints.push_back({
-				COIL_AMPLITUDE * std::sin(humpPhase * std::numbers::pi_v<float>),
-				COIL_Y_START + t * (COIL_Y_END - COIL_Y_START)
-				});
-		}
-		sf::VertexArray coil(sf::PrimitiveType::LineStrip, coilPoints.size());
-		for (std::size_t i = 0; i < coilPoints.size(); i++)
-			coil[i] = sf::Vertex{ coilPoints[i], color };
-		target.draw(coil, states);
+		DrawCoil(target, states, 0.0f, 1.0f, -10.0f, 10.0f, 8.0f, color);
 		break;
 	}
 
@@ -171,10 +176,7 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderTarget &target, sf::Color c
 					-std::sin(t * 2.0f * std::numbers::pi_v<float>) * 5.0f
 					});
 			}
-			sf::VertexArray sine(sf::PrimitiveType::LineStrip, points.size());
-			for (std::size_t i = 0; i < points.size(); i++)
-				sine[i] = sf::Vertex{ points[i], color };
-			target.draw(sine, states);
+			DrawLocalSegments(target, states, points, sf::PrimitiveType::LineStrip, color);
 		}
 		else if (waveForm == WaveFormType::squareWaveForm)
 		{
@@ -221,32 +223,8 @@ void CircuitLab::ComponentView::DrawSymbol(sf::RenderTarget &target, sf::Color c
 
 		// Ciascun avvolgimento: stessa approssimazione a gobbe dell'induttore
 		// (vedi sopra) ma verticale, rivolta verso il nucleo al centro.
-		constexpr int HUMPS = 3;
-		constexpr int SAMPLES_PER_HUMP = 8;
-		constexpr float COIL_Y_START = -15.0f;
-		constexpr float COIL_Y_END = 15.0f;
-		constexpr float COIL_AMPLITUDE = 6.0f;
-
-		auto drawCoil = [&](float baseX, float sign)
-		{
-			std::vector<sf::Vector2f> coilPoints;
-			coilPoints.reserve(HUMPS * SAMPLES_PER_HUMP + 1);
-			for (int i = 0; i <= HUMPS * SAMPLES_PER_HUMP; i++)
-			{
-				float t = static_cast<float>(i) / (HUMPS * SAMPLES_PER_HUMP);
-				float humpPhase = std::fmod(t * HUMPS, 1.0f);
-				coilPoints.push_back({
-					baseX + sign * COIL_AMPLITUDE * std::sin(humpPhase * std::numbers::pi_v<float>),
-					COIL_Y_START + t * (COIL_Y_END - COIL_Y_START)
-					});
-			}
-			sf::VertexArray coil(sf::PrimitiveType::LineStrip, coilPoints.size());
-			for (std::size_t i = 0; i < coilPoints.size(); i++)
-				coil[i] = sf::Vertex{ coilPoints[i], color };
-			target.draw(coil, states);
-		};
-		drawCoil(-20.0f, 1.0f);  // primario: gobbe verso il nucleo (a destra)
-		drawCoil(20.0f, -1.0f);  // secondario: gobbe verso il nucleo (a sinistra)
+		DrawCoil(target, states, -20.0f, 1.0f, -15.0f, 15.0f, 6.0f, color);  // primario: gobbe verso il nucleo (a destra)
+		DrawCoil(target, states, 20.0f, -1.0f, -15.0f, 15.0f, 6.0f, color);  // secondario: gobbe verso il nucleo (a sinistra)
 
 		// Pallini di polarità (convenzione standard): indicano quale coppia di
 		// terminali ha la stessa fase istantanea, sul lato dei terminali "+" (0 e 2).

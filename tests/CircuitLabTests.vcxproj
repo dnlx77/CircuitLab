@@ -86,6 +86,7 @@
     <ClCompile Include="TestSupport.cpp" />
     <ClCompile Include="bench_simulation.cpp" />
     <ClCompile Include="test_circuit.cpp" />
+    <ClCompile Include="test_component_types.cpp" />
     <ClCompile Include="test_dc_operating_point.cpp" />
     <ClCompile Include="test_nonlinear_solver.cpp" />
     <ClCompile Include="test_report_currents.cpp" />

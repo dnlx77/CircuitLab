@@ -28,7 +28,13 @@ namespace CircuitLab {
 		SimulationResult simRes;                         // Esito della simulazione
 		std::vector<std::pair<std::string, double>> res; // Variabili calcolate: { nome, valore }
 		std::unordered_map<int, double> currentComp;
+		// Corrente di ramo per coppia di nodi: { nodoA, nodoB, idComponente } -> corrente da A a B.
+		// Serve all'oscilloscopio (sonda "corrente di ramo"), che sceglie il ramo per nodi.
 		std::map<std::tuple<int, int, int>, double> currentBranch;
+		// Corrente che ENTRA nel componente da ciascun terminale: { idComponente, indice terminale }
+		// -> corrente. Vale per ogni tipo di componente (anche per quelli con piu' di una coppia di
+		// terminali o con correnti indipendenti), cosi' la UI non ne deve conoscere i casi speciali.
+		std::map<std::pair<int, int>, double> terminalCurrent;
 		std::unordered_map<int, double> nodeVoltages; // NodeId -> tensione
 	};
 

@@ -211,8 +211,5 @@ namespace CircuitLab {
 		// con un click, non scrivendo un numero).
 		virtual std::map<ComponentValue, double> GetValues() const { return {}; }
 		virtual void SetValues(const std::map<ComponentValue, double> &) {}
-
-		// Nome breve del tipo di componente per la UI/etichette (es. "R", "V", "G")
-		static std::string ComponentTypeName(ComponentType type);
 	};
 }

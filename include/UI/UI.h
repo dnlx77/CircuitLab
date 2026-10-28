@@ -236,6 +236,8 @@ namespace CircuitLab {
 		std::vector<LinkParticles> m_linkParticlesList;
 
 		sf::Vector2f m_compClickOffset;
+		void SetDragOffsetFromComponent(int compId, sf::Vector2i pos);
+		void SetDragOffsetFromNodeView(int nodeViewId, sf::Vector2i pos);
 
 		// Selezione multipla (rettangolo di gomma, tasto sinistro trascinato da
 		// spazio vuoto): gli ID dei componenti e dei NodeView LIBERI (non i
@@ -293,6 +295,8 @@ namespace CircuitLab {
 		fnGetDecimationFactor m_onGetDecimationFactor;
 		fnGetMaxFrequency m_onGetMaxFrequency;
 		fnPushUndoSnapshot m_onPushUndoSnapshot;
+		// Cattura lo stato PRIMA di un gesto che lo modifica (vedi Application::PushUndoSnapshot)
+		void PushUndo() { if (m_onPushUndoSnapshot) m_onPushUndoSnapshot(); }
 		fnUndo m_onUndo;
 		fnRedo m_onRedo;
 		fnCanUndo m_onCanUndo;
@@ -317,7 +321,7 @@ namespace CircuitLab {
 		std::vector<sf::Vector2f> GetTerminalPositionbyCompId(int compId) const;
 
 		// Restituisce il NodeView con l'ID dato (lancia eccezione se non trovato)
-		NodeView GetNodeViewById(int nodeViewId) const;
+		const NodeView &GetNodeViewById(int nodeViewId) const;
 
 		// Converte una posizione in pixel della finestra in coordinate mondo
 		// (tenendo conto di zoom e spostamento della vista), arrotondata all'intero.
@@ -523,7 +527,7 @@ namespace CircuitLab {
 
 		bool IsWindowOpen() const { return m_window.isOpen(); }
 
-		void UpdateSimulation(SimulationOutput output) { m_simulationOutput = output; }
+		void UpdateSimulation(SimulationOutput output) { m_simulationOutput = std::move(output); }
 
 		// Ricostruisce m_linkParticlesList in base al numero di particelle da mostrare per ogni filo
 		void CreateLinkParticlesList();

@@ -86,6 +86,16 @@ namespace CircuitLab {
 		int nodeViewId = -1;	// ID del nodeView selezionato (-1 se nessuno)
 		SelectionState state = SelectionState::none;
 		sf::Vector2f clickPos;
+
+		// Nessuna selezione (clickPos resta: serve solo mentre si trascina)
+		void Reset()
+		{
+			compId = -1;
+			terminalIndex = -1;
+			linkId = -1;
+			nodeViewId = -1;
+			state = SelectionState::none;
+		}
 	};
 
 	// Usata per l'animazione delle particelle di corrente (stile Falstad) lungo un filo:
