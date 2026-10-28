@@ -49,7 +49,7 @@
     <!-- Percorsi relativi a questo file: il progetto si compila anche da solo, senza la soluzione -->
     <OutDir>$(MSBuildThisFileDirectory)..\bin\tests\$(Configuration)\</OutDir>
     <IntDir>$(MSBuildThisFileDirectory)..\obj\tests\$(Configuration)\</IntDir>
-    <IncludePath>$(MSBuildThisFileDirectory);$(MSBuildThisFileDirectory)..\include;$(MSBuildThisFileDirectory)..\external\eigen;$(MSBuildThisFileDirectory)..\external\nlohmann-json\include;$(MSBuildThisFileDirectory)..\external\catch2;$(IncludePath)</IncludePath>
+    <IncludePath>$(MSBuildThisFileDirectory);$(MSBuildThisFileDirectory)..\include;$(MSBuildThisFileDirectory)..\external\eigen;$(MSBuildThisFileDirectory)..\external\nlohmann-json\include;$(MSBuildThisFileDirectory)..\external\catch2;$(MSBuildThisFileDirectory)..\external\SFML\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -88,7 +88,11 @@
     <ClCompile Include="test_circuit.cpp" />
     <ClCompile Include="test_dc_operating_point.cpp" />
     <ClCompile Include="test_nonlinear_solver.cpp" />
+    <ClCompile Include="test_serialization.cpp" />
     <ClCompile Include="test_transistor.cpp" />
+    <ClCompile Include="test_wire_graph.cpp" />
+    <!-- WireGraph (topologia dei fili della UI) usa solo sf::Vector2f, che e' solo header: niente librerie SFML -->
+    <ClCompile Include="..\src\ui\WireGraph.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TestSupport.h" />

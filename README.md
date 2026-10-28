@@ -91,7 +91,7 @@ git submodule update --init --recursive
 I test (Catch2) coprono il nucleo di simulazione, senza interfaccia grafica: modello del
 transistor NPN/PNP in tutte le regioni (confrontato con una soluzione indipendente delle
 equazioni di Ebers-Moll), convergenza di Newton su circuiti difficili (trigger di Schmitt,
-amplificatore, multivibratore astabile), punto di lavoro DC e circuiti lineari.
+amplificatore, multivibratore astabile), punto di lavoro DC e circuiti lineari. Provano anche la topologia dei fili (`WireGraph`) e il salvataggio JSON dei componenti.
 
 ```bash
 msbuild CircuitLab.slnx /p:Configuration=Release /p:Platform=x64
@@ -100,7 +100,7 @@ bin\tests\Release\CircuitLabTests.exe
 
 Il nucleo (circuito, solver, componenti) è la libreria statica `CircuitLabCore`, referenziata
 sia dall'applicazione sia dai test: i sorgenti sono elencati e compilati una volta sola. Si può
-compilare anche solo `tests/CircuitLabTests.vcxproj`, che non richiede SFML. Conviene lanciare i
+compilare anche solo `tests/CircuitLabTests.vcxproj`, che non collega SFML (usa solo i suoi header, per `sf::Vector2f`). Conviene lanciare i
 test in `Release`: in `Debug` Eigen non è ottimizzato e la suite impiega alcuni minuti invece di
 qualche secondo. Opzioni utili: `CircuitLabTests.exe "[transistor]"` esegue solo i test con quell'etichetta
 (`[solver]`, `[dc]`, `[circuit]`...), `--list-tests` li elenca. Ogni bug corretto dovrebbe

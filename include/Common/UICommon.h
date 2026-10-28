@@ -1,5 +1,7 @@
 #pragma once
-#include <SFML/Graphics.hpp>
+#include <vector>
+
+#include <SFML/System/Vector2.hpp>
 
 namespace CircuitLab {
 
