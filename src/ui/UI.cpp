@@ -2909,6 +2909,22 @@ int CircuitLab::UI::AddBusLinkView(int sourceNodeViewId, int targetNodeViewId)
 	return m_graph.AddBusEdge(sourceNodeViewId, targetNodeViewId);
 }
 
+int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position, bool manual, int anchorCompId, int anchorTermIndex, bool attached)
+{
+	// Un NodeView agganciato sta per definizione sul suo terminale: lo si
+	// riallinea alla posizione attuale invece di fidarsi di quella salvata, che
+	// nei file vecchi può essere quella di quando il terminale era disegnato
+	// altrove (vedi GetRotatedTerminalPos). Le viste dei componenti sono già state
+	// create a questo punto del caricamento (IOManager::Deserialize, passo 2).
+	if (attached && anchorCompId != -1)
+	{
+		const std::vector<sf::Vector2f> terminals = GetTerminalPositionbyCompId(anchorCompId);
+		if (anchorTermIndex >= 0 && anchorTermIndex < static_cast<int>(terminals.size()))
+			position = terminals[anchorTermIndex];
+	}
+	return m_graph.AddNodeView(nodeId, position, manual, anchorCompId, anchorTermIndex, attached);
+}
+
 void CircuitLab::UI::ConvertLegacyNodeViews()
 {
 	m_graph.ConvertLegacy();
