@@ -25,11 +25,6 @@ namespace CircuitLab {
 			const std::map<int, int> &voltageSourceMap,
 			double h) override;
 
-		void StampVector(Eigen::VectorXd &B,
-			const std::map<int, int> &nodeMap,
-			const std::map<int, int> &voltageSourceMap,
-			const StampContext &ctx) override;
-
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;
 		std::map<ComponentValue, double> GetValues() const override;

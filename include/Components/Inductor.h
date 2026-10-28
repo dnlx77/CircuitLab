@@ -40,7 +40,8 @@ namespace CircuitLab {
 
 		// Aggiorna la corrente memorizzata: i(t) = Geq*(v1-v2) + i(t-h),
 		// da usare come i(t-h) nel prossimo StampVector.
-		void UpdateState(double v1, double v2) override;
+		bool HasMemory() const override { return true; }
+		void UpdateState(const std::vector<double> &terminalVoltages) override;
 
 		// Conduttanza equivalente e corrente memorizzata al passo precedente
 		// (per il calcolo della corrente in Application::SimulateLocked, prima di UpdateState).

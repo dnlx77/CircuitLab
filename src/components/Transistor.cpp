@@ -2,6 +2,7 @@
 #include <cmath>
 
 #include "Components/Transistor.h"
+#include "Components/Junction.h"
 #include "Common/ComponentType.h"
 
 CircuitLab::Transistor::Transistor(double saturationCurrent, double forwardBeta, bool pnp) :
@@ -13,46 +14,6 @@ CircuitLab::Transistor::Transistor(double saturationCurrent, double forwardBeta,
 	m_lastGpi(0.0), m_lastGmu(0.0), m_lastGm(0.0), m_lastGo(0.0),
 	m_lastIBeq(0.0), m_lastICeq(0.0)
 {}
-
-// Il transistor non ha parte lineare: tutto è nella parte non lineare
-// (StampNonlinear), ristampata ad ogni iterazione di Newton.
-void CircuitLab::Transistor::StampMatrix(Eigen::MatrixXd &A,
-	const std::map<int, int> &nodeMap,
-	const std::map<int, int> &voltageSourceMap,
-	double h)
-{
-	(void)A;
-	(void)nodeMap;
-	(void)voltageSourceMap;
-	(void)h;
-}
-
-void CircuitLab::Transistor::StampVector(Eigen::VectorXd &B,
-	const std::map<int, int> &nodeMap,
-	const std::map<int, int> &voltageSourceMap,
-	const StampContext &ctx)
-{
-	(void)B;
-	(void)nodeMap;
-	(void)voltageSourceMap;
-	(void)ctx;
-}
-
-// pnjlim (SPICE), identico a Diode::LimitVoltage — vedi lì per la spiegazione.
-double CircuitLab::Transistor::LimitVoltage(double vNew, double vOld, double vt, double vCrit)
-{
-	if (vNew > vCrit && std::fabs(vNew - vOld) > 2.0 * vt)
-	{
-		if (vOld > 0.0)
-		{
-			double arg = 1.0 + (vNew - vOld) / vt;
-			vNew = (arg > 0.0) ? vOld + vt * std::log(arg) : vCrit;
-		}
-		else
-			vNew = vt * std::log(vNew / vt);
-	}
-	return vNew;
-}
 
 // Linearizzazione di Newton attorno a (VBE, VBC): modello companion standard
 // di un BJT (senza effetto Early) — vedi la spiegazione in Transistor.h.
@@ -72,16 +33,16 @@ bool CircuitLab::Transistor::StampNonlinear(Eigen::MatrixXd &A,
 	const std::map<int, int> &nodeMap,
 	const Eigen::VectorXd &x)
 {
-	int n0 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1; // base
-	int n1 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1; // collettore
-	int n2 = (GetTerminals()[2].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[2].GetNodeId()) : -1; // emettitore
+	const int n0 = MatrixIndex(0, nodeMap); // base
+	const int n1 = MatrixIndex(1, nodeMap); // collettore
+	const int n2 = MatrixIndex(2, nodeMap); // emettitore
 
-	double vBase = (n0 >= 0) ? x[n0] : 0.0;
-	double vColl = (n1 >= 0) ? x[n1] : 0.0;
-	double vEmit = (n2 >= 0) ? x[n2] : 0.0;
+	const double vBase = VoltageAt(x, n0);
+	const double vColl = VoltageAt(x, n1);
+	const double vEmit = VoltageAt(x, n2);
 
 	const double vt = THERMAL_VOLTAGE;
-	const double vCrit = vt * std::log(vt / (std::sqrt(2.0) * m_saturationCurrent));
+	const double vCrit = CriticalVoltage(vt, m_saturationCurrent);
 
 	// Tensioni nel riferimento "NPN equivalente" (specchiate per un PNP)
 	const double vbeRaw = m_polarity * (vBase - vEmit);
@@ -92,8 +53,8 @@ bool CircuitLab::Transistor::StampNonlinear(Eigen::MatrixXd &A,
 	m_lastVbe = vbe;
 	m_lastVbc = vbc;
 
-	const double eF = std::exp(std::min(vbe / vt, MAX_EXPONENT));
-	const double eR = std::exp(std::min(vbc / vt, MAX_EXPONENT));
+	const double eF = LimitedExp(vbe / vt);
+	const double eR = LimitedExp(vbc / vt);
 	const double iF = m_saturationCurrent * (eF - 1.0);
 	const double iR = m_saturationCurrent * (eR - 1.0);
 	const double gF = m_saturationCurrent / vt * eF; // dIF/dVBE
@@ -119,18 +80,14 @@ bool CircuitLab::Transistor::StampNonlinear(Eigen::MatrixXd &A,
 	// GMIN solo sui due rami "resistivi" (base-emettitore, base-collettore):
 	// evita che base/collettore/emettitore restino isolati a transistor spento,
 	// esattamente come per il Diodo. Non contribuisce a iBeq/iCeq (è già lineare).
-	const double gpiFull = gpi + GMIN;
-	const double gmuFull = gmu + GMIN;
+	const double gpiFull = gpi + JUNCTION_GMIN;
+	const double gmuFull = gmu + JUNCTION_GMIN;
 
 	// gpi: "resistore" base(n0)-emettitore(n2)
-	if (n0 >= 0) A(n0, n0) += gpiFull;
-	if (n2 >= 0) A(n2, n2) += gpiFull;
-	if (n0 >= 0 && n2 >= 0) { A(n0, n2) -= gpiFull; A(n2, n0) -= gpiFull; }
+	StampConductance(A, n0, n2, gpiFull);
 
 	// gmu: "resistore" base(n0)-collettore(n1)
-	if (n0 >= 0) A(n0, n0) += gmuFull;
-	if (n1 >= 0) A(n1, n1) += gmuFull;
-	if (n0 >= 0 && n1 >= 0) { A(n0, n1) -= gmuFull; A(n1, n0) -= gmuFull; }
+	StampConductance(A, n0, n1, gmuFull);
 
 	// gm: generatore pilotato collettore(n1)->emettitore(n2), pilotato da VBE (n0,n2)
 	if (n1 >= 0 && n0 >= 0) A(n1, n0) += gm;
@@ -165,23 +122,15 @@ bool CircuitLab::Transistor::StampNonlinear(Eigen::MatrixXd &A,
 // linearizzazione con quelle vere di Ebers-Moll alla nuova soluzione x.
 bool CircuitLab::Transistor::HasConverged(const std::map<int, int> &nodeMap, const Eigen::VectorXd &x) const
 {
-	int n0 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
-	int n1 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
-	int n2 = (GetTerminals()[2].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[2].GetNodeId()) : -1;
-
-	const double vbe = ((n0 >= 0) ? x[n0] : 0.0) - ((n2 >= 0) ? x[n2] : 0.0);
-	const double vbc = ((n0 >= 0) ? x[n0] : 0.0) - ((n1 >= 0) ? x[n1] : 0.0);
+	const double vBase = VoltageAt(x, MatrixIndex(0, nodeMap));
+	const double vbe = vBase - VoltageAt(x, MatrixIndex(2, nodeMap));
+	const double vbc = vBase - VoltageAt(x, MatrixIndex(1, nodeMap));
 
 	const auto currents = Currents(vbe, vbc);
 	const double iBpredicted = m_lastGpi * vbe + m_lastGmu * vbc + m_lastIBeq;
 	const double iCpredicted = m_lastGm * vbe + m_lastGo * vbc + m_lastICeq;
 
-	constexpr double CURRENT_ABS_TOL = 1e-9;
-	constexpr double CURRENT_REL_TOL = 1e-3;
-
-	bool baseOk = std::abs(currents.ib - iBpredicted) <= CURRENT_ABS_TOL + CURRENT_REL_TOL * std::max(std::abs(currents.ib), std::abs(iBpredicted));
-	bool collOk = std::abs(currents.ic - iCpredicted) <= CURRENT_ABS_TOL + CURRENT_REL_TOL * std::max(std::abs(currents.ic), std::abs(iCpredicted));
-	return baseOk && collOk;
+	return CurrentsAgree(currents.ib, iBpredicted) && CurrentsAgree(currents.ic, iCpredicted);
 }
 
 CircuitLab::Transistor::TerminalCurrents CircuitLab::Transistor::Currents(double vbe, double vbc) const
@@ -189,8 +138,8 @@ CircuitLab::Transistor::TerminalCurrents CircuitLab::Transistor::Currents(double
 	// Solo le correnti di giunzione: GMIN è un artificio numerico (vedi Diode::Current).
 	// Si calcola nel riferimento NPN equivalente e si riporta il segno ai
 	// terminali veri.
-	const double iF = m_saturationCurrent * (std::exp(std::min(m_polarity * vbe / THERMAL_VOLTAGE, MAX_EXPONENT)) - 1.0);
-	const double iR = m_saturationCurrent * (std::exp(std::min(m_polarity * vbc / THERMAL_VOLTAGE, MAX_EXPONENT)) - 1.0);
+	const double iF = m_saturationCurrent * (LimitedExp(m_polarity * vbe / THERMAL_VOLTAGE) - 1.0);
+	const double iR = m_saturationCurrent * (LimitedExp(m_polarity * vbc / THERMAL_VOLTAGE) - 1.0);
 
 	const double ib = m_polarity * (iF / m_forwardBeta + iR / REVERSE_BETA);
 	const double ic = m_polarity * ((iF - iR) - iR / REVERSE_BETA);

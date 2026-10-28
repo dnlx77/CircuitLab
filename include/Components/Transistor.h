@@ -1,5 +1,6 @@
 #pragma once
 #include "Component.h"
+#include "Junction.h"
 
 namespace CircuitLab {
 
@@ -42,18 +43,11 @@ namespace CircuitLab {
 	// già nella resistenza gmu) — vedi StampNonlinear.
 	class Transistor : public Component {
 	private:
-		// Tensione termica kT/q a ~300 K (stessa costante del Diodo)
-		static constexpr double THERMAL_VOLTAGE = 0.02585;
 		// Guadagno di corrente inverso: conta solo in saturazione (entrambe le
 		// giunzioni polarizzate diretto). Fisso, non esposto in UI — vedi sopra.
 		static constexpr double REVERSE_BETA = 1.0;
-		// Stesso ruolo di Diode::GMIN: evita nodi isolati (transistor spento) e
-		// un rapporto tra il termine più grande e il più piccolo della matrice
-		// troppo estremo.
-		static constexpr double GMIN = 1e-9;
-		// Limite sull'argomento dell'esponenziale, per non andare in overflow
-		// quando Newton propone tensioni assurde nelle prime iterazioni
-		static constexpr double MAX_EXPONENT = 80.0;
+		// Costanti della giunzione (tensione termica, GMIN, limite dell'esponenziale),
+		// limitatore di tensione (pnjlim) e test di convergenza: vedi Junction.h
 
 		double m_saturationCurrent; // Is, comune alle due giunzioni (Ampere)
 		double m_forwardBeta;       // BF (hFE), adimensionale
@@ -69,12 +63,6 @@ namespace CircuitLab {
 		double m_lastGpi, m_lastGmu, m_lastGm, m_lastGo;
 		double m_lastIBeq, m_lastICeq;
 
-		// pnjlim (SPICE), identico a Diode::LimitVoltage: impedisce che un
-		// singolo passo di Newton faccia salire la tensione di giunzione di
-		// molte volte Vt, il che darebbe una corrente/conduttanza esponenzialmente
-		// enorme. Applicato separatamente a VBE e VBC.
-		static double LimitVoltage(double vNew, double vOld, double vt, double vCrit);
-
 	public:
 		// Correnti nei tre terminali (convenzione MNA: positive ENTRANTI nel
 		// componente dal terminale, come per gli altri componenti multi-terminale
@@ -84,16 +72,6 @@ namespace CircuitLab {
 		Transistor(double saturationCurrent = 1e-14, double forwardBeta = 100.0, bool pnp = false);
 
 		// Nessun contributo statico: tutto il transistor è nella parte non lineare
-		void StampMatrix(Eigen::MatrixXd &A,
-			const std::map<int, int> &nodeMap,
-			const std::map<int, int> &voltageSourceMap,
-			double h) override;
-
-		void StampVector(Eigen::VectorXd &B,
-			const std::map<int, int> &nodeMap,
-			const std::map<int, int> &voltageSourceMap,
-			const StampContext &ctx) override;
-
 		bool IsNonlinear() const override { return true; }
 
 		// Linearizza il transistor attorno a (VBE, VBC) letti da x (soluzione

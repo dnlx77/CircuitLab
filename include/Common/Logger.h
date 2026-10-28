@@ -56,7 +56,6 @@ namespace CircuitLab {
 
 		std::string_view LevelToString(LogLevel level);
 	public:
-		~Logger();
 		static Logger &GetInstance() {
 			static Logger instance;
 			return instance;

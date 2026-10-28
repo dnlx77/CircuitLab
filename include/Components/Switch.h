@@ -7,6 +7,8 @@ namespace CircuitLab {
 	// (conduttanza altissima), aperto come un circuito aperto (conduttanza
 	// pressoché nulla). A differenza di condensatore/induttore non ha memoria
 	// né dipendenza dal tempo: StampVector non fa nulla, esattamente come Resistor.
+	// Nessun valore continuo da modificare nel pannello delle proprietà: lo stato si
+	// cambia solo con click o tasto (vedi UI).
 	// Lo stato (aperto/chiuso) cambia solo su comando esterno (click o tasto in UI,
 	// vedi Circuit::ToggleSwitch), non per effetto della simulazione.
 	class Switch : public Component {
@@ -24,11 +26,6 @@ namespace CircuitLab {
 			const std::map<int, int> &voltageSourceMap,
 			double h) override;
 
-		void StampVector(Eigen::VectorXd &B,
-			const std::map<int, int> &nodeMap,
-			const std::map<int, int> &voltageSourceMap,
-			const StampContext &ctx) override;
-
 		// Inverte lo stato e ricalcola la conduttanza. Chi lo chiama (Circuit)
 		// deve invalidare il circuito, perché la matrice va ristampata.
 		void ToggleSwitch() override;
@@ -41,7 +38,5 @@ namespace CircuitLab {
 
 		void SaveSpecificData(nlohmann::json &j) const override;
 		void LoadSpecificData(const nlohmann::json &j) override;
-		std::map<ComponentValue, double> GetValues() const override;
-		void SetValues(const std::map<ComponentValue, double> &values) override;
 	};
 }

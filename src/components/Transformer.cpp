@@ -20,11 +20,9 @@ CircuitLab::Transformer::Transformer(double primaryInductance, double secondaryI
 // doppio bipolo reciproco.
 void CircuitLab::Transformer::StampMatrix(Eigen::MatrixXd &A,
 	const std::map<int, int> &nodeMap,
-	const std::map<int, int> &voltageSourceMap,
+	const std::map<int, int> &,
 	double h)
 {
-	(void)voltageSourceMap;
-
 	const double l1 = std::max(m_l1, MIN_INDUCTANCE);
 	const double l2 = std::max(m_l2, MIN_INDUCTANCE);
 	const double k = std::clamp(m_k, 0.0, MAX_COUPLING);
@@ -48,20 +46,15 @@ void CircuitLab::Transformer::StampMatrix(Eigen::MatrixXd &A,
 		m_g12 = -h * m / det;
 	}
 
-	int n0 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
-	int n1 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
-	int n2 = (GetTerminals()[2].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[2].GetNodeId()) : -1;
-	int n3 = (GetTerminals()[3].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[3].GetNodeId()) : -1;
+	const int n0 = MatrixIndex(0, nodeMap);
+	const int n1 = MatrixIndex(1, nodeMap);
+	const int n2 = MatrixIndex(2, nodeMap);
+	const int n3 = MatrixIndex(3, nodeMap);
 
 	// Parte "propria": i1 = G11*v1 (primario), i2 = G22*v2 (secondario) — stesso
-	// pattern a 4 termini di Resistor::StampMatrix, applicato due volte.
-	if (n0 >= 0) A(n0, n0) += m_g11;
-	if (n1 >= 0) A(n1, n1) += m_g11;
-	if (n0 >= 0 && n1 >= 0) { A(n0, n1) -= m_g11; A(n1, n0) -= m_g11; }
-
-	if (n2 >= 0) A(n2, n2) += m_g22;
-	if (n3 >= 0) A(n3, n3) += m_g22;
-	if (n2 >= 0 && n3 >= 0) { A(n2, n3) -= m_g22; A(n3, n2) -= m_g22; }
+	// pattern di Resistor::StampMatrix, applicato due volte.
+	StampConductance(A, n0, n1, m_g11);
+	StampConductance(A, n2, n3, m_g22);
 
 	// Parte mutua: il contributo di v2 a i1 (righe n0/n1) e, simmetricamente,
 	// il contributo di v1 a i2 (righe n2/n3). i1 esce da n0 ed entra in n1,
@@ -84,25 +77,15 @@ void CircuitLab::Transformer::StampMatrix(Eigen::MatrixXd &A,
 // la parte mutua è già interamente nella matrice G (StampMatrix).
 void CircuitLab::Transformer::StampVector(Eigen::VectorXd &B,
 	const std::map<int, int> &nodeMap,
-	const std::map<int, int> &voltageSourceMap,
+	const std::map<int, int> &,
 	const StampContext &ctx)
 {
-	(void)voltageSourceMap;
-
-	int n0 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
-	int n1 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
-	int n2 = (GetTerminals()[2].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[2].GetNodeId()) : -1;
-	int n3 = (GetTerminals()[3].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[3].GetNodeId()) : -1;
-
 	// DC: nessuna memoria del passo precedente
 	const double i1 = (ctx.h == DC_ANALYSIS_STEP) ? 0.0 : m_i1Prev;
 	const double i2 = (ctx.h == DC_ANALYSIS_STEP) ? 0.0 : m_i2Prev;
 
-	if (n0 >= 0) B[n0] -= i1;
-	if (n1 >= 0) B[n1] += i1;
-
-	if (n2 >= 0) B[n2] -= i2;
-	if (n3 >= 0) B[n3] += i2;
+	StampCurrent(B, MatrixIndex(0, nodeMap), MatrixIndex(1, nodeMap), -i1);
+	StampCurrent(B, MatrixIndex(2, nodeMap), MatrixIndex(3, nodeMap), -i2);
 }
 
 std::pair<double, double> CircuitLab::Transformer::BranchCurrents(double vPrimary, double vSecondary) const
@@ -112,8 +95,11 @@ std::pair<double, double> CircuitLab::Transformer::BranchCurrents(double vPrimar
 	return { i1, i2 };
 }
 
-void CircuitLab::Transformer::UpdateWindingState(double vPrimary, double vSecondary)
+void CircuitLab::Transformer::UpdateState(const std::vector<double> &terminalVoltages)
 {
+	const double vPrimary = terminalVoltages[0] - terminalVoltages[1];
+	const double vSecondary = terminalVoltages[2] - terminalVoltages[3];
+
 	// Stesso schema di Inductor::UpdateState, applicato a entrambi gli
 	// avvolgimenti: usa i valori VECCHI di m_i1Prev/m_i2Prev (letti qui prima
 	// dell'assegnazione) per calcolare quelli nuovi.

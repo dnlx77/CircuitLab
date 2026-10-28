@@ -61,16 +61,14 @@ namespace CircuitLab {
 
 		// Correnti dei due avvolgimenti alla tensione convergente (vPrimary,
 		// vSecondary), usando lo stato ANCORA VECCHIO (va chiamata prima di
-		// UpdateWindingState, come Inductor::GetConductance/GetPreviousCurrent
+		// UpdateState, come Inductor::GetConductance/GetPreviousCurrent
 		// usati insieme in Application::SimulateLocked).
 		std::pair<double, double> BranchCurrents(double vPrimary, double vSecondary) const;
 
 		// Aggiorna le correnti memorizzate dei due avvolgimenti, da usare come
-		// Ieq1/Ieq2 nel prossimo StampVector. Non sovrascrive il virtual
-		// Component::UpdateState (quello ha un solo v1/v2, pensato per 2
-		// terminali): qui vPrimary/vSecondary sono le tensioni dei DUE
-		// avvolgimenti, non due nodi qualsiasi.
-		void UpdateWindingState(double vPrimary, double vSecondary);
+		// Ieq1/Ieq2 nel prossimo StampVector. 4 terminali: 0/1 primario, 2/3 secondario.
+		bool HasMemory() const override { return true; }
+		void UpdateState(const std::vector<double> &terminalVoltages) override;
 
 		void ResetDynamicState() override { m_i1Prev = 0.0; m_i2Prev = 0.0; }
 		void SetStateFromDc(const std::vector<double> &terminalVoltages) override;

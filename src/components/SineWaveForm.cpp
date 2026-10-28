@@ -38,3 +38,10 @@ void CircuitLab::SineWaveForm::SaveSpecificData(nlohmann::json & j) const
 	sineWaveFormValueJson["phase"] = m_phase;
 	j["value"].push_back(sineWaveFormValueJson);
 }
+
+void CircuitLab::SineWaveForm::LoadSpecificData(const nlohmann::json &j)
+{
+	m_amplitude = j["value"][0]["amplitude"];
+	m_frequency = j["value"][0]["frequency"];
+	m_phase = j["value"][0]["phase"];
+}

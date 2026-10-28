@@ -1,9 +1,11 @@
 #pragma once
+#include <map>
 #include <string>
 #include <vector>
 #include <Eigen/Dense>
 #include <nlohmann/json.hpp>
 #include "Terminal.h"
+#include "Stamp.h"
 #include "Common/ComponentType.h"
 #include "Common/ComponentValue.h"
 
@@ -36,12 +38,11 @@ namespace CircuitLab {
 
 	// Classe base astratta per tutti i componenti elettrici.
 	// Ogni componente ha un ID univoco, un certo numero di terminali
-	// e deve implementare il metodo Stamp() per contribuire alla matrice MNA.
+	// e contribuisce alla matrice MNA con StampMatrix/StampVector (o StampNonlinear).
 	class Component {
 	protected:
 		static int s_nextId;        // Contatore globale per assegnare ID univoci
 		int m_id;                   // ID univoco di questo componente
-		int m_terminalNumber;       // Numero di terminali del componente
 		std::vector<Terminal> m_terminals; // Lista dei terminali
 		ComponentType m_componentType;
 
@@ -49,10 +50,18 @@ namespace CircuitLab {
 		virtual void SaveSpecificData(nlohmann::json &j) const = 0;
 		virtual void LoadSpecificData(const nlohmann::json &j) = 0;
 
+		// Indice di riga/colonna nella matrice MNA del nodo a cui è collegato il terminale
+		// dato (-1 se è a massa o non collegato: non ha riga e non si scrive nulla)
+		int MatrixIndex(int terminal, const std::map<int, int> &nodeMap) const
+		{
+			const int nodeId = m_terminals[terminal].GetNodeId();
+			return (nodeId > 0) ? nodeMap.at(nodeId) : -1;
+		}
+
 	public:
 		// Il costruttore alloca automaticamente il numero corretto di terminali
-		Component(int terminalNumber, ComponentType compType) : m_id(s_nextId++), m_terminalNumber(terminalNumber), m_componentType(compType) {
-			m_terminals.resize(m_terminalNumber);
+		Component(int terminalNumber, ComponentType compType) : m_id(s_nextId++), m_componentType(compType) {
+			m_terminals.resize(terminalNumber);
 		}
 		virtual ~Component() = default;
 
@@ -74,21 +83,19 @@ namespace CircuitLab {
 		// Stampa il contributo del componente nella matrice MNA (A) e nel vettore (b).
 		// nodeMap mappa nodeId -> indice di riga/colonna nella matrice.
 		// voltageSourceMap mappa componentId -> indice della riga extra per le sorgenti di tensione.
+		// Di default non contribuiscono a nulla (massa, componenti non lineari per la parte
+		// statica, componenti resistivi per quella dinamica): ogni componente sovrascrive
+		// solo la parte che gli serve. Per scrivere in A e b vedi Stamp.h e MatrixIndex().
+		//
 		// StampMatrix: parte statica (dipendente da topologia e passo di simulazione h),
 		// chiamata una sola volta, quando la matrice viene (ri)fattorizzata.
 		// h è necessario ai componenti con modello companion (es. condensatori/induttori),
 		// la cui conduttanza equivalente dipende dal passo di integrazione.
-		virtual void StampMatrix(Eigen::MatrixXd &A,
-			const std::map<int, int> &nodeMap,
-			const std::map<int, int> &voltageSourceMap,
-			double h) = 0;
+		virtual void StampMatrix(Eigen::MatrixXd &, const std::map<int, int> &, const std::map<int, int> &, double) {}
 
 		// StampVector: parte dinamica, richiamata ad ogni step di simulazione
 		// (dipende da ctx.t, quindi va aggiornata ad ogni istante).
-		virtual void StampVector(Eigen::VectorXd &B,
-			const std::map<int, int> &nodeMap,
-			const std::map<int, int> &voltageSourceMap,
-			const StampContext &ctx) = 0;
+		virtual void StampVector(Eigen::VectorXd &, const std::map<int, int> &, const std::map<int, int> &, const StampContext &) {}
 
 		// True per i componenti la cui corrente non è lineare nella tensione (es. il
 		// diodo): non possono essere stampati una volta sola in A, quindi la
@@ -102,12 +109,8 @@ namespace CircuitLab {
 		// Restituisce true se il componente ha dovuto limitare la propria tensione
 		// (in quel caso l'iterazione non può essere considerata convergita).
 		// Default: no-op, restituisce false.
-		virtual bool StampNonlinear(Eigen::MatrixXd &A,
-			Eigen::VectorXd &B,
-			const std::map<int, int> &nodeMap,
-			const Eigen::VectorXd &x)
+		virtual bool StampNonlinear(Eigen::MatrixXd &, Eigen::VectorXd &, const std::map<int, int> &, const Eigen::VectorXd &)
 		{
-			(void)A; (void)B; (void)nodeMap; (void)x;
 			return false;
 		}
 
@@ -118,9 +121,8 @@ namespace CircuitLab {
 		// È il test di convergenza di SPICE: a differenza del confronto tra due
 		// soluzioni successive non viene falsato dal rumore numerico dei nodi
 		// quasi isolati. Default: true.
-		virtual bool HasConverged(const std::map<int, int> &nodeMap, const Eigen::VectorXd &x) const
+		virtual bool HasConverged(const std::map<int, int> &, const Eigen::VectorXd &) const
 		{
-			(void)nodeMap; (void)x;
 			return true;
 		}
 
@@ -129,11 +131,17 @@ namespace CircuitLab {
 		// (la corrente incognita che scorre nel generatore).
 		virtual int GetExtraVariables() const { return 0; }
 
+		// True per i componenti con memoria di stato (condensatore, induttore,
+		// trasformatore): dopo ogni step risolto TransientStepper chiama il loro
+		// UpdateState. Gli altri non ne hanno bisogno e si saltano.
+		virtual bool HasMemory() const { return false; }
+
 		// Aggiorna lo stato interno del componente con le tensioni ai suoi terminali
-		// risolte allo step corrente (v1, v2 = tensioni del terminale 0 e 1 rispetto a ground).
-		// Usato dai componenti con memoria di stato (es. condensatori: serve la tensione
-		// del passo precedente per il modello companion). Default: no-op.
-		virtual void UpdateState(double v1, double v2) { (void)v1; (void)v2; }
+		// risolte allo step corrente (terminalVoltages: una per terminale, nello stesso
+		// ordine di GetTerminals(), rispetto a massa). Usato dai componenti con memoria
+		// (es. condensatori: serve la tensione del passo precedente per il modello
+		// companion). Default: no-op.
+		virtual void UpdateState(const std::vector<double> &) {}
 
 		// Azzera lo stato dinamico accumulato durante la simulazione (tensione/
 		// corrente del passo precedente per condensatori/induttori/trasformatore,
@@ -154,7 +162,7 @@ namespace CircuitLab {
 		// a massa. Da chiamare PRIMA che la matrice venga ristampata con il passo di
 		// integrazione (alcuni componenti usano ancora i coefficienti dell'analisi DC).
 		// Default: no-op (componenti senza memoria).
-		virtual void SetStateFromDc(const std::vector<double> &terminalVoltages) { (void)terminalVoltages; }
+		virtual void SetStateFromDc(const std::vector<double> &) {}
 
 		// Inverte lo stato aperto/chiuso. Solo lo Switch lo sovrascrive;
 		// per tutti gli altri componenti è un no-op (non ha senso "aprirli").
@@ -167,10 +175,13 @@ namespace CircuitLab {
 		// Solo i componenti con forma d'onda (es. VoltageGenerator) sovrascrivono questi;
 		// gli altri restituiscono WaveFormType::none / non fanno nulla.
 		virtual WaveFormType GetWaveFormType() const { return WaveFormType::none; }
-		virtual void SetWaveFormType(WaveFormType type) { (void)type; }
+		virtual void SetWaveFormType(WaveFormType) {}
 
-		virtual std::map<ComponentValue, double> GetValues() const = 0;
-		virtual void SetValues(const std::map<ComponentValue, double> &values) = 0;
+		// Valori modificabili dall'utente (resistenza, capacità...), mostrati nel pannello
+		// delle proprietà. Di default nessuno (massa, interruttori: lo stato si cambia
+		// con un click, non scrivendo un numero).
+		virtual std::map<ComponentValue, double> GetValues() const { return {}; }
+		virtual void SetValues(const std::map<ComponentValue, double> &) {}
 
 		// Nome breve del tipo di componente per la UI/etichette (es. "R", "V", "G")
 		static std::string ComponentTypeName(ComponentType type);

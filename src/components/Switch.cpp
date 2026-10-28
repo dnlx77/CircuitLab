@@ -16,34 +16,13 @@ void CircuitLab::Switch::SetClosed(bool closed)
 }
 
 // Identico a Resistor::StampMatrix: una conduttanza tra i nodi n1 e n2.
+// Puramente resistivo (nel senso lato: una conduttanza fissa): nessun contributo dinamico.
 void CircuitLab::Switch::StampMatrix(Eigen::MatrixXd &A,
 	const std::map<int, int> &nodeMap,
-	const std::map<int, int> &voltageSourceMap,
-	double h)
+	const std::map<int, int> &,
+	double)
 {
-	(void)voltageSourceMap;
-	(void)h;
-
-	int n1 = (GetTerminals()[0].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[0].GetNodeId()) : -1;
-	int n2 = (GetTerminals()[1].GetNodeId() > 0) ? nodeMap.at(GetTerminals()[1].GetNodeId()) : -1;
-
-	if (n1 >= 0) A(n1, n1) += m_conductance;
-	if (n2 >= 0) A(n2, n2) += m_conductance;
-
-	if (n1 >= 0 && n2 >= 0) {
-		A(n1, n2) -= m_conductance;
-		A(n2, n1) -= m_conductance;
-	}
-}
-
-// Puramente resistivo (nel senso lato: una conduttanza fissa): nessun
-// contributo dinamico, come Resistor::StampVector.
-void CircuitLab::Switch::StampVector(Eigen::VectorXd &B, const std::map<int, int> &nodeMap, const std::map<int, int> &voltageSourceMap, const StampContext &ctx)
-{
-	(void)B;
-	(void)nodeMap;
-	(void)voltageSourceMap;
-	(void)ctx;
+	StampConductance(A, MatrixIndex(0, nodeMap), MatrixIndex(1, nodeMap), m_conductance);
 }
 
 void CircuitLab::Switch::ToggleSwitch()
@@ -59,17 +38,4 @@ void CircuitLab::Switch::SaveSpecificData(nlohmann::json &j) const
 void CircuitLab::Switch::LoadSpecificData(const nlohmann::json &j)
 {
 	SetClosed(j["closed"]);
-}
-
-// Nessun valore continuo da esporre nel pannello proprietà: lo stato si
-// controlla solo con click/tasto (vedi UI), non editando un numero.
-std::map<CircuitLab::ComponentValue, double> CircuitLab::Switch::GetValues() const
-{
-	std::map<ComponentValue, double> map;
-	return map;
-}
-
-void CircuitLab::Switch::SetValues(const std::map<ComponentValue, double> &values)
-{
-	(void)values;
 }

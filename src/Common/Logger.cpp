@@ -18,12 +18,6 @@ std::string_view CircuitLab::Logger::LevelToString(LogLevel level)
 	}
 }
 
-CircuitLab::Logger::~Logger()
-{
-	if (m_fileStream.is_open())
-		m_fileStream.close();
-}
-
 void CircuitLab::Logger::Log(std::string logMsg, LogLevel level)
 {
 	if (level >= m_minLevel)
