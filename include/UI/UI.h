@@ -54,8 +54,8 @@ namespace CircuitLab {
 		using fnSetChannelActive = std::function<void(int, bool)>;
 		using fnRemoveChannel = std::function<void(int)>;
 		using fnGetHSim = std::function<double()>;
-		using fnSetHSim = std::function<void(int)>;
-		using fnSetSimSpeed = std::function<void(int)>;
+		using fnSetHSim = std::function<void(double seconds)>;
+		using fnSetSimSpeed = std::function<void(double multiplier)>;
 		using fnSetStartFromDc = std::function<void(bool)>;
 		using fnRestartFromDc = std::function<void()>;
 		using fnSetWindowTime = std::function<void(double)>;

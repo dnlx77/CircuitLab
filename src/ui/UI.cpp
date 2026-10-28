@@ -17,6 +17,7 @@
 #include <filesystem>
 #include "Core/Vector2.h"
 #include "Common/Logger.h"
+#include "Common/SimulationSettings.h"
 
 namespace {
 	// Nome e cartella di un percorso in UTF-8 (come arrivano dalla finestra di scelta file)
@@ -1093,19 +1094,6 @@ void CircuitLab::UI::BuildPaletteIcons()
 }
 
 namespace {
-	// Nomi dei passi di tempo e delle velocità (stesso ordine di TIMESTEP_VALUES e SPEED_VALUES
-	// in Application.cpp: la UI passa solo l'indice)
-	constexpr const char *TIMESTEP_NAMES[] = {
-		"1 s", "100 ms", "10 ms", "1 ms",
-		"100 us", "10 us", "1 us", "100 ns", "10 ns", "1 ns", "100 ps", "10 ps", "1 ps"
-	};
-	constexpr int TIMESTEP_COUNT = static_cast<int>(std::size(TIMESTEP_NAMES));
-
-	constexpr const char *SPEED_NAMES[] = {
-		"0.001x", "0.01x", "0.1x", "1x", "2x", "5x", "10x", "20x", "50x", "100x", "Massima"
-	};
-	constexpr int SPEED_COUNT = static_cast<int>(std::size(SPEED_NAMES));
-
 	// Messaggio per un esito di simulazione che non è un successo (nullptr se va tutto bene)
 	const char *SimulationMessage(CircuitLab::SimulationResult result)
 	{
@@ -1221,21 +1209,21 @@ void CircuitLab::UI::DrawMainMenuBar()
 		ImGui::Separator();
 		if (ImGui::BeginMenu("Passo di tempo"))
 		{
-			for (int i = 0; i < TIMESTEP_COUNT; i++)
-				if (ImGui::MenuItem(TIMESTEP_NAMES[i], nullptr, m_hSimIndex == i))
+			for (std::size_t i = 0; i < TIMESTEP_COUNT; i++)
+				if (ImGui::MenuItem(TIMESTEPS[i].name, nullptr, m_hSimIndex == static_cast<int>(i)))
 				{
-					m_hSimIndex = i;
-					m_onSetHSim(m_hSimIndex);
+					m_hSimIndex = static_cast<int>(i);
+					m_onSetHSim(TIMESTEPS[i].seconds);
 				}
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Velocita'"))
 		{
-			for (int i = 0; i < SPEED_COUNT; i++)
-				if (ImGui::MenuItem(SPEED_NAMES[i], nullptr, m_simSpeedIndex == i))
+			for (std::size_t i = 0; i < SPEED_COUNT; i++)
+				if (ImGui::MenuItem(SPEEDS[i].name, nullptr, m_simSpeedIndex == static_cast<int>(i)))
 				{
-					m_simSpeedIndex = i;
-					m_onSetSimSpeed(m_simSpeedIndex);
+					m_simSpeedIndex = static_cast<int>(i);
+					m_onSetSimSpeed(SPEEDS[i].multiplier);
 				}
 			ImGui::EndMenu();
 		}
@@ -1337,16 +1325,32 @@ void CircuitLab::UI::DrawToolbar()
 	ImGui::TextUnformatted("Passo");
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(90.0f);
-	if (ImGui::Combo("##timestep", &m_hSimIndex, TIMESTEP_NAMES, TIMESTEP_COUNT))
-		m_onSetHSim(m_hSimIndex);
+	if (ImGui::BeginCombo("##timestep", TIMESTEPS[m_hSimIndex].name))
+	{
+		for (std::size_t i = 0; i < TIMESTEP_COUNT; i++)
+			if (ImGui::Selectable(TIMESTEPS[i].name, m_hSimIndex == static_cast<int>(i)))
+			{
+				m_hSimIndex = static_cast<int>(i);
+				m_onSetHSim(TIMESTEPS[i].seconds);
+			}
+		ImGui::EndCombo();
+	}
 
 	ImGui::SameLine(0.0f, 16.0f);
 	ImGui::AlignTextToFramePadding();
 	ImGui::TextUnformatted("Velocita'");
 	ImGui::SameLine();
 	ImGui::SetNextItemWidth(90.0f);
-	if (ImGui::Combo("##speed", &m_simSpeedIndex, SPEED_NAMES, SPEED_COUNT))
-		m_onSetSimSpeed(m_simSpeedIndex);
+	if (ImGui::BeginCombo("##speed", SPEEDS[m_simSpeedIndex].name))
+	{
+		for (std::size_t i = 0; i < SPEED_COUNT; i++)
+			if (ImGui::Selectable(SPEEDS[i].name, m_simSpeedIndex == static_cast<int>(i)))
+			{
+				m_simSpeedIndex = static_cast<int>(i);
+				m_onSetSimSpeed(SPEEDS[i].multiplier);
+			}
+		ImGui::EndCombo();
+	}
 
 	ImGui::End();
 }
@@ -2732,8 +2736,8 @@ CircuitLab::UI::UI(unsigned int width, unsigned int height, const std::string &t
 	m_title{ title },
 	m_showOscilloscope{ false },
 	m_windowTime{ 1.0 },
-	m_hSimIndex{ 3 },
-	m_simSpeedIndex{ 3 }, // 1x (vedi SPEED_VALUES in Application.cpp)
+	m_hSimIndex{ static_cast<int>(DEFAULT_TIMESTEP_INDEX) },
+	m_simSpeedIndex{ static_cast<int>(DEFAULT_SPEED_INDEX) },
 	m_window{ sf::VideoMode({ m_width, m_height }), m_title }
 {
 	if (!ImGui::SFML::Init(m_window))
