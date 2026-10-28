@@ -50,7 +50,7 @@ namespace CircuitLab {
 		// verticale (resistore, condensatore... sono simmetrici e non hanno nulla da specchiare)
 		bool IsMirrorable() const
 		{
-			for (const auto &offset : GetComponetDesign().terminalOffset)
+			for (const auto &offset : GetComponentDesign().terminalOffset)
 				if (offset.x != 0)
 					return true;
 			return false;
@@ -60,7 +60,7 @@ namespace CircuitLab {
 		ComponentType GetComponentType() const { return m_type; }
 
 		// Restituisce il design grafico del tipo di questo componente
-		const ComponentDesign &GetComponetDesign() const { return s_design.at(m_type); }
+		const ComponentDesign &GetComponentDesign() const { return s_design.at(m_type); }
 
 		// Disegna il simbolo schematico del componente (resistenza, condensatore,
 		// massa, generatore, induttore, interruttore) in coordinate locali (origine
@@ -77,9 +77,6 @@ namespace CircuitLab {
 		void SetPosition(const Vec2 &position) { m_position = position; }
 		void SetRotation(float rotation) { m_rotation = rotation; }
 		void SetMirrored(bool mirrored) { m_mirrored = mirrored; }
-		void SetName(const std::string &name) { m_name = name; }
-		void SetComponentLink(int link) { m_componentLink = link; }
-		void SetComponentType(ComponentType type) { m_type = type; }
 
 		void Save(nlohmann::json &j) const;
 	};

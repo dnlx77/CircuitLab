@@ -46,7 +46,6 @@ namespace CircuitLab {
 		using fnIsSwitchClosed = std::function<bool(int compId)>;
 		using fnSetSimulationStatus = std::function<void(const SimulationStatus status)>;
 		using fnGetSimulationStatus = std::function<SimulationStatus()>;
-		using fnGetComponentsByNodeId = std::function<std::vector<int>(int nodeId)>;
 		using fnGetComponentTypeById = std::function<ComponentType(int compId)>;
 		using fnGetWaveFormType = std::function<WaveFormType(int)>;
 		using fnSetWaveFormType = std::function<void(int, WaveFormType)>;
@@ -78,14 +77,14 @@ namespace CircuitLab {
 		
 	private:
 		unsigned int m_width;   // Larghezza della finestra (pixel)
-		unsigned int m_heigth;  // Altezza della finestra (pixel)
+		unsigned int m_height;  // Altezza della finestra (pixel)
 		std::string m_title;    // Titolo della finestra
 		sf::Font m_font;        // Font usato per le etichette dei componenti sul canvas
 		sf::View m_view;
 
 
 		// Costanti di configurazione UI
-		static constexpr int CLICK_TOLLERANCE = 7;         // Tolleranza click sui terminali (pixel)
+		static constexpr int CLICK_TOLERANCE = 7;         // Tolleranza click sui terminali (pixel)
 		// Distanza minima (pixel di schermo) perché il trascinamento di un NodeView
 		// sia considerato tale, invece che il tremolio inevitabile di un semplice
 		// click. Senza questa soglia, un right-click che selezionava un pallino
@@ -94,8 +93,6 @@ namespace CircuitLab {
 		// col terminale senza che l'utente se ne accorgesse (bug osservato: un filo
 		// rimasto indietro dopo aver spostato di nuovo il componente).
 		static constexpr float NODE_DRAG_THRESHOLD = 4.0f;
-		static constexpr double DEFAULT_RESISTANCE = 1.0;  // Resistenza di default (Ohm)
-		static constexpr double DEFAULT_VOLTAGE = 5.0;     // Tensione di default (Volt)
 		static constexpr float DEFAULT_ROTATION = 0.0f;    // Rotazione di default (gradi)
 		static constexpr int OUTLINE_THICKNESS = 2;        // Spessore outline selezione (pixel)
 		static constexpr int TEXT_COMPONENT_OFFSET = 15;   // Offset orizzontale etichetta rispetto al centro del componente (pixel)
@@ -110,7 +107,7 @@ namespace CircuitLab {
 		static constexpr int PARTICLE_SIZE = 5;
 		static constexpr int PARTICLE_SPACING_FACTOR = 3;
 		static constexpr float PARTICLE_SPEED_SCALE = 0.1f;
-		// Impostazioni dei pallini della corrente, dal pannello laterale: visibilità e
+		// Impostazioni dei pallini della corrente, dal menu Visualizza: visibilità e
 		// moltiplicatore di velocità (1 = PARTICLE_SPEED_SCALE, valori più bassi rallentano)
 		bool m_showParticles = true;
 		float m_particleSpeed = 1.0f;
@@ -224,7 +221,7 @@ namespace CircuitLab {
 		double m_frozenTMax = 0.0;
 		std::vector<OscilloscopeChannel> m_frozenChannels;
 
-		SelecetedComponent m_selectedComponent; // Componente/terminale attualmente selezionato
+		SelectedComponent m_selectedComponent; // Componente/terminale attualmente selezionato
 
 		std::vector<ComponentView> m_componentViewList; // Lista delle viste grafiche dei componenti
 		// Topologia dei collegamenti (NodeView e fili): vive in WireGraph, che ne
@@ -236,7 +233,7 @@ namespace CircuitLab {
 		unsigned int &m_linkViewIdCount = m_graph.linkViewIdCount;
 		unsigned int &m_nodeViewCount = m_graph.nodeViewCount;
 		std::unordered_map<int, double> m_linkViewCurrentList;
-		std::vector<LinkPararticles> m_linkParticlesList;
+		std::vector<LinkParticles> m_linkParticlesList;
 
 		sf::Vector2f m_compClickOffset;
 
@@ -263,7 +260,6 @@ namespace CircuitLab {
 		sf::Clock m_deltaClock;
 
 		// Callback impostati da Application
-		std::function<SimulationOutput()> m_onRunSimulation;
 		fnCircuitChange m_onCircuitChange;
 		fnCreateLink m_onCreateLink;
 		fnGetCompTerminalId m_onGetCompTerminalId; // Richiede i nodeId dei terminali al circuito
@@ -279,7 +275,6 @@ namespace CircuitLab {
 		fnIsSwitchClosed m_onIsSwitchClosed;
 		fnSetSimulationStatus m_onSetSimulationStatus;
 		fnGetSimulationStatus m_onGetSimulationStatus;
-		fnGetComponentsByNodeId m_onGetComponentsByNodeId;
 		fnGetComponentTypeById m_onGetComponentTypeById;
 		fnGetWaveFormType m_onGetWaveFormType;
 		fnSetWaveFormType m_onSetWaveFormType;
@@ -305,7 +300,7 @@ namespace CircuitLab {
 
 		// Determina quale componente o terminale è stato cliccato nella posizione pos.
 		// Aggiorna selComp con il risultato.
-		void CheckClick(sf::Vector2i pos, SelecetedComponent &selComp);
+		void CheckClick(sf::Vector2i pos, SelectedComponent &selComp);
 
 		// Calcola le coordinate pixel dei due estremi di un collegamento,
 		// tenendo conto delle posizioni e degli offset dei terminali.
@@ -321,9 +316,6 @@ namespace CircuitLab {
 
 		std::vector<sf::Vector2f> GetTerminalPositionbyCompId(int compId) const;
 
-		// Cerca l'ID del NodeView collegato a un dato LinkView (-1 se non trovato)
-		int GetNodeViewIdByLinkId(int linkId) const;
-
 		// Restituisce il NodeView con l'ID dato (lancia eccezione se non trovato)
 		NodeView GetNodeViewById(int nodeViewId) const;
 
@@ -337,7 +329,7 @@ namespace CircuitLab {
 		// Geometria del canvas, in pixel della finestra (vedi TOOLBAR_HEIGHT)
 		float CanvasTop() const { return m_menuBarHeight + TOOLBAR_HEIGHT; }
 		float CanvasWidth() const { return static_cast<float>(m_width); }
-		float CanvasHeight() const { return static_cast<float>(m_heigth) - CanvasTop() - STATUS_BAR_HEIGHT; }
+		float CanvasHeight() const { return static_cast<float>(m_height) - CanvasTop() - STATUS_BAR_HEIGHT; }
 		// Vero se il punto (pixel della finestra) cade sul canvas e non sulle barre
 		bool IsInCanvas(sf::Vector2i pixelPos) const;
 		// Porta dimensione (secondo lo zoom) e viewport della vista del canvas alla geometria corrente
@@ -418,34 +410,21 @@ namespace CircuitLab {
 		// Distanza perpendicolare del punto P dal segmento (o retta) A-B, usata per il click sui fili
 		float PointToStraightDistance(const sf::Vector2f &A, const sf::Vector2f &B, const sf::Vector2f &P);
 
-		//void ConnectTerminalToLink(int compId, int termIndex, int linkViewId, sf::Vector2f clickPos);
-
-		// Rimuove linkViewId dalla lista dei link del NodeView nodeViewId;
-		// restituisce il numero di link rimanenti sul NodeView dopo la rimozione
-		int RemoveLinkFromNodeView(int nodeViewId, int linkViewId);
-
 		// Avanza la posizione (offset) di ogni particella attiva di dt secondi,
 		// facendo ripartire le particelle che escono dal filo
 		void UpdateParticles(float dt);
 
-		// Restituisce il NodeView all'altro capo del filo linkViewId
-		NodeView GetNodeViewFromLInkId(int linkViewId);
-
 		// Posizione nel canvas del NodeView con l'ID dato
 		sf::Vector2f GetNodeviewPositionByNodeViewId(int nodeViewId);
-
-		// Cerca l'ID del NodeView collegato al terminale (compId, termIndex), -1 se il terminale è libero
-		int GetNodeViewIdByTerminal(int compId, int termIndex) const;
 
 		// Aggiorna la posizione del NodeView e delle LinkView che vi convergono dopo un trascinamento
 		void UpdateLinksForNodeView(int nodeViewId, sf::Vector2f newPos);
 
 	public:
-		UI(unsigned int width, unsigned int heigth, const std::string &title);
+		UI(unsigned int width, unsigned int height, const std::string &title);
 		~UI();
 
 		// Setter per i callback - chiamati da Application nel costruttore
-		void SetOnRunSimulation(const std::function<SimulationOutput()> &func) { m_onRunSimulation = func; }
 		void SetOnCircuitChange(const fnCircuitChange &func) { m_onCircuitChange = func; }
 		void SetOnCreateLink(const fnCreateLink &func) { m_onCreateLink = func; }
 		void SetOnGetCompTerminalId(const fnGetCompTerminalId &func) { m_onGetCompTerminalId = func; }
@@ -461,7 +440,6 @@ namespace CircuitLab {
 		void SetOnIsSwitchClosed(const fnIsSwitchClosed &func) { m_onIsSwitchClosed = func; }
 		void SetOnSetSimulationStatus(const fnSetSimulationStatus &func) { m_onSetSimulationStatus = func; }
 		void SetOnGetSimulationStatus(const fnGetSimulationStatus &func) { m_onGetSimulationStatus = func; }
-		void SetOnGetComponentsByNodeId(const fnGetComponentsByNodeId &func) { m_onGetComponentsByNodeId = func; }
 		void SetOnGetComponentTypeById(const fnGetComponentTypeById &func) { m_onGetComponentTypeById = func; }
 		void SetOnGetWaveFormType(const fnGetWaveFormType &func) { m_onGetWaveFormType = func; }
 		void SetOnSetWaveFormType(const fnSetWaveFormType &func) { m_onSetWaveFormType = func; }
@@ -502,7 +480,7 @@ namespace CircuitLab {
 		// libero, per una derivazione a T). Il Circuit viene avvisato PRIMA del disegno
 		// e, se rifiuta il collegamento, non si disegna nulla. Non fa nulla se i due
 		// elementi sono già nello stesso nodo (si formerebbe un ciclo di fili).
-		void ConnectSelections(const SelecetedComponent &first, const SelecetedComponent &second);
+		void ConnectSelections(const SelectedComponent &first, const SelectedComponent &second);
 
 		// Comunica al Circuit i terminali a cui la UI ha tolto ogni filo (vedi
 		// WireGraph::RemoveComponent): tornano liberi anche per lui.
@@ -517,8 +495,6 @@ namespace CircuitLab {
 		// Converte nel modello attuale i NodeView letti da un file vecchio (a hub).
 		// Chiamato da IOManager dopo il caricamento, solo per i file vecchi.
 		void ConvertLegacyNodeViews();
-
-		//int AddViewLinkToNode(int comp1, int term1, int nodeViewId);
 
 		// Aggiunge un NodeView al canvas; restituisce l'ID assegnato. Con anchorCompId
 		// != -1 è ancorato a quel terminale (vedi NodeView). manual serve solo alla
@@ -541,7 +517,7 @@ namespace CircuitLab {
 		const std::vector<ComponentView> &GetComponentsViewList() const { return m_componentViewList; }
 
 		// Restituisce la lista delle viste grafiche dei fili (usata da IOManager per la serializzazione)
-		const std::vector<LinkView> &GetLinkVIewList() const { return m_linkViewList; }
+		const std::vector<LinkView> &GetLinkViewList() const { return m_linkViewList; }
 
 		const std::vector<NodeView> &GetNodeViewList() const { return m_nodeViewList; }
 

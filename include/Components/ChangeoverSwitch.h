@@ -40,7 +40,7 @@ namespace CircuitLab {
 		bool IsSwitchClosed() const override { return m_viaSecond; }
 
 		// Conduttanze correnti dei due rami (comune-via1, comune-via2), per il
-		// calcolo delle correnti in Application, stesso ruolo di Switch::GetConductance.
+		// calcolo delle correnti in Application::SimulateLocked, stesso ruolo di Switch::GetConductance.
 		double GetConductanceVia1() const { return m_conductanceVia1; }
 		double GetConductanceVia2() const { return m_conductanceVia2; }
 

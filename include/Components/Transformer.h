@@ -62,7 +62,7 @@ namespace CircuitLab {
 		// Correnti dei due avvolgimenti alla tensione convergente (vPrimary,
 		// vSecondary), usando lo stato ANCORA VECCHIO (va chiamata prima di
 		// UpdateWindingState, come Inductor::GetConductance/GetPreviousCurrent
-		// usati insieme in Application::Simulate).
+		// usati insieme in Application::SimulateLocked).
 		std::pair<double, double> BranchCurrents(double vPrimary, double vSecondary) const;
 
 		// Aggiorna le correnti memorizzate dei due avvolgimenti, da usare come

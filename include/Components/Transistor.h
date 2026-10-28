@@ -28,7 +28,7 @@ namespace CircuitLab {
 	// diretto) resta fisso a un valore tipico — esporlo aggiungerebbe un
 	// parametro che quasi nessun principiante userebbe.
 	//
-	// Come il Diodo, è NON LINEARE: Application lo risolve con Newton-Raphson,
+	// Come il Diodo, è NON LINEARE: il solver (SolveNonlinearStep) lo risolve con Newton-Raphson,
 	// linearizzando ad ogni iterazione attorno a (VBE_k, VBC_k):
 	//
 	//   IB ≈ gpi*VBE + gmu*VBC + IBeq,   IC ≈ gm*VBE + go*VBC + ICeq
@@ -110,8 +110,8 @@ namespace CircuitLab {
 
 		// Correnti reali (non linearizzate) ai tre terminali per una data
 		// (VBE, VBC) = (V(base)-V(emettitore), V(base)-V(collettore)) VERE, cioè
-		// non specchiate per il PNP — usata da Application una volta convergita
-		// la soluzione, per fili e oscilloscopio (stesso ruolo di Diode::Current).
+		// non specchiate per il PNP — usata da Application::SimulateLocked una volta
+		// convergita la soluzione, per fili e oscilloscopio (stesso ruolo di Diode::Current).
 		TerminalCurrents Currents(double vbe, double vbc) const;
 
 		void ResetDynamicState() override

@@ -28,11 +28,9 @@ namespace CircuitLab {
 	inline constexpr double DC_ANALYSIS_STEP = -1.0;
 
 	// Contesto passato a StampVector ad ogni step di simulazione:
-	// t = tempo corrente, h = passo di integrazione, companionState = stato del modello
-	// companion per componenti dinamici (es. condensatori/induttori, quando introdotti).
+	// t = tempo corrente, h = passo di integrazione.
 	struct StampContext {
 		double t = 0.0;
-		double companionState = 0.0;
 		double h = 0.0;
 	};
 
@@ -63,8 +61,6 @@ namespace CircuitLab {
 		const std::vector<Terminal> &GetTerminals() const { return m_terminals; }
 		Terminal &GetTerminal(int index) { return m_terminals[index]; }
 		// Restituisce il nodeId di ogni terminale del componente (non l'ID del terminale).
-		// Da non confondere con Circuit::GetTerminalId(compId, termIndex),
-		// che invece restituisce l'ID del terminale stesso.
 		std::vector<int> GetTerminalNodeIds() const;
 		virtual bool IsGround() const { return false; }
 		ComponentType GetType() const { return m_componentType; }
@@ -97,7 +93,7 @@ namespace CircuitLab {
 		// True per i componenti la cui corrente non è lineare nella tensione (es. il
 		// diodo): non possono essere stampati una volta sola in A, quindi la
 		// simulazione deve risolvere ogni step con iterazioni di Newton-Raphson
-		// (vedi Application::SolveNonlinearStep). Default: componente lineare.
+		// (vedi SolveNonlinearStep in NonlinearSolve.h). Default: componente lineare.
 		virtual bool IsNonlinear() const { return false; }
 
 		// Solo per i componenti non lineari: linearizza il componente attorno alla
@@ -144,7 +140,7 @@ namespace CircuitLab {
 		// punto di linearizzazione per diodo/transistor) — NON i valori impostati
 		// dall'utente (resistenza, capacità, Is, BF...), quelli restano. Chiamato
 		// da Circuit::ResetDynamicState quando cambia il timestep di simulazione
-		// (vedi Application::SetOnSetHSim): un passo molto diverso da quello con
+		// (vedi UI::SetOnSetHSim): un passo molto diverso da quello con
 		// cui quello stato è stato calcolato può produrre uno step fisicamente
 		// legittimo ma numericamente estremo (es. Geq=C/h con h improvvisamente
 		// enorme o minuscolo), che poi si porta dietro per molti passi anche

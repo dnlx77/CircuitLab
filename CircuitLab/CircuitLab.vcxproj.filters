@@ -21,20 +21,11 @@
     <Filter Include="Include">
       <UniqueIdentifier>{fa86db1e-162a-446f-97d3-088c683ea2c9}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Include\Components">
-      <UniqueIdentifier>{b2f93f80-b34c-4884-badd-8939c3c6193d}</UniqueIdentifier>
-    </Filter>
     <Filter Include="src">
       <UniqueIdentifier>{2a1a9e5e-68aa-4786-abf0-a6315b5cdb2f}</UniqueIdentifier>
     </Filter>
     <Filter Include="Include\Core">
       <UniqueIdentifier>{e20502c5-b401-482a-a62d-8abc188e455f}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="src\Core">
-      <UniqueIdentifier>{09c3dfe8-0791-461e-bf6f-b6936b159cb5}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="src\Components">
-      <UniqueIdentifier>{8d3c5b14-1920-462a-a113-dd30f8971407}</UniqueIdentifier>
     </Filter>
     <Filter Include="Include\App">
       <UniqueIdentifier>{26db7f39-0b2e-446a-9a10-389294d9159c}</UniqueIdentifier>
@@ -51,9 +42,6 @@
     <Filter Include="src\UI">
       <UniqueIdentifier>{efedbc89-c957-4d02-8284-7c150931a495}</UniqueIdentifier>
     </Filter>
-    <Filter Include="src\Common">
-      <UniqueIdentifier>{3332081c-32e5-4be0-b709-44a112525611}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Include\IO">
       <UniqueIdentifier>{de44452b-c72f-4cdc-aa36-d29585ba952c}</UniqueIdentifier>
     </Filter>
@@ -69,9 +57,6 @@
       <Filter>External\ImGui-SFML</Filter>
     </ClCompile>
     <ClCompile Include="..\external\imgui\imgui.cpp">
-      <Filter>External\ImGui</Filter>
-    </ClCompile>
-    <ClCompile Include="..\external\imgui\imgui_demo.cpp">
       <Filter>External\ImGui</Filter>
     </ClCompile>
     <ClCompile Include="..\external\imgui\imgui_draw.cpp">

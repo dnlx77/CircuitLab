@@ -1,5 +1,7 @@
 #include <array>
+#include <chrono>
 #include <memory>
+#include <thread>
 #include <nlohmann/json.hpp>
 #include <SFML/System/Sleep.hpp>
 
@@ -18,7 +20,7 @@
 #include "Components/ChangeoverSwitch.h"
 #include "Components/Transistor.h"
 #include "Common/SimulationOutput.h"
-#include "UI/Ui.h"
+#include "UI/UI.h"
 #include "Common/Logger.h"
 
 namespace {
@@ -51,22 +53,21 @@ namespace {
 	// di Hz, a 1x un fotogramma (16 ms) copre più periodi e la corrente letta ad
 	// ogni fotogramma è di fatto casuale (aliasing), quindi i pallini saltano senza
 	// senso; a 0.01x un periodo di 40 Hz dura 2.5 s reali e il movimento si segue.
-	// L'ordine deve coincidere con speedNames in UI::DrawImageGuiPanel (l'indice
+	// L'ordine deve coincidere con SPEED_NAMES in UI.cpp (l'indice
 	// predefinito, 1x, è UI::m_simSpeedIndex).
 	constexpr double SPEED_VALUES[] = { 0.001, 0.01, 0.1, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, -1.0 };
 }
 
-// Crea il componente appropriato in base al tipo richiesto.
-// Il valore ha significato diverso a seconda del tipo:
-//   - resistor:      valore in Ohm
-//   - voltageSource: valore in Volt
-//   - ground:        valore ignorato
-//   - capacitor:     valore in Farad
-//   - inductor:      valore in Henry
-//   - switch:        chiuso di default
+// Crea il componente appropriato in base al tipo richiesto, con i valori di default:
+//   - resistor:      1 kΩ
+//   - voltageSource: generatore DC (0 V)
+//   - ground:        nessun valore
+//   - capacitor:     1 µF
+//   - inductor:      1 mH
+//   - switch:        chiuso
 //   - diode:         Is = 1e-14 A, n = 1 (silicio generico)
 //   - transformer:   L1 = L2 = 1 mH, k = 0.999 (accoppiamento 1:1 quasi ideale)
-//   - changeoverSwitch: comune sulla via 1 di default
+//   - changeoverSwitch: comune sulla via 1
 //   - transistor:    Is = 1e-14 A, BF = 100 (NPN generico; transistorPnp: stessi valori, PNP)
 std::unique_ptr<CircuitLab::Component> CircuitLab::Application::MakeComponent(ComponentType type)
 {
@@ -225,12 +226,9 @@ void CircuitLab::Application::RenderLoop()
 	m_isRunning = false;
 }
 
-// Costruisce UI e Circuit, poi collega i cinque callback:
-//   - onRunSimulation:     la UI chiama RunSimulation() su Application
-//   - onCircuitChange:     la UI chiede ad Application di aggiungere un componente al circuito
-//   - onCreateLink:        la UI chiede ad Application di collegare due terminali
-//   - onGetCompTerminalId: la UI chiede i nodeId dei terminali di un componente
-//   - onDeleteComponent:   la UI chiede ad Application di rimuovere un componente
+// Costruisce UI, Circuit, IOManager e solver, poi collega le callback: la UI (e l'IOManager)
+// non conoscono Circuit, passano da Application che prende il mutex del circuito
+// (vedi UiLock) ed esegue l'operazione richiesta.
 CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 }, m_windowTime{ 1.0 }, m_decimationFactor{ 1 }, m_sampleCounter{ 0 }
 {
 	Logger::GetInstance().SetMinLogLevel(LogLevel::Debug);
@@ -374,7 +372,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 	m_ui->SetOnSave([this](const std::string &path)
 		{
 			UiLock lock(m_circuitMutex, m_uiWaiters);
-			m_ioManager->SaveToFile(path, *m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList(), m_ui->GetNodeViewList());
+			m_ioManager->SaveToFile(path, *m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkViewList(), m_ui->GetNodeViewList());
 		});
 
 	m_ui->SetOnLoad([this](const std::string &path)
@@ -423,7 +421,7 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 			// caricato, invece di lasciare il pannello Risultato/Correnti con
 			// l'output di PRIMA del caricamento — o, alla primissima apertura
 			// dell'app (nessuna simulazione mai partita), con un
-			// SimulationOutput mai scritto (che UI::DrawImageGuiPanel legge
+			// SimulationOutput mai scritto (che UI::DrawResultsWindow legge
 			// comunque, mostrando un risultato "vuoto" invece che i valori
 			// veri). Un solo passo, pubblicato come farebbe normalmente un
 			// batch (swap + notifica): RenderLoop lo raccoglie al giro
@@ -480,12 +478,6 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 		{
 			UiLock lock(m_circuitMutex, m_uiWaiters);
 			return m_circuit->GetComponentType(compId);
-		});
-
-	m_ui->SetOnGetComponentsByNodeId([this](int nodeId)->std::vector<int>
-		{
-			UiLock lock(m_circuitMutex, m_uiWaiters);
-			return m_circuit->GetComponentsByNodeId(nodeId);
 		});
 
 	m_ui->SetOnGetWaveFormType([this](int compId) -> WaveFormType
@@ -606,10 +598,10 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ 0.001 
 
 CircuitLab::Application::~Application() = default;
 
-// Esegue la simulazione MNA sull'attuale stato del circuito.
-// Controlla prima i casi degeneri (circuito nullo o vuoto),
-// poi risolve il sistema A*x = b e costruisce il vettore di output
-// con i nomi delle variabili (tensioni Vn e correnti nei rami).
+// Esegue un passo di simulazione MNA sull'attuale stato del circuito.
+// Controlla prima i casi degeneri (circuito vuoto, solo massa, terminali scollegati),
+// poi risolve il sistema A*x = b e costruisce l'output con le tensioni dei nodi
+// e le correnti dei componenti.
 void CircuitLab::Application::Simulate()
 {
 	// Protegge l'intero step contro modifiche concorrenti al circuito dal thread
@@ -631,11 +623,6 @@ bool CircuitLab::Application::SimulateLocked(bool publish)
 		output.simRes = result;
 		return true;
 	};
-
-	// Questi controlli sono difensivi: m_circuit non dovrebbe mai essere nullptr
-	// dato che viene creato nel costruttore, ma è buona pratica verificarlo
-	if (m_circuit == nullptr)
-		return reportFailure(SimulationResult::no_circuit);
 
 	// I controlli di validità dipendono solo dalla topologia: si rifanno solo
 	// quando il circuito è cambiato (dirty), non ad ogni step.
@@ -1249,7 +1236,7 @@ void CircuitLab::Application::PushUndoSnapshot()
 	nlohmann::json snapshot;
 	{
 		UiLock lock(m_circuitMutex, m_uiWaiters);
-		snapshot = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList(), m_ui->GetNodeViewList());
+		snapshot = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkViewList(), m_ui->GetNodeViewList());
 	}
 
 	m_undoStack.push_back(std::move(snapshot));
@@ -1271,7 +1258,7 @@ void CircuitLab::Application::Undo()
 	nlohmann::json current;
 	{
 		UiLock lock(m_circuitMutex, m_uiWaiters);
-		current = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList(), m_ui->GetNodeViewList());
+		current = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkViewList(), m_ui->GetNodeViewList());
 	}
 	m_redoStack.push_back(std::move(current));
 	if (m_redoStack.size() > MAX_UNDO_STEPS)
@@ -1294,7 +1281,7 @@ void CircuitLab::Application::Redo()
 	nlohmann::json current;
 	{
 		UiLock lock(m_circuitMutex, m_uiWaiters);
-		current = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkVIewList(), m_ui->GetNodeViewList());
+		current = m_ioManager->Serialize(*m_circuit, m_ui->GetComponentsViewList(), m_ui->GetLinkViewList(), m_ui->GetNodeViewList());
 	}
 	m_undoStack.push_back(std::move(current));
 	if (m_undoStack.size() > MAX_UNDO_STEPS)

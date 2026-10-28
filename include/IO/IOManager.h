@@ -1,5 +1,8 @@
 #pragma once
+#include <functional>
+#include <map>
 #include <string>
+#include <vector>
 #include "Core/Circuit.h"
 #include "UI/ComponentView.h"
 #include "Common/UICommon.h"

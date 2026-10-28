@@ -26,11 +26,11 @@ const std::map<CircuitLab::ComponentType, CircuitLab::ComponentDesign> CircuitLa
 
 CircuitLab::ComponentView::ComponentView(int componentLink, const Vec2 &position,
 	float rotation, const std::string &name, ComponentType type, bool mirrored) :
-	m_componentLink(componentLink),
 	m_position(position),
 	m_rotation(rotation),
 	m_mirrored(mirrored),
 	m_name(name),
+	m_componentLink(componentLink),
 	m_type(type)
 {}
 

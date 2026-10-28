@@ -121,7 +121,7 @@ void CircuitLab::Solver::Factorize(const Eigen::MatrixXd &A)
 	m_isMatrixInvertible = m_matrix.isInvertible();
 }
 
-CircuitLab::Solver::Solver() : m_isMatrixInvertible(false), m_useLu(false)
+CircuitLab::Solver::Solver() : m_useLu(false), m_isMatrixInvertible(false)
 {}
 
 // Tenta di risolvere A*x = b sul sistema equilibrato: A' * y = R*b con x = C*y (vedi

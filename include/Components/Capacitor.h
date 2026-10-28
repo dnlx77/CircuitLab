@@ -12,7 +12,7 @@ namespace CircuitLab {
 	// ordinaria (parte statica, StampMatrix) mentre Ieq è un generatore di corrente
 	// che dipende dalla tensione memorizzata allo step precedente (parte dinamica,
 	// StampVector). v(t-h) viene aggiornata dopo ogni step tramite UpdateState(),
-	// chiamata da Application una volta risolto il sistema.
+	// chiamata da TransientStepper una volta risolto il sistema.
 	class Capacitor : public Component {
 	private:
 		double m_capacitance;     // Capacità in Farad
@@ -41,7 +41,7 @@ namespace CircuitLab {
 		// come v(t-h) nel prossimo StampVector.
 		void UpdateState(double v1, double v2) override;
 
-		// Tensione memorizzata al passo precedente (per il calcolo della corrente in Application).
+		// Tensione memorizzata al passo precedente (per il calcolo della corrente in Application::SimulateLocked).
 		double GetPreviousVoltage() const { return m_previousVoltage; }
 
 		void ResetDynamicState() override { m_previousVoltage = 0.0; }
