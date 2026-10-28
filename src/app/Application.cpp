@@ -451,6 +451,19 @@ CircuitLab::Application::Application() : m_simulationTime{ 0.0 }, m_hSim{ TIMEST
 			return m_circuit->GetComponentById(compId)->GetWaveFormType();
 		});
 
+	m_ui->SetOnGetComponentDrawState([this](int compId, bool wantWaveForm, bool wantSwitchState) -> UI::ComponentDrawState
+		{
+			UiLock lock(m_circuitMutex, m_uiWaiters);
+			UI::ComponentDrawState state;
+			state.terminalIds = m_circuit->GetNodesIdFromComponentId(compId);
+			Component *comp = m_circuit->GetComponentById(compId);
+			if (wantWaveForm)
+				state.waveForm = comp->GetWaveFormType();
+			if (wantSwitchState)
+				state.switchClosed = comp->IsSwitchClosed();
+			return state;
+		});
+
 	m_ui->SetOnSetWaveFormType([this](int compId, WaveFormType type)
 		{
 			UiLock lock(m_circuitMutex, m_uiWaiters);

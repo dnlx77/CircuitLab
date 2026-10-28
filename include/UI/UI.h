@@ -48,6 +48,15 @@ namespace CircuitLab {
 		using fnGetSimulationStatus = std::function<SimulationStatus()>;
 		using fnGetComponentTypeById = std::function<ComponentType(int compId)>;
 		using fnGetWaveFormType = std::function<WaveFormType(int)>;
+
+		// Tutto ciò che serve a disegnare un componente, letto dal circuito con un solo lock
+		struct ComponentDrawState
+		{
+			std::vector<int> terminalIds;
+			WaveFormType waveForm = WaveFormType::none;
+			bool switchClosed = true;
+		};
+		using fnGetComponentDrawState = std::function<ComponentDrawState(int compId, bool wantWaveForm, bool wantSwitchState)>;
 		using fnSetWaveFormType = std::function<void(int, WaveFormType)>;
 		using fnGetOscilloscopeChannels = std::function<std::vector<OscilloscopeChannel>()>;
 		using fnAddChannel = std::function<void(ProbeType, int, int, int)>;
@@ -279,6 +288,7 @@ namespace CircuitLab {
 		fnGetSimulationStatus m_onGetSimulationStatus;
 		fnGetComponentTypeById m_onGetComponentTypeById;
 		fnGetWaveFormType m_onGetWaveFormType;
+		fnGetComponentDrawState m_onGetComponentDrawState;
 		fnSetWaveFormType m_onSetWaveFormType;
 		fnGetOscilloscopeChannels m_onGetOscilloscopeChannels;
 		fnAddChannel m_onAddChannel;
@@ -446,6 +456,7 @@ namespace CircuitLab {
 		void SetOnGetSimulationStatus(const fnGetSimulationStatus &func) { m_onGetSimulationStatus = func; }
 		void SetOnGetComponentTypeById(const fnGetComponentTypeById &func) { m_onGetComponentTypeById = func; }
 		void SetOnGetWaveFormType(const fnGetWaveFormType &func) { m_onGetWaveFormType = func; }
+		void SetOnGetComponentDrawState(const fnGetComponentDrawState &func) { m_onGetComponentDrawState = func; }
 		void SetOnSetWaveFormType(const fnSetWaveFormType &func) { m_onSetWaveFormType = func; }
 		void SetOnGetOscilloscopeChannels(const fnGetOscilloscopeChannels &func) { m_onGetOscilloscopeChannels = func; }
 		void SetOnAddChannel(const fnAddChannel &fn) { m_onAddChannel = fn; }

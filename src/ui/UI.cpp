@@ -1672,16 +1672,15 @@ void CircuitLab::UI::DrawComponents()
 				m_selectedComponent.state == SelectionState::componentSelected);
 		sf::Color symbolColor = isSelected ? sf::Color::Yellow : sf::Color::White;
 
-		WaveFormType waveForm = (comp.GetComponentType() == ComponentType::voltageGenerator && m_onGetWaveFormType)
-			? m_onGetWaveFormType(comp.GetComponentLink())
-			: WaveFormType::none;
-
-		// Riusato anche dal deviatore: per lui indica "via 2 attiva" invece di
-		// "chiuso" (vedi ChangeoverSwitch::IsSwitchClosed), ma il default (true)
-		// per gli altri tipi è comunque irrilevante, esattamente come per Switch.
-		bool switchClosed = (IsToggleableByClick(comp.GetComponentType()) && m_onIsSwitchClosed)
-			? m_onIsSwitchClosed(comp.GetComponentLink())
-			: true;
+		// Una sola lettura (e un solo lock del circuito) per componente e per frame.
+		// Per il deviatore switchClosed indica "via 2 attiva" invece di "chiuso"
+		// (vedi ChangeoverSwitch::IsSwitchClosed).
+		const ComponentDrawState drawState = m_onGetComponentDrawState(
+			comp.GetComponentLink(),
+			comp.GetComponentType() == ComponentType::voltageGenerator,
+			IsToggleableByClick(comp.GetComponentType()));
+		const WaveFormType waveForm = drawState.waveForm;
+		const bool switchClosed = drawState.switchClosed;
 
 		comp.DrawSymbol(m_window, symbolColor, waveForm, switchClosed);
 
@@ -1689,7 +1688,7 @@ void CircuitLab::UI::DrawComponents()
 		sf::CircleShape term(static_cast<float>(des.terminalRadius));
 		term.setFillColor(sf::Color::Blue);
 		term.setOrigin({ static_cast<float>(des.terminalRadius), static_cast<float>(des.terminalRadius) });
-		std::vector<int> terminalsId = m_onGetCompTerminalId(comp.GetComponentLink());
+		const std::vector<int> &terminalsId = drawState.terminalIds;
 
 		int strPosX = 0, strPosY = 0;
 
@@ -2156,6 +2155,7 @@ void CircuitLab::UI::DrawOscilloscope()
 	const int decimationFactor = m_onGetDecimationFactor();
 	const double xscale = hSim * static_cast<double>(decimationFactor);
 
+	const double fMaxFrame = m_onGetMaxFrequency(); // una sola lettura per frame
 	double tMax;
 	if (m_oscFrozen)
 	{
@@ -2167,7 +2167,7 @@ void CircuitLab::UI::DrawOscilloscope()
 	{
 		// Asse X scorrevole, aggiornato ogni frame
 		tMax = m_onGetSimulationTime();
-		double fMax = m_onGetMaxFrequency();
+		double fMax = fMaxFrame;
 
 		// Trigger matematico — allinea tMin al multiplo del periodo
 		if (fMax > 0.0)
@@ -2206,7 +2206,7 @@ void CircuitLab::UI::DrawOscilloscope()
 	double sweepLength = m_windowTime;
 	if (sweepMode)
 	{
-		const double fMaxSweep = m_onGetMaxFrequency();
+		const double fMaxSweep = fMaxFrame;
 		if (fMaxSweep > 0.0)
 		{
 			const double period = 1.0 / fMaxSweep;
