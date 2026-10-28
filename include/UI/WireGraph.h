@@ -72,7 +72,7 @@ namespace CircuitLab {
 		TerminalRef FindRealTapInGroup(int startNvId, int excludeCompId = -1, int excludeTermIndex = -1) const;
 
 		// --- Costruzione ---
-		int AddNodeView(int nodeId, sf::Vector2f position,
+		int AddNodeView(int nodeId, Vec2 position,
 			int anchorCompId = -1, int anchorTermIndex = -1, bool attached = false);
 
 		// Aggiunge un tratto di bus sourceNvId -> targetNvId e lo registra su entrambi.
@@ -81,27 +81,27 @@ namespace CircuitLab {
 
 		// NodeView ancorato al terminale: quello esistente, oppure uno nuovo sopra
 		// il terminale (terminalPos) con il suo tap.
-		int EnsureTerminalNodeView(int compId, int termIndex, sf::Vector2f terminalPos);
+		int EnsureTerminalNodeView(int compId, int termIndex, Vec2 terminalPos);
 
 		// Spezza il tratto di bus linkId nel punto della sua lunghezza più vicino a
 		// clickPos, creando lì un NodeView libero. Restituisce il suo id, oppure -1
 		// se linkId non è un tratto di bus. Il primo mezzo tratto conserva l'id di linkId.
-		int InsertNodeOnBusEdge(int linkId, sf::Vector2f clickPos);
+		int InsertNodeOnBusEdge(int linkId, Vec2 clickPos);
 
 		// --- Spostamento ---
 		// Sposta un NodeView e aggiorna gli estremi di tutti i fili che lo toccano.
-		void SetNodeViewPosition(int nvId, sf::Vector2f position);
+		void SetNodeViewPosition(int nvId, Vec2 position);
 
 		// Il terminale si è spostato in terminalPos: aggiorna il suo tap e, se il
 		// NodeView ancorato è agganciato, sposta anche lui.
-		void MoveTerminal(int compId, int termIndex, sf::Vector2f terminalPos);
+		void MoveTerminal(int compId, int termIndex, Vec2 terminalPos);
 
 		// L'utente sta trascinando nvId: se è ancorato si stacca dal terminale.
 		void DetachIfAnchored(int nvId);
 
 		// Se nvId è ancorato e sta entro maxDistance dal terminale, lo riporta sul
 		// terminale e lo riaggancia. True se l'ha riagganciato.
-		bool TryReattach(int nvId, sf::Vector2f terminalPos, float maxDistance);
+		bool TryReattach(int nvId, Vec2 terminalPos, float maxDistance);
 
 		// --- Rimozione (restituiscono i terminali rimasti senza fili) ---
 
@@ -118,7 +118,7 @@ namespace CircuitLab {
 		int PassThroughNodeOfEdge(int linkId) const;
 
 	private:
-		int AddTapLink(int compId, int termIndex, sf::Vector2f terminalPos, int nvId);
+		int AddTapLink(int compId, int termIndex, Vec2 terminalPos, int nvId);
 		void RemoveLinkRaw(int linkId);
 		void EraseNodeViewRaw(int nvId);
 

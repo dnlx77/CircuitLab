@@ -1,5 +1,5 @@
 // WireGraph e' la topologia visiva dei fili (NodeView e LinkView): non dipende da finestra, disegno
-// o Circuit, quindi si prova da sola. Dei tipi SFML usa solo sf::Vector2f (solo header).
+// o Circuit, quindi si prova da sola. Non usa SFML.
 #include <algorithm>
 #include <set>
 
@@ -51,7 +51,7 @@ namespace {
 	}
 
 	// Filo tra due terminali: un NodeView ancorato per ciascuno, collegati da un tratto di bus
-	int Wire(WireGraph &graph, TerminalRef a, sf::Vector2f posA, TerminalRef b, sf::Vector2f posB)
+	int Wire(WireGraph &graph, TerminalRef a, Vec2 posA, TerminalRef b, Vec2 posB)
 	{
 		const int nvA = graph.EnsureTerminalNodeView(a.first, a.second, posA);
 		const int nvB = graph.EnsureTerminalNodeView(b.first, b.second, posB);
@@ -81,7 +81,7 @@ TEST_CASE("WireGraph: un terminale ha un solo NodeView ancorato con il suo tap",
 	CHECK(view->anchorCompId == 1);
 	CHECK(view->anchorTermIndex == 0);
 	CHECK(view->attached);
-	CHECK(view->position == sf::Vector2f(10.f, 20.f));
+	CHECK(view->position == Vec2(10.f, 20.f));
 
 	const LinkView *tap = graph.TapOfTerminal(1, 0);
 	REQUIRE(tap != nullptr);
@@ -169,23 +169,23 @@ TEST_CASE("WireGraph: spostare un terminale trascina il suo NodeView solo se e' 
 	const int busId = graph.linkViews.back().id;
 
 	graph.MoveTerminal(1, 0, { 0.f, 10.f });
-	CHECK(graph.FindNodeView(nvA)->position == sf::Vector2f(0.f, 10.f));
-	CHECK(graph.TapOfTerminal(1, 0)->startPos == sf::Vector2f(0.f, 10.f));
-	CHECK(graph.FindLinkView(busId)->startPos == sf::Vector2f(0.f, 10.f)); // anche il filo lo segue
+	CHECK(graph.FindNodeView(nvA)->position == Vec2(0.f, 10.f));
+	CHECK(graph.TapOfTerminal(1, 0)->startPos == Vec2(0.f, 10.f));
+	CHECK(graph.FindLinkView(busId)->startPos == Vec2(0.f, 10.f)); // anche il filo lo segue
 
 	// Trascinato altrove il NodeView si stacca: il terminale si muove da solo e il tap diventa un filo
 	graph.DetachIfAnchored(nvA);
 	graph.SetNodeViewPosition(nvA, { 40.f, 40.f });
 	graph.MoveTerminal(1, 0, { 0.f, 30.f });
-	CHECK(graph.FindNodeView(nvA)->position == sf::Vector2f(40.f, 40.f));
-	CHECK(graph.TapOfTerminal(1, 0)->startPos == sf::Vector2f(0.f, 30.f));
+	CHECK(graph.FindNodeView(nvA)->position == Vec2(40.f, 40.f));
+	CHECK(graph.TapOfTerminal(1, 0)->startPos == Vec2(0.f, 30.f));
 
 	// Lontano dal terminale non si riaggancia, vicino si
 	CHECK_FALSE(graph.TryReattach(nvA, { 0.f, 30.f }, 5.f));
 	CHECK_FALSE(graph.FindNodeView(nvA)->attached);
 	CHECK(graph.TryReattach(nvA, { 38.f, 40.f }, 5.f));
 	CHECK(graph.FindNodeView(nvA)->attached);
-	CHECK(graph.FindNodeView(nvA)->position == sf::Vector2f(38.f, 40.f));
+	CHECK(graph.FindNodeView(nvA)->position == Vec2(38.f, 40.f));
 
 	// Un NodeView libero non si aggancia a niente
 	const int freeNode = graph.AddNodeView(-1, { 5.f, 5.f });
@@ -204,11 +204,11 @@ TEST_CASE("WireGraph: spostare un NodeView aggiorna gli estremi di tutti i fili 
 	const LinkView &bus = graph.linkViews.back();
 
 	graph.SetNodeViewPosition(nvA, { 7.f, 8.f });
-	CHECK(bus.startPos == sf::Vector2f(7.f, 8.f));
-	CHECK(graph.TapOfTerminal(1, 0)->targetPos == sf::Vector2f(7.f, 8.f));
+	CHECK(bus.startPos == Vec2(7.f, 8.f));
+	CHECK(graph.TapOfTerminal(1, 0)->targetPos == Vec2(7.f, 8.f));
 
 	graph.SetNodeViewPosition(nvB, { 70.f, 80.f });
-	CHECK(bus.targetPos == sf::Vector2f(70.f, 80.f));
+	CHECK(bus.targetPos == Vec2(70.f, 80.f));
 
 	graph.SetNodeViewPosition(9999, { 1.f, 1.f }); // id sconosciuto: nessun effetto
 	CheckConsistent(graph);

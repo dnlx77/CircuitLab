@@ -238,7 +238,7 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelectedComponent &selComp)
 			selComp.linkId = -1;
 			selComp.nodeViewId = nv.id;
 			selComp.state = SelectionState::nodeViewSelected;
-			selComp.clickPos = posF;
+			selComp.clickPos = FromSf(posF);
 			return;
 		}
 	}
@@ -271,7 +271,7 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelectedComponent &selComp)
 				selComp.linkId = -1;
 				selComp.nodeViewId = -1;
 				selComp.state = SelectionState::terminalSelected;
-				selComp.clickPos = sf::Vector2f({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
+				selComp.clickPos = Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y));
 				return;
 			}
 			i++;
@@ -288,7 +288,7 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelectedComponent &selComp)
 			selComp.linkId = -1;
 			selComp.nodeViewId = -1;
 			selComp.state = SelectionState::componentSelected;
-			selComp.clickPos = sf::Vector2f({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
+			selComp.clickPos = Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y));
 			return;
 		}
 	}
@@ -317,7 +317,7 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelectedComponent &selComp)
 			selComp.linkId = link.id;
 			selComp.nodeViewId = -1;
 			selComp.state = SelectionState::linkSelected;
-			selComp.clickPos = sf::Vector2f({ static_cast<float>(pos.x), static_cast<float>(pos.y) });
+			selComp.clickPos = Vec2(static_cast<float>(pos.x), static_cast<float>(pos.y));
 			LOG_DEBUG("CheckClick found link id: " << link.id);
 			return;
 		}
@@ -330,7 +330,7 @@ void CircuitLab::UI::CheckClick(sf::Vector2i pos, SelectedComponent &selComp)
 	selComp.linkId = -1;
 	selComp.nodeViewId = -1;
 	selComp.state = SelectionState::none;
-	selComp.clickPos = sf::Vector2f({ posF.x, posF.y });
+	selComp.clickPos = FromSf(posF);
 }
 
 // Calcola le coordinate pixel dei due estremi di un collegamento tra terminali e nodeView.
@@ -353,7 +353,7 @@ CircuitLab::LinkView CircuitLab::UI::GetLinkCoords(int comp1, int term1, NodeVie
 
 	LinkView link;
 	link.id = ++m_linkViewIdCount;
-	link.startPos = pA;
+	link.startPos = FromSf(pA);
 	link.targetPos = nodeView.position;
 	link.compIdA = comp1;
 	link.termIndexA = term1;
@@ -407,7 +407,7 @@ void CircuitLab::UI::UpdateLinksForComponent(int compId)
 			// Il filo del terminale ora parte da posTer; il NodeView ancorato lo segue
 			// solo se è ancora agganciato (uno che l'utente ha trascinato altrove resta
 			// dove sta, e il filo tra terminale e nodo si allunga).
-			m_graph.MoveTerminal(compId, i, posTer);
+			m_graph.MoveTerminal(compId, i, FromSf(posTer));
 		}
 		return;
 	}
@@ -638,7 +638,7 @@ void CircuitLab::UI::HandleEvents()
 						// un nodo vuoto non è un componente, è puramente un punto di aggancio
 						// visivo (nodeId -1, come un terminale mai collegato) a cui collegare
 						// dei fili in seguito, esattamente come ai terminali di un componente.
-						AddNodeView(-1, SnapToGrid(sf::Vector2f(static_cast<float>(pos.x), static_cast<float>(pos.y))));
+						AddNodeView(-1, FromSf(SnapToGrid(sf::Vector2f(static_cast<float>(pos.x), static_cast<float>(pos.y)))));
 						// Il nodo appena creato è esattamente sotto al cursore: senza questo
 						// flag, la CheckClick qui sotto lo selezionerebbe subito da solo
 						// (o, se un altro nodo era già selezionato da un click precedente,
@@ -868,7 +868,7 @@ void CircuitLab::UI::HandleEvents()
 				{
 					for (const auto &nv : m_nodeViewList)
 						if (nv.id == m_selectedComponent.nodeViewId)
-							anchorPos = nv.position;
+							anchorPos = ToSf(nv.position);
 				}
 
 				const sf::Vector2f snappedAnchor = SnapToGrid(sf::Vector2f(newPos.x, newPos.y));
@@ -956,7 +956,7 @@ void CircuitLab::UI::HandleEvents()
 					{
 						const std::vector<sf::Vector2f> terminals = GetTerminalPositionbyCompId(dragged->anchorCompId);
 						if (dragged->anchorTermIndex >= 0 && dragged->anchorTermIndex < static_cast<int>(terminals.size()))
-							m_graph.TryReattach(dragged->id, terminals[dragged->anchorTermIndex], (CLICK_TOLERANCE + NODE_RADIUS) / m_zoom);
+							m_graph.TryReattach(dragged->id, FromSf(terminals[dragged->anchorTermIndex]), (CLICK_TOLERANCE + NODE_RADIUS) / m_zoom);
 					}
 				}
 				m_selectedComponent.state = SelectionState::none;
@@ -1792,7 +1792,7 @@ void CircuitLab::UI::DrawWires()
 	std::unordered_map<int, sf::Vector2f> nodePositions;
 	nodePositions.reserve(m_nodeViewList.size());
 	for (const auto &nv : m_nodeViewList)
-		nodePositions[nv.id] = nv.position;
+		nodePositions[nv.id] = ToSf(nv.position);
 
 	// Disegna i fili come linee bianche tra i punti dei terminali collegati (tutti insieme)
 	sf::VertexArray lines(sf::PrimitiveType::Lines);
@@ -1803,7 +1803,7 @@ void CircuitLab::UI::DrawWires()
 			throw std::runtime_error("NodeView not found for id: " + std::to_string(wire.nodeViewId));
 
 		const sf::Color color = (m_selectedComponent.state == SelectionState::linkSelected && wire.id == m_selectedComponent.linkId) ? sf::Color::Red : sf::Color::White;
-		lines.append(sf::Vertex{ wire.startPos, color });
+		lines.append(sf::Vertex{ ToSf(wire.startPos), color });
 		lines.append(sf::Vertex{ end->second, color });
 	}
 	m_window.draw(lines);
@@ -1823,9 +1823,9 @@ void CircuitLab::UI::DrawNodes()
 	{
 		bool isMultiSelected = std::find(m_selectedNodeViewIds.begin(), m_selectedNodeViewIds.end(), nv.id) != m_selectedNodeViewIds.end();
 		if (isMultiSelected || (nv.id == m_selectedComponent.nodeViewId && m_selectedComponent.state == SelectionState::nodeViewSelected))
-			AppendCircle(outlines, nv.position, NODE_RADIUS + OUTLINE_THICKNESS, sf::Color::Yellow);
+			AppendCircle(outlines, ToSf(nv.position), NODE_RADIUS + OUTLINE_THICKNESS, sf::Color::Yellow);
 
-		AppendCircle(nodes, nv.position, NODE_RADIUS, sf::Color::Green);
+		AppendCircle(nodes, ToSf(nv.position), NODE_RADIUS, sf::Color::Green);
 	}
 	m_window.draw(outlines);
 	m_window.draw(nodes);
@@ -2734,14 +2734,14 @@ sf::Vector2f CircuitLab::UI::GetNodeviewPositionByNodeViewId(int nodeViewId)
 {
 	for (const auto &nv : m_nodeViewList)
 		if (nv.id == nodeViewId)
-			return nv.position;
+			return ToSf(nv.position);
 
 	throw std::runtime_error("NodeView not found for id: " + std::to_string(nodeViewId));
 }
 
 void CircuitLab::UI::UpdateLinksForNodeView(int nodeViewId, sf::Vector2f newPos)
 {
-	m_graph.SetNodeViewPosition(nodeViewId, newPos);
+	m_graph.SetNodeViewPosition(nodeViewId, FromSf(newPos));
 }
 
 // Inizializza la finestra SFML e ImGui-SFML.
@@ -2929,7 +2929,7 @@ int CircuitLab::UI::AddBusLinkView(int sourceNodeViewId, int targetNodeViewId)
 	return m_graph.AddBusEdge(sourceNodeViewId, targetNodeViewId);
 }
 
-int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position, int anchorCompId, int anchorTermIndex, bool attached)
+int CircuitLab::UI::AddNodeView(int nodeId, Vec2 position, int anchorCompId, int anchorTermIndex, bool attached)
 {
 	// Un NodeView agganciato sta per definizione sul suo terminale: lo si
 	// riallinea alla posizione attuale invece di fidarsi di quella salvata, che
@@ -2940,7 +2940,7 @@ int CircuitLab::UI::AddNodeView(int nodeId, sf::Vector2f position, int anchorCom
 	{
 		const std::vector<sf::Vector2f> terminals = GetTerminalPositionbyCompId(anchorCompId);
 		if (anchorTermIndex >= 0 && anchorTermIndex < static_cast<int>(terminals.size()))
-			position = terminals[anchorTermIndex];
+			position = FromSf(terminals[anchorTermIndex]);
 	}
 	return m_graph.AddNodeView(nodeId, position, anchorCompId, anchorTermIndex, attached);
 }
@@ -3080,7 +3080,7 @@ void CircuitLab::UI::ConnectSelections(const SelectedComponent &first, const Sel
 			const std::vector<sf::Vector2f> terminals = GetTerminalPositionbyCompId(sel.compId);
 			if (sel.terminalIndex < 0 || sel.terminalIndex >= static_cast<int>(terminals.size()))
 				return -1;
-			return m_graph.EnsureTerminalNodeView(sel.compId, sel.terminalIndex, terminals[sel.terminalIndex]);
+			return m_graph.EnsureTerminalNodeView(sel.compId, sel.terminalIndex, FromSf(terminals[sel.terminalIndex]));
 		}
 		case SelectionState::nodeViewSelected:
 			return sel.nodeViewId;
@@ -3112,7 +3112,7 @@ void CircuitLab::UI::Clear()
 	m_graph.Clear();
 
 	m_selectedComponent.Reset();
-	m_selectedComponent.clickPos = sf::Vector2f(0.0f, 0.0f);
+	m_selectedComponent.clickPos = Vec2(0.0f, 0.0f);
 
 	m_selectedComponentIds.clear();
 	m_selectedNodeViewIds.clear();

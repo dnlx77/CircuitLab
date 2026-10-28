@@ -12,6 +12,7 @@
 #include "Common/ComponentValue.h"
 #include "Common/OscilloscopeChannel.h"
 #include "UI/WireGraph.h"
+#include "UI/SfmlVec.h"
 
 namespace CircuitLab {
 
@@ -509,7 +510,7 @@ namespace CircuitLab {
 
 		// Aggiunge un NodeView al canvas; restituisce l'ID assegnato. Con anchorCompId
 		// != -1 è ancorato a quel terminale (vedi NodeView).
-		int AddNodeView(int nodeId, sf::Vector2f position, int anchorCompId = -1, int anchorTermIndex = -1, bool attached = false);
+		int AddNodeView(int nodeId, Vec2 position, int anchorCompId = -1, int anchorTermIndex = -1, bool attached = false);
 
 		// Sostituisce la lista dei linkViewIds appartenenti al NodeView nodeViewId (usato da IOManager al caricamento)
 		void UpdateNodeViewLinkIds(int nodeViewId, std::vector<int> linkViewIds);
