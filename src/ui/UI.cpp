@@ -2557,6 +2557,18 @@ void CircuitLab::UI::CreateLinkViewCurrentList()
 	// filo. Nessuna ambiguità: il grafo dei tratti di bus di uno stesso nodo è
 	// sempre un albero (collegare due elementi già nello stesso nodo è rifiutato,
 	// vedi ConnectSelections), mai un ciclo di fili ideali paralleli.
+	// Ricerca per id in tempo costante: la visita sotto cerca un NodeView per ogni vertice e un
+	// filo per ogni id di ogni NodeView, e con le liste lineari il costo cresceva col quadrato
+	// del numero di fili.
+	std::unordered_map<int, const NodeView *> nodeViewById;
+	std::unordered_map<int, const LinkView *> linkViewById;
+	nodeViewById.reserve(m_nodeViewList.size());
+	linkViewById.reserve(m_linkViewList.size());
+	for (const auto &nv : m_nodeViewList)
+		nodeViewById.emplace(nv.id, &nv);
+	for (const auto &lv : m_linkViewList)
+		linkViewById.emplace(lv.id, &lv);
+
 	std::set<int> visited;
 	for (const auto &startNv : m_nodeViewList)
 	{
@@ -2578,29 +2590,27 @@ void CircuitLab::UI::CreateLinkViewCurrentList()
 			queue.pop_back();
 			groupNodeViewIds.push_back(currentId);
 
-			const NodeView &nv = GetNodeViewById(currentId);
+			const NodeView &nv = *nodeViewById.at(currentId);
 			for (int lvId : nv.linkViewIds)
 			{
-				for (const auto &lv : m_linkViewList)
-				{
-					if (lv.id != lvId) continue;
+				const auto lvIt = linkViewById.find(lvId);
+				if (lvIt == linkViewById.end()) continue;
+				const LinkView &lv = *lvIt->second;
 
-					if (lv.sourceNodeViewId == -1)
+				if (lv.sourceNodeViewId == -1)
+				{
+					if (lv.nodeViewId == currentId)
+						groupTapLinks.push_back(&lv);
+				}
+				else
+				{
+					groupBusEdges.push_back(&lv);
+					int neighborId = (lv.sourceNodeViewId == currentId) ? lv.nodeViewId : lv.sourceNodeViewId;
+					if (!visited.count(neighborId))
 					{
-						if (lv.nodeViewId == currentId)
-							groupTapLinks.push_back(&lv);
+						visited.insert(neighborId);
+						queue.push_back(neighborId);
 					}
-					else
-					{
-						groupBusEdges.push_back(&lv);
-						int neighborId = (lv.sourceNodeViewId == currentId) ? lv.nodeViewId : lv.sourceNodeViewId;
-						if (!visited.count(neighborId))
-						{
-							visited.insert(neighborId);
-							queue.push_back(neighborId);
-						}
-					}
-					break;
 				}
 			}
 		}
